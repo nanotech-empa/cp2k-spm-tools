@@ -1,0 +1,10 @@
+.ipynb_checkpoints/
+__pycache__/
+
+carlo_fortran_code/
+fig/
+fortran_test/
+
+geometry/
+leopold_code/
+restart_files/
