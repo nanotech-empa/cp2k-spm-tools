@@ -266,10 +266,26 @@ def load_restart_wfn_file(restart_file, emin, emax, fermi):
             morb_composition.append(current_morb_comp)
 
     inpf.close()
+
+    coef_arr = np.empty(len(morb_composition))
+    morb_composition_rev = []
+
+    for iatom in range(len(morb_composition[0])):
+        morb_composition_rev.append([])
+        for iset in range(len(morb_composition[0][iatom])):
+            morb_composition_rev[-1].append([])
+            for ishell in range(len(morb_composition[0][iatom][iset])):
+                morb_composition_rev[-1][-1].append([])
+                for iorb in range(len(morb_composition[0][iatom][iset][ishell])):
+                    for imo in range(len(morb_composition)):
+                        coef_arr[imo] = morb_composition[imo][iatom][iset][ishell][iorb]
+                    morb_composition_rev[-1][-1][-1].append(np.copy(coef_arr))
+
+
     ref_energy = fermi
 
     n_sel_morbs = len(morb_composition)
-    return morb_composition, evals[first_imo:first_imo+n_sel_morbs], occs[first_imo:first_imo+n_sel_morbs], ref_energy
+    return morb_composition, morb_composition_rev, evals[first_imo:first_imo+n_sel_morbs], occs[first_imo:first_imo+n_sel_morbs], ref_energy
 
 ### ---------------------------------------------------------------------------
 ### MOLOG FILE loading and processing
@@ -543,7 +559,7 @@ def calc_morb_planes(plane_size, plane_size_n, plane_z,
 
     # Define small grid for orbital evaluation
     # and convenient PBC implementation
-    loc_cell = np.array([10.0,  10.0])*ang_2_bohr
+    loc_cell = np.array([pbc_box,  pbc_box])*ang_2_bohr
     x_arr_loc = np.arange(0, loc_cell[0], dv[0])
     y_arr_loc = np.arange(0, loc_cell[1], dv[1])
     loc_cell_n = np.array([len(x_arr_loc), len(y_arr_loc)])
@@ -558,13 +574,18 @@ def calc_morb_planes(plane_size, plane_size_n, plane_z,
     print("Main plane:   ", plane_size, plane_size_n)
     print("Local plane: ", loc_cell, loc_cell_n)
 
-    morb_planes = [np.zeros(plane_size_n) for _ in range(len(morb_composition))]
+    num_morbs = len(morb_composition[0][0][0][0])
+
+    morb_planes = [np.zeros(plane_size_n) for _ in range(num_morbs)]
+
+    morb_planes_local = np.zeros((num_morbs, loc_cell_n[0], loc_cell_n[1]))
 
     print("---- Setup: %.4f" % (time.time() - time1))
 
     time_radial_calc = 0.0
     time_spherical = 0.0
     time_loc_glob_add = 0.0
+    time_loc_lmorb_add = 0.0
 
 
     for i_at in range(len(at_positions)):
@@ -574,6 +595,7 @@ def calc_morb_planes(plane_size, plane_size_n, plane_z,
         # how does the position match with the grid?
         int_shift = (pos[0:2]/dv).astype(int)
         frac_shift = pos[0:2]/dv - int_shift
+        origin_diff = int_shift - mid_ixs
 
         # Shift the local grid such that origin is on the atom
         x_grid_rel_loc = x_grid_loc - frac_shift[0]*dv[0]
@@ -582,6 +604,8 @@ def calc_morb_planes(plane_size, plane_size_n, plane_z,
         z_rel = plane_z - pos[2]
 
         r_vec_2 = x_grid_rel_loc**2 + y_grid_rel_loc**2 + z_rel**2
+
+        morb_planes_local.fill(0.0)
 
         for i_shell, shell in enumerate(basis_sets[elem]):
             l = shell[0]
@@ -603,20 +627,27 @@ def calc_morb_planes(plane_size, plane_size_n, plane_z,
                                                                  z_rel)
                 time_spherical += time.time() - time2
 
-                for i_mo in range(len(morb_composition)):
-                    i_set = 0 # SHOULD START SUPPORTING MULTIPLE SET BASES AT SOME POINT
-                    coef = morb_composition[i_mo][i_at][i_set][i_shell][i]
+                i_set = 0 # SHOULD START SUPPORTING MULTIPLE SET BASES AT SOME POINT
+                coef_arr = morb_composition[i_at][i_set][i_shell][i]
 
-                    # Add the atomic orbital on the local grid to the global grid
-                    origin_diff = int_shift - mid_ixs
-                    time2 = time.time()
-                    add_local_to_global_grid(coef*atomic_orb, morb_planes[i_mo], origin_diff)
-                    time_loc_glob_add += time.time() - time2
+                time2 = time.time()
 
+                #morb_planes_local += np.einsum('i,jk', coef_arr, atomic_orb)
+
+                morb_planes_local += np.outer(coef_arr, atomic_orb).reshape(
+                                 num_morbs, loc_cell_n[0], loc_cell_n[1])
+
+                time_loc_lmorb_add += time.time() - time2
+
+        time2 = time.time()
+        for i_mo in range(num_morbs):
+            add_local_to_global_grid(morb_planes_local[i_mo], morb_planes[i_mo], origin_diff)
+        time_loc_glob_add += time.time() - time2
 
     print("---- Radial calc time : %4f" % time_radial_calc)
     print("---- Spherical calc time : %4f" % time_spherical)
-    print("---- Loc -> glob time : %4f" % time_loc_glob_add)
+    print("---- Loc -> loc_morb time : %4f" % time_loc_lmorb_add)
+    print("---- loc_morb -> glob time : %4f" % time_loc_glob_add)
     print("---- Total time: %.4f"%(time.time() - time1))
 
     return morb_planes
