@@ -179,6 +179,7 @@ def read_basis_functions(basis_set_file, elem_basis_name):
 # NB: If Fermi energy is passed as "None", it will be set to HOMO energy
 # RETURNS: morb_composition[imo][iatom][iset][ishell][iorb (m)]
 # AND corresponding eigenvalues (eV) and occupancies for the morbitals
+# Energies in ev
 def load_restart_wfn_file(restart_file, emin, emax, fermi):
 
     inpf = scipy.io.FortranFile(restart_file, 'r')
