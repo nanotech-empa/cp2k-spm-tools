@@ -289,9 +289,20 @@ def load_restart_wfn_file(restart_file, emin, emax, fermi):
 
 
     ref_energy = fermi
-
     n_sel_morbs = len(morb_composition)
-    return morb_composition_rev, evals[first_imo:first_imo+n_sel_morbs], occs[first_imo:first_imo+n_sel_morbs], ref_energy
+
+    morb_energies = evals[first_imo:first_imo+n_sel_morbs]
+    morb_occs = occs[first_imo:first_imo+n_sel_morbs]
+
+    i_homo = 0
+    for i, en in enumerate(morb_energies):
+        if en > 0.0:
+            i_homo = i - 1
+            break
+        if np.abs(en) < 1e-6:
+            i_homo = i
+
+    return morb_composition_rev, morb_energies, morb_occs, ref_energy, i_homo
 
 ### ---------------------------------------------------------------------------
 ### MOLOG FILE loading and processing
@@ -478,6 +489,9 @@ def read_and_process_molog(molog_file):
 ### Methods more directly related to putting stuff on grids
 ### ---------------------------------------------------------------------------
 
+
+# Evaluates the spherical harmonics (times r^l) with some unknown normalization
+# (source: Carlo's Fortran code)
 def spherical_harmonic_grid(l, m, x_grid, y_grid, z_grid):
     c = (2.0/np.pi)**(3.0/4.0)
 
@@ -504,6 +518,22 @@ def spherical_harmonic_grid(l, m, x_grid, y_grid, z_grid):
         return c*4.0*z_grid*x_grid
     elif (l, m) == (2, 2):
         return c*2.0*(x_grid**2-y_grid**2)
+
+    # f orbitals
+    elif (l, m) == (3, -3):
+        return c*np.sqrt(8/3)*y_grid*(3*x_grid**2-y_grid**2)
+    elif (l, m) == (3, -2):
+        return c*8.0*x_grid*y_grid*z_grid
+    elif (l, m) == (3, -1):
+        return c*np.sqrt(8/5)*y_grid*(4*z_grid**2-x_grid**2-y_grid**2)
+    elif (l, m) == (3, 0):
+        return c*4.0/np.sqrt(15.0)*z_grid*(2.0*z_grid**2-3.0*x_grid**2-3.0*y_grid**2)
+    elif (l, m) == (3, 1):
+        return c*np.sqrt(8/5)*x_grid*(4*z_grid**2-x_grid**2-y_grid**2)
+    elif (l, m) == (3, 2):
+        return c*4.0*z_grid*(x_grid**2-y_grid**2)
+    elif (l, m) == (3, 3):
+        return c*np.sqrt(8/3)*x_grid*(x_grid**2-3.0*y_grid**2)
 
     print("No spherical harmonic found for l=%d, m=%d" % (l, m))
     return 0
@@ -552,6 +582,7 @@ def add_local_to_global_grid(loc_grid, glob_grid, origin_diff):
 
 
 # Puts the molecular orbitals onto a plane.
+# All inputs are needed to be in [a.u.], except for pbc_box (angstrom)
 def calc_morb_planes(plane_size, plane_size_n, plane_z,
                      at_positions, at_elems,
                      basis_sets, morb_composition, pbc_box = 10.0):
