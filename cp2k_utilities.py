@@ -23,7 +23,8 @@ def read_cp2k_input(cp2k_input_file):
         lines = f.readlines()
         for i in range(len(lines)):
             parts = lines[i].split()
-
+            if len(parts) == 0:
+                continue
             # Have we found the basis set info?
             if parts[0] == "&KIND":
                 elem = parts[1]
@@ -57,7 +58,11 @@ def read_atoms(file_xyz):
     positions = []
     elem_nr = {'H': 1,
                'C': 6,
-               'Na': 11}
+               'N': 7,
+               'O': 8,
+               'Na': 11,
+               'Br': 35,
+               'Au': 79}
     for line in data:
         elem = line[0].decode("utf-8")
         if len(line) > 4:
@@ -286,7 +291,7 @@ def load_restart_wfn_file(restart_file, emin, emax, fermi):
     ref_energy = fermi
 
     n_sel_morbs = len(morb_composition)
-    return morb_composition, morb_composition_rev, evals[first_imo:first_imo+n_sel_morbs], occs[first_imo:first_imo+n_sel_morbs], ref_energy
+    return morb_composition_rev, evals[first_imo:first_imo+n_sel_morbs], occs[first_imo:first_imo+n_sel_morbs], ref_energy
 
 ### ---------------------------------------------------------------------------
 ### MOLOG FILE loading and processing
