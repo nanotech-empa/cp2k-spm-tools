@@ -101,8 +101,9 @@ basis_sets = cu.read_basis_functions(args.basis_file, elem_basis_names)
 print("Read basis sets: %.3f" % (time.time()-time1))
 
 time1 = time.time()
-morb_composition, morb_energies, morb_occs = cu.load_restart_wfn_file(
-        args.restart_file, args.emin, args.emax, fermi)
+morb_composition, morb_energies, morb_occs, ref_en, i_homo = \
+    cu.load_restart_wfn_file(args.restart_file, args.emin, args.emax, fermi)
+print("Found %d orbitals" % len(morb_energies))
 print("Read restart: %.3f" % (time.time()-time1))
 
 geom_folder, geom_file = os.path.split(args.xyz_file)

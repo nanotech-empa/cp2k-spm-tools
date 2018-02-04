@@ -83,9 +83,15 @@ parser.add_argument(
     metavar='D',
     default=18.0,
     help='Spatial step for the grid (angstroms).')
+parser.add_argument(
+    '--single_plane',
+    type=bool,
+    metavar='SP',
+    default=False,
+    help='Calculate only single plane of molecular orbitals at z_top')
 
 
-# Define all varialbes that must be later broadcasted
+# Define all varialbles that must be later broadcasted
 args = None
 cell = None
 at_positions = None
@@ -193,6 +199,12 @@ eval_reg_size_n[2] += 1
 
 # z array in bohr and wrt topmost atom
 z_arr = np.arange(0.0, eval_reg_size[2], dv[2]) + z_bottom - top_atom_z
+
+if args.single_plane:
+    eval_reg_size[2] = dv[2]
+    eval_reg_size_n[2] = 1
+    z_bottom = z_top
+    z_arr = np.array([height_above_atoms*ang_2_bohr])
 
 ### -----------------------------------------
 ### Calculate the molecular orbitals in the specified region

@@ -616,7 +616,7 @@ def add_local_to_global_grid(loc_grid, glob_grid, origin_diff):
 # All inputs are needed to be in [a.u.], except for pbc_box (angstrom)
 def calc_morb_planes(plane_size, plane_size_n, plane_z,
                      at_positions, at_elems,
-                     basis_sets, morb_composition, pbc_box = 10.0):
+                     basis_sets, morb_composition, pbc_box = 12.0):
 
     time1 = time.time()
 
