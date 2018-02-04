@@ -538,6 +538,37 @@ def spherical_harmonic_grid(l, m, x_grid, y_grid, z_grid):
     print("No spherical harmonic found for l=%d, m=%d" % (l, m))
     return 0
 
+# Adds local 3D box to a global grid by wrapping the boundaries in X and Y
+# But not in Z
+def add_local_to_global_box(loc_grid, glob_grid, origin_diff):
+    loc_n = np.shape(loc_grid)[0:2]
+    glob_n = np.shape(glob_grid)[0:2]
+    od = origin_diff
+
+    # Move the origin_diff vector to the main global cell (not an image)
+    od = od % glob_n
+
+    inds = []
+    l_inds = []
+
+    for i in range(len(glob_n)):
+        ixs = [[od[i], od[i] + loc_n[i]]]
+        l_ixs = [0]
+        while ixs[-1][1] > glob_n[i]:
+            overshoot = ixs[-1][1]-glob_n[i]
+            ixs[-1][1] = glob_n[i]
+            l_ixs.append(l_ixs[-1]+glob_n[i]-ixs[-1][0])
+            ixs.append([0, overshoot])
+        l_ixs.append(loc_n[i])
+
+        inds.append(ixs)
+        l_inds.append(l_ixs)
+
+    l_ixs = l_inds[0]
+    l_iys = l_inds[1]
+    for i, ix in enumerate(inds[0]):
+        for j, iy in enumerate(inds[1]):
+            glob_grid[ix[0]:ix[1], iy[0]:iy[1], :] += loc_grid[l_ixs[i]:l_ixs[i+1], l_iys[j]:l_iys[j+1], :]
 
 # Adds local 2D or 3D grid to a global grid by wrapping the extending boundaries
 def add_local_to_global_grid(loc_grid, glob_grid, origin_diff):
@@ -688,6 +719,120 @@ def calc_morb_planes(plane_size, plane_size_n, plane_z,
     print("---- Total time: %.4f"%(time.time() - time1))
 
     return morb_planes
+
+
+# Puts the molecular orbitals onto a specified region. For a plane, just specify eval_reg_size_n[2] = 1
+# All inputs are needed to be in [a.u.], except for pbc_box (angstrom)
+def calc_morbs_in_region(eval_cell, eval_cell_n, eval_reg_z,
+                         at_positions, at_elems,
+                         basis_sets, morb_composition,
+                         pbc_box_size = 16.0,
+                         print_info=True):
+
+    time1 = time.time()
+
+    dv = eval_cell/eval_cell_n
+
+    pbc_box_size *= ang_2_bohr
+
+    # Define small grid for orbital evaluation
+    # and convenient PBC implementation
+    loc_cell = np.array([pbc_box_size,  pbc_box_size, eval_cell[2]])
+    x_arr_loc = np.arange(0, loc_cell[0], dv[0])
+    y_arr_loc = np.arange(0, loc_cell[1], dv[1])
+    z_arr_loc = np.arange(0, loc_cell[2], dv[2])
+    z_arr_loc += eval_reg_z
+
+    loc_cell_n = np.array([len(x_arr_loc), len(y_arr_loc), len(z_arr_loc)])
+    # Define it such that the origin is somewhere
+    # in the middle but exactly on a grid point
+    mid_ixs = (loc_cell_n/2).astype(int)
+    x_arr_loc -= x_arr_loc[mid_ixs[0]]
+    y_arr_loc -= y_arr_loc[mid_ixs[1]]
+
+    x_grid_loc, y_grid_loc, z_grid_loc = np.meshgrid(x_arr_loc, y_arr_loc, z_arr_loc, indexing='ij')
+
+    num_morbs = len(morb_composition[0][0][0][0])
+    morb_grids = 0 # release memory from previous run (needed in some rare cases)
+    #morb_grids = [np.zeros(eval_cell_n) for _ in range(num_morbs)]
+    morb_grids = np.zeros((num_morbs, eval_cell_n[0], eval_cell_n[1], eval_cell_n[2]))
+    morb_grids_local = np.zeros((num_morbs, loc_cell_n[0], loc_cell_n[1], loc_cell_n[2]))
+
+    # Some info
+    if print_info:
+        print("Eval cell:   ", eval_cell, eval_cell_n)
+        print("Local cell: ", loc_cell, loc_cell_n)
+        print("---- Setup: %.4f" % (time.time() - time1))
+
+    time_radial_calc = 0.0
+    time_spherical = 0.0
+    time_loc_glob_add = 0.0
+    time_loc_lmorb_add = 0.0
+
+    for i_at in range(len(at_positions)):
+        elem = at_elems[i_at][0]
+        pos = at_positions[i_at]
+
+        # how does the position match with the grid?
+        int_shift = (pos[0:2]/dv[0:2]).astype(int)
+        frac_shift = pos[0:2]/dv[0:2] - int_shift
+        origin_diff = int_shift - mid_ixs[0:2]
+
+        # Shift the local grid such that origin is on the atom
+        x_grid_rel_loc = x_grid_loc - frac_shift[0]*dv[0]
+        y_grid_rel_loc = y_grid_loc - frac_shift[1]*dv[1]
+
+        z_grid_rel_loc = z_grid_loc - pos[2]
+
+        r_vec_2 = x_grid_rel_loc**2 + y_grid_rel_loc**2 + z_grid_rel_loc**2
+
+        morb_grids_local.fill(0.0)
+
+        for i_shell, shell in enumerate(basis_sets[elem]):
+            l = shell[0]
+            es = shell[1]
+            cs = shell[2]
+
+            # Calculate the radial part of the atomic orbital
+            time2 = time.time()
+            radial_part = np.zeros(loc_cell_n)
+            for e, c in zip(es, cs):
+                radial_part += c*np.exp(-1.0*e*r_vec_2)
+            time_radial_calc += time.time() - time2
+
+            for i, m in enumerate(range(-l, l+1, 1)):
+                time2 = time.time()
+                atomic_orb = radial_part*spherical_harmonic_grid(l, m,
+                                                                 x_grid_rel_loc,
+                                                                 y_grid_rel_loc,
+                                                                 z_grid_rel_loc)
+                time_spherical += time.time() - time2
+
+                i_set = 0 # SHOULD START SUPPORTING MULTIPLE SET BASES AT SOME POINT
+                coef_arr = morb_composition[i_at][i_set][i_shell][i]
+
+                time2 = time.time()
+                for i_mo in range(num_morbs):
+                    morb_grids_local[i_mo] += coef_arr[i_mo]*atomic_orb
+
+                # slow:
+                #morb_grids_local += np.outer(coef_arr, atomic_orb).reshape(
+                #                 num_morbs, loc_cell_n[0], loc_cell_n[1], loc_cell_n[2])
+                time_loc_lmorb_add += time.time() - time2
+
+        time2 = time.time()
+        for i_mo in range(num_morbs):
+            add_local_to_global_box(morb_grids_local[i_mo], morb_grids[i_mo], origin_diff)
+        time_loc_glob_add += time.time() - time2
+
+    if print_info:
+        print("---- Radial calc time : %4f" % time_radial_calc)
+        print("---- Spherical calc time : %4f" % time_spherical)
+        print("---- Loc -> loc_morb time : %4f" % time_loc_lmorb_add)
+        print("---- loc_morb -> glob time : %4f" % time_loc_glob_add)
+        print("---- Total time: %.4f"%(time.time() - time1))
+
+    return morb_grids
 
 ### ---------------------------------------------------------------------------
 ### MISC
