@@ -229,6 +229,10 @@ else:
 comm.Gatherv(sendbuf=morb_grids, recvbuf=(recvbuf, sendcounts), root=0)
 
 if rank == 0:
+
+    geom_base = os.path.basename(args.xyz_file)
+    geom_label = os.path.splitext(geom_base)[0]
+
     time0 = time.time()
     elim = np.array([args.emin, args.emax])
     all_morb_grids = recvbuf.reshape(num_morbs,
@@ -239,5 +243,6 @@ if rank == 0:
         dv=dv,
         z_arr=z_arr,
         elim=elim,
-        ref_energy=ref_energy)
+        ref_energy=ref_energy,
+        geom_label=geom_label)
     print("Saved the orbitals to file: %.2fs" % (time.time() - time0))

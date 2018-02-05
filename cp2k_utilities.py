@@ -905,3 +905,59 @@ def read_cube_file(cube_file):
     f.close()
 
     return title, comment, natoms, origin, shape, cell, numbers, positions, data
+
+# Extrapolate molecular orbitals from a specified plane to a box or another plane
+# in case of "single_plane = True", the orbitals will be only extrapolated on
+# a plane "extent" distance away
+# Extent in bohr !!!
+def extrapolate_morbs(morb_grids, morb_energies, dv, plane_ind,
+                      extent, hart_plane, single_plane, use_weighted_avg=True):
+    # NB: everything in hartree units!
+    time1 = time.time()
+
+    num_morbs = np.shape(morb_grids)[0]
+    eval_reg_size_n = np.shape(morb_grids[0])
+
+    if single_plane:
+        extrap_morbs = np.zeros((num_morbs, eval_reg_size_n[0], eval_reg_size_n[1]))
+    else:
+        extrap_morbs = np.zeros((num_morbs, eval_reg_size_n[0], eval_reg_size_n[1],
+                                 int(extent/dv[2])))
+
+    for morb_index in range(num_morbs):
+
+        morb_plane = morb_grids[morb_index][:, :, plane_ind]
+
+        if use_weighted_avg:
+            # weigh the hartree potential by the molecular orbital
+            density_plane = morb_plane**2
+            density_plane /= np.sum(density_plane)
+            weighted_hartree = density_plane * skimage.transform.resize(hart_plane, density_plane.shape, mode='reflect')
+            hartree_avg = np.sum(weighted_hartree)
+        else:
+            hartree_avg = np.mean(hart_plane)
+
+        energy = morb_energies[morb_index]/hart_2_ev
+        if energy > hartree_avg:
+            print("Warning: unbound state, can't extrapolate! index: %d. Exiting." % morb_index)
+            break
+
+        fourier = np.fft.rfft2(morb_plane)
+        # NB: rfft2 takes REAL fourier transform over last (y) axis and COMPLEX over other (x) axes
+        # dv in BOHR, so k is in 1/bohr
+        kx_arr = 2*np.pi*np.fft.fftfreq(morb_plane.shape[0], dv[0])
+        ky_arr = 2*np.pi*np.fft.rfftfreq(morb_plane.shape[1], dv[1])
+
+        kx_grid, ky_grid = np.meshgrid(kx_arr, ky_arr,  indexing='ij')
+
+        if single_plane:
+            prefactors = np.exp(-np.sqrt(kx_grid**2 + ky_grid**2 - 2*(energy - hartree_avg))*extent)
+            extrap_morbs[morb_index, :, :] = np.fft.irfft2(fourier*prefactors, morb_plane.shape)
+        else:
+            prefactors = np.exp(-np.sqrt(kx_grid**2 + ky_grid**2 - 2*(energy - hartree_avg))*dv[2])
+            for iz in range(np.shape(extrap_morbs)[3]):
+                fourier *= prefactors
+                extrap_morbs[morb_index, :, :, iz] = np.fft.irfft2(fourier, morb_plane.shape)
+
+    print("Extrapolation time: %.3f s"%(time.time()-time1))
+    return extrap_morbs

@@ -153,48 +153,47 @@ plt.axis('scaled')
 plt.savefig(args.output_dir+"/hartree.png", dpi=300)
 plt.close()
 
-def extrapolate_morbs(morb_grids, morb_energies, dv, plane_ind, extent, hart_plane, use_weighted_avg=True):
-    # NB: everything in hartree units!
-    extrap_planes = []
-    time1 = time.time()
-
-    num_morbs = np.shape(morb_grids)[0]
-    extrap_morbs = np.zeros((num_morbs, eval_reg_size_n[0], eval_reg_size_n[1], int(extent*ang_2_bohr/dv[2])))
-
-    for morb_index in range(num_morbs):
-
-        morb_plane = morb_grids[morb_index][:, :, plane_ind]
-
-        if use_weighted_avg:
-            # weigh the hartree potential by the molecular orbital
-            density_plane = morb_plane**2
-            density_plane /= np.sum(density_plane)
-            weighted_hartree = density_plane * skimage.transform.resize(hart_plane, density_plane.shape, mode='reflect')
-            hartree_avg = np.sum(weighted_hartree)
-        else:
-            hartree_avg = np.mean(hart_plane)
-
-        energy = morb_energies[morb_index]/hart_2_ev
-        if energy > hartree_avg:
-            print("Warning: unbound state, can't extrapolate! index: %d. Exiting." % morb_index)
-            break
-
-        fourier = np.fft.rfft2(morb_plane)
-        # NB: rfft2 takes REAL fourier transform over last (y) axis and COMPLEX over other (x) axes
-        # dv in BOHR, so k is in 1/bohr
-        kx_arr = 2*np.pi*np.fft.fftfreq(morb_plane.shape[0], dv[0])
-        ky_arr = 2*np.pi*np.fft.rfftfreq(morb_plane.shape[1], dv[1])
-
-        kx_grid, ky_grid = np.meshgrid(kx_arr, ky_arr,  indexing='ij')
-
-        prefactors = np.exp(-np.sqrt(kx_grid**2 + ky_grid**2 - 2*(energy - hartree_avg))*dv[2])
-
-        for iz in range(np.shape(extrap_morbs)[3]):
-            fourier *= prefactors
-            extrap_morbs[morb_index, :, :, iz] = np.fft.irfft2(fourier, morb_plane.shape)
-
-    print("Extrapolation time: %.3f s"%(time.time()-time1))
-    return extrap_morbs
+#def extrapolate_morbs(morb_grids, morb_energies, dv, plane_ind, extent, hart_plane, use_weighted_avg=True):
+#    # NB: everything in hartree units!
+#    time1 = time.time()
+#
+#    num_morbs = np.shape(morb_grids)[0]
+#    extrap_morbs = np.zeros((num_morbs, eval_reg_size_n[0], eval_reg_size_n[1], int(extent*ang_2_bohr/dv[2])))
+#
+#    for morb_index in range(num_morbs):
+#
+#        morb_plane = morb_grids[morb_index][:, :, plane_ind]
+#
+#        if use_weighted_avg:
+#            # weigh the hartree potential by the molecular orbital
+#            density_plane = morb_plane**2
+#            density_plane /= np.sum(density_plane)
+#            weighted_hartree = density_plane * skimage.transform.resize(hart_plane, density_plane.shape, mode='reflect')
+#            hartree_avg = np.sum(weighted_hartree)
+#        else:
+#            hartree_avg = np.mean(hart_plane)
+#
+#        energy = morb_energies[morb_index]/hart_2_ev
+#        if energy > hartree_avg:
+#            print("Warning: unbound state, can't extrapolate! index: %d. Exiting." % morb_index)
+#            break
+#
+#        fourier = np.fft.rfft2(morb_plane)
+#        # NB: rfft2 takes REAL fourier transform over last (y) axis and COMPLEX over other (x) axes
+#        # dv in BOHR, so k is in 1/bohr
+#        kx_arr = 2*np.pi*np.fft.fftfreq(morb_plane.shape[0], dv[0])
+#        ky_arr = 2*np.pi*np.fft.rfftfreq(morb_plane.shape[1], dv[1])
+#
+#        kx_grid, ky_grid = np.meshgrid(kx_arr, ky_arr,  indexing='ij')
+#
+#        prefactors = np.exp(-np.sqrt(kx_grid**2 + ky_grid**2 - 2*(energy - hartree_avg))*dv[2])
+#
+#        for iz in range(np.shape(extrap_morbs)[3]):
+#            fourier *= prefactors
+#            extrap_morbs[morb_index, :, :, iz] = np.fft.irfft2(fourier, morb_plane.shape)
+#
+#    print("Extrapolation time: %.3f s"%(time.time()-time1))
+#    return extrap_morbs
 
 extrap_plane_index = get_plane_index(args.extrap_plane*ang_2_bohr, z_arr, dv[2])
 if extrap_plane_index >= np.shape(morb_grids[0])[2]:
@@ -202,8 +201,9 @@ if extrap_plane_index >= np.shape(morb_grids[0])[2]:
     print("Error: the extrapolation plane can't be outside the initial box (z_max = %.2f)"
            % (z_arr[-1]/ang_2_bohr))
     exit(1)
-extrap_morbs = extrapolate_morbs(morb_grids, morb_energies, dv, extrap_plane_index,
-                                 args.extrap_extent, hart_plane, use_weighted_avg=True)
+extrap_morbs = cu.extrapolate_morbs(morb_grids, morb_energies, dv, extrap_plane_index,
+                                 args.extrap_extent*ang_2_bohr, hart_plane, False,
+                                 use_weighted_avg=True)
 
 total_morb_grids = np.concatenate((morb_grids, extrap_morbs), axis=3)
 
