@@ -1,13 +1,11 @@
 
 import os
 import numpy as np
+import scipy
 import scipy.io
 import time
 import copy
 import sys
-
-import skimage.transform
-
 
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
@@ -909,6 +907,19 @@ def read_cube_file(cube_file):
 
     return title, comment, natoms, origin, shape, cell, numbers, positions, data
 
+
+def resize_2d_arr_with_interpolation(array, new_shape):
+    x_arr = np.linspace(0, 1, array.shape[0])
+    y_arr = np.linspace(0, 1, array.shape[1])
+    rgi = scipy.interpolate.RegularGridInterpolator(points=[x_arr, y_arr], values=array)
+
+    x_arr_new = np.linspace(0, 1, new_shape[0])
+    y_arr_new = np.linspace(0, 1, new_shape[1])
+    x_coords = np.repeat(x_arr_new, len(y_arr_new))
+    y_coords = np.tile(y_arr_new, len(x_arr_new))
+
+    return rgi(np.array([x_coords, y_coords]).T).reshape(new_shape)
+
 # Extrapolate molecular orbitals from a specified plane to a box or another plane
 # in case of "single_plane = True", the orbitals will be only extrapolated on
 # a plane "extent" distance away
@@ -935,7 +946,7 @@ def extrapolate_morbs(morb_grids, morb_energies, dv, plane_ind,
             # weigh the hartree potential by the molecular orbital
             density_plane = morb_plane**2
             density_plane /= np.sum(density_plane)
-            weighted_hartree = density_plane * skimage.transform.resize(hart_plane, density_plane.shape, mode='reflect')
+            weighted_hartree = density_plane * resize_2d_arr_with_interpolation(hart_plane, density_plane.shape)
             hartree_avg = np.sum(weighted_hartree)
         else:
             hartree_avg = np.mean(hart_plane)

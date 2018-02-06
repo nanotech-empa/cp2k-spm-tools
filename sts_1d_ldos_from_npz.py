@@ -194,7 +194,7 @@ for fwhm in fwhm_arr:
 
         pldos = calculate_ldos(de, fwhm, broad_type)
 
-        ofname = output_dir + "ldos_%s_h%.1f_fwhm%.2f%s.txt" % (geom_name, height, fwhm, broad_type)
+        ofname = output_dir + "ldos_%s_h%.1f_dx%.3f_fwhm%.2f%s.txt" % (geom_name, height, dv[0]/ang_2_bohr, fwhm, broad_type)
         header = "geom: %s; height(ang): %.1f; fwhm(eV): %.4f; broad: %s; " % (geom_name, height, fwhm, broad_type) + \
                  "xmin(ang): %.5f; xmax(ang): %.5f; nx: %d; " % (np.min(x_arr_ang), np.max(x_arr_ang), len(x_arr_ang)) + \
                  "emin(eV): %.5f; emax(eV): %.5f; ne: %d" % (np.min(e_arr), np.max(e_arr), len(e_arr))

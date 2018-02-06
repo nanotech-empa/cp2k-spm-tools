@@ -70,6 +70,21 @@ parser.add_argument(
     default=0.7,
     help="Max value of energy.")
 
+parser.add_argument(
+    '--gammas',
+    nargs='+',
+    type=float,
+    metavar='G',
+    default=1.0,
+    help='Gamma values for color scale control.')
+parser.add_argument(
+    '--vmax_coefs',
+    nargs='+',
+    type=float,
+    metavar='VM',
+    default=1.0,
+    help='Only show proportion lower than specified on the color scale.')
+
 
 time0 = time.time()
 args = parser.parse_args()
@@ -246,27 +261,28 @@ np.savez(args.output_dir+figname,x_arr=k_arr, y_arr=e_arr, values=aft,
 x_grid_whole, e_grid_whole = np.meshgrid(x_arr_whole, e_arr_whole, indexing='ij')
 k_grid, e_k_grid = np.meshgrid(k_arr, e_arr, indexing='ij')
 
-for gamma in [1.0, 0.5, 0.2]:
+for gamma in args.gammas:
+    for vmax_coef in args.vmax_coefs:
 
-    f, (ax1, ax2) = plt.subplots(2, figsize=(18.0, 12.0))
+        f, (ax1, ax2) = plt.subplots(2, figsize=(18.0, 12.0))
 
-    ax1.pcolormesh(x_grid_whole, e_grid_whole, ldos_raw,
-                    norm=colors.PowerNorm(gamma=gamma),
-                    vmax=np.max(ldos_raw))
-    ax1.axvline(crop_x_l, color='r')
-    ax1.axvline(crop_x_r, color='r')
-    ax1.axhline(e_arr[0], color='r')
-    ax1.axhline(e_arr[-1], color='r')
-    ax1.set_xlabel("x (angstrom)")
-    ax1.set_ylabel("E (eV)")
+        ax1.pcolormesh(x_grid_whole, e_grid_whole, ldos_raw,
+                        norm=colors.PowerNorm(gamma=gamma),
+                        vmax=vmax_coef*np.max(ldos_raw))
+        ax1.axvline(crop_x_l, color='r')
+        ax1.axvline(crop_x_r, color='r')
+        ax1.axhline(e_arr[0], color='r')
+        ax1.axhline(e_arr[-1], color='r')
+        ax1.set_xlabel("x (angstrom)")
+        ax1.set_ylabel("E (eV)")
 
-    ax2.pcolormesh(k_grid, e_k_grid, aft,
-                    norm=colors.PowerNorm(gamma=gamma),
-                    vmax=np.max(aft))
-    ax2.set_ylim([np.min(e_arr), np.max(e_arr)])
-    ax2.set_xlim([0.0, 2.0])
-    ax2.set_xlabel("k (1/angstrom)")
-    ax2.set_ylabel("E (eV)")
+        ax2.pcolormesh(k_grid, e_k_grid, aft,
+                        norm=colors.PowerNorm(gamma=gamma),
+                        vmax=vmax_coef*np.max(aft))
+        ax2.set_ylim([np.min(e_arr), np.max(e_arr)])
+        ax2.set_xlim([0.0, 2.0])
+        ax2.set_xlabel("k (1/angstrom)")
+        ax2.set_ylabel("E (eV)")
 
-    plt.savefig(args.output_dir+figname+"_g%.1f.png"%gamma, dpi=300, bbox_inches='tight')
-    plt.close()
+        plt.savefig(args.output_dir+figname+"_g%.1f_vmc%.1f.png"%(gamma, vmax_coef), dpi=300, bbox_inches='tight')
+        plt.close()

@@ -26,6 +26,8 @@ python3 ./ldos_postproc.py \
   --crop_defect_r 1 \
   --padding_x 300.0 \
   --emin -0.7 \
-  --emax 0.7
+  --emax 0.7 \
+  --gammas 1.0 0.5 \
+  --vmax_coefs 1.0 0.5
 
 
