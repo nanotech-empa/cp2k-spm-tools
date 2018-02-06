@@ -5,7 +5,9 @@ import time
 import copy
 import sys
 import argparse
+
 import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import cp2k_utilities as cu
@@ -55,6 +57,12 @@ parser.add_argument(
 
 args = parser.parse_args()
 
+time0 = time.time()
+
+output_dir = args.output_dir
+if output_dir[-1] != '/':
+    output_dir += '/'
+
 npz_file_data = np.load(args.npz_file)
 
 morb_grids = npz_file_data['morb_grids']
@@ -71,6 +79,7 @@ plane_index = int(np.round((args.sts_plane_height*ang_2_bohr - z_bottom)/dv[2]))
 
 num_morbs = np.shape(morb_grids)[0]
 eval_reg_size_n = np.shape(morb_grids[0])
+eval_reg_size = dv*eval_reg_size_n
 
 if plane_index > len(z_arr) - 1:
     # Extrapolation is needed! Load the Hartree potential
@@ -109,6 +118,36 @@ else:
         morb_planes[i_mo, :, :] =  morb_grids[i_mo, :, :, plane_index]
 
 ### ----------------------------------------------------------------
+### Plot some orbitals for troubleshooting
+### ----------------------------------------------------------------
+i_homo = 0
+for i, en in enumerate(morb_energies):
+    if en > 0.0:
+        i_homo = i - 1
+        break
+    if np.abs(en) < 1e-6:
+        i_homo = i
+
+select = [i_homo - 1, i_homo, i_homo + 1, i_homo + 2]
+
+sel_morbs = np.zeros((eval_reg_size_n[0], 4*eval_reg_size_n[1]))
+
+for i, i_mo in enumerate(select):
+    sel_morbs[:, i*eval_reg_size_n[1]:(i+1)*eval_reg_size_n[1]] = morb_planes[i_mo]
+
+x_arr = np.arange(0, eval_reg_size[0], dv[0])
+y_arr_inc = np.arange(0, 4*eval_reg_size[1], dv[1])
+x_grid_inc, y_grid_inc = np.meshgrid(x_arr, y_arr_inc, indexing='ij')
+
+max_val = np.max(sel_morbs)
+
+plt.figure(figsize=(12, int(eval_reg_size_n[1]/eval_reg_size_n[0]*12*4)))
+plt.pcolormesh(x_grid_inc, y_grid_inc, sel_morbs, vmax=max_val, vmin=-max_val, cmap='seismic') # seismic bwr
+plt.savefig(output_dir+"orbs.png", dpi=300, bbox_inches='tight')
+plt.close()
+
+
+### ----------------------------------------------------------------
 ### Calculate the LDOS based on the orbitals
 ### ----------------------------------------------------------------
 
@@ -145,9 +184,6 @@ def calculate_ldos(de, fwhm, broad_type):
 
     return pldos
 
-output_dir = args.output_dir
-if output_dir[-1] != '/':
-    output_dir += '/'
 
 fwhm_arr = args.sts_fwhm
 

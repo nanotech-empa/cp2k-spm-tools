@@ -122,6 +122,7 @@ try:
 
         time1 = time.time()
         at_positions, at_elems = cu.read_atoms(args.xyz_file)
+        cu.center_atoms_to_cell(at_positions, cell)
         print("Read xyz: %.3f" % (time.time()-time1))
 
         time1 = time.time()
