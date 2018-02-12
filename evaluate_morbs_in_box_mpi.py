@@ -150,24 +150,46 @@ cell = comm.bcast(cell, root=0)
 at_positions = comm.bcast(at_positions, root=0)
 at_elems = comm.bcast(at_elems, root=0)
 basis_sets = comm.bcast(basis_sets, root=0)
-morb_composition = comm.bcast(morb_composition, root=0)
 
-num_morbs = len(morb_composition[0][0][0][0])
 
-morbs_per_rank = num_morbs//size
+### -----------------------------------------
+### Divide the molecular orbitals fairly between processors
+### -----------------------------------------
 
-# Select correct molecular orbitals for each rank
-ind_start = rank*morbs_per_rank
-ind_end = (rank+1)*morbs_per_rank
-if rank == size-1:
-    ind_end = num_morbs
-print("Rank %d works with orbitals %d:%d" %(rank, ind_start, ind_end))
-for iatom in range(len(morb_composition)):
-    for iset in range(len(morb_composition[iatom])):
-        for ishell in range(len(morb_composition[iatom][iset])):
-            for iorb in range(len(morb_composition[iatom][iset][ishell])):
-                morb_composition[iatom][iset][ishell][iorb] = \
-                    morb_composition[iatom][iset][ishell][iorb][ind_start:ind_end]
+if rank == 0:
+
+    num_morbs = len(morb_composition[0][0][0][0])
+    morbs_per_rank = num_morbs//size
+    extra_morbs = num_morbs % size
+
+    for i_rank in range(size):
+        ind_start = i_rank*morbs_per_rank
+        if i_rank < extra_morbs:
+            ind_start += i_rank
+            ind_end = ind_start + morbs_per_rank + 1
+        else:
+            ind_start += extra_morbs
+            ind_end = ind_start + morbs_per_rank
+        print("Rank %d works with orbitals %d:%d" %(i_rank, ind_start, ind_end))
+
+        morb_comp_send = copy.deepcopy(morb_composition)
+
+        for iatom in range(len(morb_comp_send)):
+            for iset in range(len(morb_comp_send[iatom])):
+                for ishell in range(len(morb_comp_send[iatom][iset])):
+                    for iorb in range(len(morb_comp_send[iatom][iset][ishell])):
+                        morb_comp_send[iatom][iset][ishell][iorb] = \
+                            morb_comp_send[iatom][iset][ishell][iorb][ind_start:ind_end]
+        if i_rank != 0:
+            comm.send(morb_comp_send, dest=i_rank)
+        else:
+            morb_comp_scattered = copy.deepcopy(morb_comp_send)
+    # Release memory
+    morb_composition = 0
+    morb_comp_send = 0
+else:
+    morb_comp_scattered = comm.recv(source=0)
+
 
 if rank == 0:
     print("Initial broadcast time %.4f s" % (time.time() - time1))
@@ -213,7 +235,7 @@ if args.single_plane:
 
 morb_grids = cu.calc_morbs_in_region(eval_reg_size, eval_reg_size_n, z_bottom,
                 at_positions, at_elems,
-                basis_sets, morb_composition,
+                basis_sets, morb_comp_scattered,
                 pbc_box_size = args.local_eval_box_size,
                 print_info = (rank == 0))
 
