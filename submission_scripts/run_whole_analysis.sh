@@ -2,10 +2,20 @@
 
 FOLDER=.
 
+cd $FOLDER
+
 mkdir sts_output
 
-# the oldest .txt in the sts_output folder 
-LDOS_FILE=$(ls -tr sts_output | grep .txt | head -n 1)
+python3 ./sts_1d_ldos_from_npz.py \
+  --npz_file "$FOLDER"/morbs_h1_dx0.2.npz \
+  --output_dir "$FOLDER"/sts_output \
+  --sts_plane_height 1.0 \
+  --sts_de 0.005 \
+  --sts_fwhm 0.01 0.05 \
+  --work_function 4.36
+
+# the newest .txt in the sts_output folder 
+LDOS_FILE=$(ls -t sts_output | grep .txt | head -n 1)
 
 CROP_DIST_L=5.0
 CROP_DIST_R=5.0

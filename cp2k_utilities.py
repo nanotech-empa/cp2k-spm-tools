@@ -901,7 +901,18 @@ def read_cube_file(cube_file):
         positions[i] = [float(s) for s in line[2:]]
 
     positions /= ang_2_bohr
-    data = np.array(f.read().split(), dtype=float)
+
+    # Option 1: less memory usage but might be slower
+    data = np.empty(shape[0]*shape[1]*shape[2], dtype=np.float32)
+    cursor = 0
+    for i, line in enumerate(f):
+        ls = line.split()
+        data[cursor:cursor+len(ls)] = ls
+        cursor += len(ls)
+
+    # Option 2: Takes much more memory (but may be faster)
+    #data = np.array(f.read().split(), dtype=float)
+
     data = data.reshape(shape)
     f.close()
 
@@ -920,17 +931,29 @@ def resize_2d_arr_with_interpolation(array, new_shape):
 
     return rgi(np.array([x_coords, y_coords]).T).reshape(new_shape)
 
-# Extrapolate molecular orbitals from a specified plane to a box or another plane
-# in case of "single_plane = True", the orbitals will be only extrapolated on
-# a plane "extent" distance away
-# Extent in bohr !!!
-def extrapolate_morbs(morb_grids, morb_energies, dv, plane_ind,
-                      extent, hart_plane, single_plane, use_weighted_avg=True):
-    # NB: everything in hartree units!
+
+def extrapolate_morbs(morb_planes, morb_energies, dv,
+                      extent, single_plane,
+                      work_function=None, hart_plane=None, use_weighted_avg=True):
+    """
+    Extrapolate molecular orbitals from a specified plane to a box or another plane
+    in case of "single_plane = True", the orbitals will be only extrapolated on
+    a plane "extent" distance away
+    Extent in bohr !!!
+
+    Either the work function or the hartree plane is needed!
+    Both are assumed to be in hartree units wrt to Fermi/Homo.
+
+    NB: everything in hartree units!
+    """
     time1 = time.time()
 
-    num_morbs = np.shape(morb_grids)[0]
-    eval_reg_size_n = np.shape(morb_grids[0])
+    if work_function == None and hart_plane == None:
+        print("You must specify either the WF or the hartree plane.")
+        return None
+
+    num_morbs = np.shape(morb_planes)[0]
+    eval_reg_size_n = np.shape(morb_planes[0])
 
     if single_plane:
         extrap_morbs = np.zeros((num_morbs, eval_reg_size_n[0], eval_reg_size_n[1]))
@@ -940,16 +963,19 @@ def extrapolate_morbs(morb_grids, morb_energies, dv, plane_ind,
 
     for morb_index in range(num_morbs):
 
-        morb_plane = morb_grids[morb_index][:, :, plane_ind]
+        morb_plane = morb_planes[morb_index]
 
-        if use_weighted_avg:
-            # weigh the hartree potential by the molecular orbital
-            density_plane = morb_plane**2
-            density_plane /= np.sum(density_plane)
-            weighted_hartree = density_plane * resize_2d_arr_with_interpolation(hart_plane, density_plane.shape)
-            hartree_avg = np.sum(weighted_hartree)
+        if work_function != None:
+            hartree_avg = work_function
         else:
-            hartree_avg = np.mean(hart_plane)
+            if use_weighted_avg:
+                # weigh the hartree potential by the molecular orbital
+                density_plane = morb_plane**2
+                density_plane /= np.sum(density_plane)
+                weighted_hartree = density_plane * resize_2d_arr_with_interpolation(hart_plane, density_plane.shape)
+                hartree_avg = np.sum(weighted_hartree)
+            else:
+                hartree_avg = np.mean(hart_plane)
 
         energy = morb_energies[morb_index]/hart_2_ev
         if energy > hartree_avg:
@@ -975,3 +1001,21 @@ def extrapolate_morbs(morb_grids, morb_energies, dv, plane_ind,
 
     print("Extrapolation time: %.3f s"%(time.time()-time1))
     return extrap_morbs
+
+def get_hartree_plane_above_top_atom(hart_cube_data, height):
+    """ Returns the hartree plane above topmost atom in z direction
+    arguments:
+        height - angstrom
+    returns:
+        hartree potential on the plane in hartree units and without any energy shift
+    """
+
+    hart_cube = hart_cube_data[-1]
+    hart_cell = hart_cube_data[5]
+    hart_atomic_pos = hart_cube_data[-2]
+
+    topmost_atom_z = np.max(hart_atomic_pos[:, 2]) # Angstrom
+    hart_plane_z = height + topmost_atom_z
+    hart_plane_index = int(np.round(hart_plane_z/hart_cell[2, 2]*np.shape(hart_cube)[2]))
+
+    return hart_cube[:, :, hart_plane_index]

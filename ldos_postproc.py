@@ -133,10 +133,10 @@ if args.crop_defect_l != 0:
     index_l = np.argmax(first_half)
     crop_x_l = x_arr_whole[index_l] + args.crop_dist_l
 
-crop_x_r = xmax - args.crop_dist_l
+crop_x_r = args.crop_dist_r
 if args.crop_defect_r != 0:
     index_r = np.argmax(second_half) + len(first_half)
-    crop_x_r = x_arr_whole[index_r] - args.crop_dist_l
+    crop_x_r = x_arr_whole[index_r] - args.crop_dist_r
 
 # align cropping, such that remaining area is a multiple of lattice parameter (minus dx!)
 lattice_param = 3*1.42
@@ -154,6 +154,9 @@ crop_r = int(np.round(crop_x_r/dx))
 
 x_arr = np.copy(x_arr_whole[crop_l:crop_r+1])
 ldos = np.copy(ldos_raw[crop_l:crop_r+1])
+
+crop_x_l_final = x_arr[0]
+crop_x_r_final = x_arr[-1]
 
 ### -------------------------------------------------------
 ### Crop the LDOS in energy
@@ -226,7 +229,7 @@ def fourier_transform(ldos, dx, lattice_param):
     k_arr = 2*np.pi*np.fft.rfftfreq(len(ldos[:, 0]), dx)
     # Note: Since we took the FT of the charge density, the wave vectors are
     #       twice the ones of the underlying wave function.
-    k_arr = k_arr / 2
+    #k_arr = k_arr / 2
 
     # Lattice spacing for the ribbon = 3x c-c distance
     # Brillouin zone boundary [1/angstroms]
@@ -261,16 +264,21 @@ np.savez(args.output_dir+figname,x_arr=k_arr, y_arr=e_arr, values=aft,
 x_grid_whole, e_grid_whole = np.meshgrid(x_arr_whole, e_arr_whole, indexing='ij')
 k_grid, e_k_grid = np.meshgrid(k_arr, e_arr, indexing='ij')
 
+gamma_ldos = 0.5
+vmax_coef_ldos = 0.3
+
 for gamma in args.gammas:
     for vmax_coef in args.vmax_coefs:
 
         f, (ax1, ax2) = plt.subplots(2, figsize=(18.0, 12.0))
 
         ax1.pcolormesh(x_grid_whole, e_grid_whole, ldos_raw,
-                        norm=colors.PowerNorm(gamma=gamma),
-                        vmax=vmax_coef*np.max(ldos_raw))
-        ax1.axvline(crop_x_l, color='r')
-        ax1.axvline(crop_x_r, color='r')
+                        norm=colors.PowerNorm(gamma=gamma_ldos),
+                        vmax=vmax_coef_ldos*np.max(ldos_raw))
+        ax1.axvline(crop_x_l_final, color='r')
+        ax1.axvline(crop_x_r_final, color='r')
+        ax1.text(crop_x_l_final+1.0, e_arr_whole[0]+0.01, "%.2f"%crop_x_l_final, color='red')
+        ax1.text(crop_x_r_final+1.0, e_arr_whole[0]+0.01, "%.2f"%crop_x_r_final, color='red')
         ax1.axhline(e_arr[0], color='r')
         ax1.axhline(e_arr[-1], color='r')
         ax1.set_xlabel("x (angstrom)")
@@ -280,7 +288,8 @@ for gamma in args.gammas:
                         norm=colors.PowerNorm(gamma=gamma),
                         vmax=vmax_coef*np.max(aft))
         ax2.set_ylim([np.min(e_arr), np.max(e_arr)])
-        ax2.set_xlim([0.0, 2.0])
+        ax2.set_xlim([0.0, 3.8])
+        ax2.text(3.4, e_arr[0]+0.01, "max=%.2e"%np.max(aft), color='red')
         ax2.set_xlabel("k (1/angstrom)")
         ax2.set_ylabel("E (eV)")
 

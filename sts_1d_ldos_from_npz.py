@@ -48,6 +48,13 @@ parser.add_argument(
     help='Full width half maximums for the broadening of each orbital.')
 
 parser.add_argument(
+    '--work_function',
+    type=float,
+    metavar='WF',
+    default=None,
+    help="Work function in eV of the system (fermi and vacuum level difference)." \
+         "For extrapolation either this or the hartree file is needed.")
+parser.add_argument(
     '--hartree_file',
     metavar='FILENAME',
     default=None,
@@ -82,35 +89,29 @@ eval_reg_size_n = np.shape(morb_grids[0])
 eval_reg_size = dv*eval_reg_size_n
 
 if plane_index > len(z_arr) - 1:
-    # Extrapolation is needed! Load the Hartree potential
-    if args.hartree_file == None:
-        print("Hartree potential must be supplied if STS plane is out of region")
+    # Extrapolation is needed!
+
+    if args.work_function != None:
+        morb_planes = cu.extrapolate_morbs(morb_grids[:, :, :, -1], morb_energies, dv,
+                                             args.sts_plane_height*ang_2_bohr - z_top, True,
+                                             work_function=args.work_function/hart_2_ev)
+    elif args.hartree_file != None:
+
+        time1 = time.time()
+        hart_cube_data = cu.read_cube_file(args.hartree_file)
+        print("Read hartree: %.3f" % (time.time()-time1))
+        hart_plane = cu.get_hartree_plane_above_top_atom(hart_cube_data, height)
+        hart_plane -= ref_energy/hart_2_ev
+        print("Hartree on extrapolation plane: min: %.4f; max: %.4f; avg: %.4f (eV)" % (
+                                                        np.min(hart_plane)*hart_2_ev,
+                                                        np.max(hart_plane)*hart_2_ev,
+                                                        np.mean(hart_plane)*hart_2_ev))
+        morb_planes = cu.extrapolate_morbs(morb_grids[:, :, :, -1], morb_energies, dv,
+                                             args.sts_plane_height*ang_2_bohr - z_top, True,
+                                             hart_plane=hart_plane, use_weighted_avg=True)
+    else:
+        print("Work function or Hartree potential must be supplied if STS plane is out of region")
         exit()
-
-    time1 = time.time()
-    hart_cube_data = cu.read_cube_file(args.hartree_file)
-    hart_cube = hart_cube_data[-1]
-    hart_cell = hart_cube_data[5]
-    hart_atomic_pos = hart_cube_data[-2]
-    print("Read hartree: %.3f" % (time.time()-time1))
-
-    topmost_atom_z = np.max(hart_atomic_pos[:, 2]) # Angstrom
-    hart_plane_z = args.extrap_plane + topmost_atom_z
-    hart_plane_index = int(np.round(hart_plane_z/hart_cell[2, 2]*np.shape(hart_cube)[2]))
-
-    hart_plane = hart_cube[:, :, hart_plane_index] - ref_energy/hart_2_ev
-
-    print("Hartree on extrapolation plane: min: %.4f; max: %.4f; avg: %.4f (eV)" % (
-                                                    np.min(hart_plane)*hart_2_ev,
-                                                    np.max(hart_plane)*hart_2_ev,
-                                                    np.mean(hart_plane)*hart_2_ev))
-    # ------------------------------
-    # Do the extrapolation !!!
-    # ------------------------------
-
-    morb_planes = cu.extrapolate_morbs(morb_grids, morb_energies, dv, -1,
-                                         args.sts_plane_height - z_top,
-                                         hart_plane, True, use_weighted_avg=True)
 
 else:
     morb_planes = np.zeros((num_morbs, eval_reg_size_n[0], eval_reg_size_n[1]))
@@ -120,6 +121,8 @@ else:
 ### ----------------------------------------------------------------
 ### Plot some orbitals for troubleshooting
 ### ----------------------------------------------------------------
+time1 = time.time()
+
 i_homo = 0
 for i, en in enumerate(morb_energies):
     if en > 0.0:
@@ -128,23 +131,30 @@ for i, en in enumerate(morb_energies):
     if np.abs(en) < 1e-6:
         i_homo = i
 
-select = [i_homo - 1, i_homo, i_homo + 1, i_homo + 2]
+n_homo = 20
+n_lumo = 20
 
-sel_morbs = np.zeros((eval_reg_size_n[0], 4*eval_reg_size_n[1]))
+select = np.arange(i_homo - n_homo + 1, i_homo + n_lumo + 1, 1)
+
+sel_morbs = np.zeros((eval_reg_size_n[0], len(select)*eval_reg_size_n[1]))
 
 for i, i_mo in enumerate(select):
     sel_morbs[:, i*eval_reg_size_n[1]:(i+1)*eval_reg_size_n[1]] = morb_planes[i_mo]
 
 x_arr = np.arange(0, eval_reg_size[0], dv[0])
-y_arr_inc = np.arange(0, 4*eval_reg_size[1], dv[1])
+y_arr_inc = np.arange(0, len(select)*eval_reg_size[1], dv[1])
 x_grid_inc, y_grid_inc = np.meshgrid(x_arr, y_arr_inc, indexing='ij')
 
 max_val = np.max(sel_morbs)
 
-plt.figure(figsize=(12, int(eval_reg_size_n[1]/eval_reg_size_n[0]*12*4)))
+plt.figure(figsize=(12, int(eval_reg_size_n[1]/eval_reg_size_n[0]*12*len(select))))
 plt.pcolormesh(x_grid_inc, y_grid_inc, sel_morbs, vmax=max_val, vmin=-max_val, cmap='seismic') # seismic bwr
-plt.savefig(output_dir+"orbs.png", dpi=300, bbox_inches='tight')
+plt.axis('off')
+plt.axhline(n_homo*eval_reg_size[1], color='lightgray')
+plt.savefig(output_dir+"orbs.png", dpi=200, bbox_inches='tight')
 plt.close()
+
+print("Made orbital plot: %.3f" % (time.time()-time1))
 
 
 ### ----------------------------------------------------------------

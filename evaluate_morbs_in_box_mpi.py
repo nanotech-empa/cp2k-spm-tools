@@ -117,7 +117,8 @@ try:
 
         time1 = time.time()
         fermi = cu.read_fermi_from_cp2k_out(args.cp2k_output)
-        print("Fermi energy: %.6f" % fermi)
+        if fermi != None:
+            print("Fermi energy: %.6f" % fermi)
         print("Read cp2k out: %.3f" % (time.time()-time1))
 
         time1 = time.time()
@@ -263,8 +264,8 @@ if rank == 0:
     np.savez(args.output_file,
         morb_grids=all_morb_grids,
         morb_energies=morb_energies,
-        dv=dv,
-        z_arr=z_arr,
+        dv=dv, # Bohr
+        z_arr=z_arr, # Bohr
         elim=elim,
         ref_energy=ref_energy,
         geom_label=geom_label)
