@@ -205,7 +205,7 @@ print("Made avg orbital plot: %.3f" % (time.time()-time1))
 ### ----------------------------------------------------------------
 ### Take the FT and plot it
 ### ----------------------------------------------------------------
-time1 = time.time()
+
 
 def remove_row_average(ldos):
     ldos_no_avg = np.copy(ldos)
@@ -239,14 +239,16 @@ def fourier_transform(ldos, dx, lattice_param):
 
     return k_arr, aft, dk, bzboundary, bzb_index
 
-dx = x_arr[1]-x_arr[0]
-modif_sel_morbs_avg = remove_row_average(sel_morbs_avg)
-modif_sel_morbs_avg = add_padding(modif_sel_morbs_avg, dx, 400.0)
-k_arr, aft, dk, bzboundary, bzb_index = fourier_transform(modif_sel_morbs_avg, dx, 4.26)
-
-k_grid_inc, y_k_grid_inc = np.meshgrid(k_arr, y_arr_inc, indexing='ij')
-
-max_val = np.max(aft)
+#time1 = time.time()
+#
+#dx_ang = (x_arr[1]-x_arr[0])/ang_2_bohr
+#modif_sel_morbs_avg = remove_row_average(sel_morbs_avg)
+#modif_sel_morbs_avg = add_padding(modif_sel_morbs_avg, dx_ang, 400.0)
+#k_arr, aft, dk, bzboundary, bzb_index = fourier_transform(modif_sel_morbs_avg, dx_ang, 4.26)
+#
+#k_grid_inc, y_k_grid_inc = np.meshgrid(k_arr, y_arr_inc, indexing='ij')
+#
+#max_val = np.max(aft)
 
 #plt.figure(figsize=(12, int(eval_reg_size_n[1]/eval_reg_size_n[0]*12*len(select))))
 #plt.pcolormesh(k_grid_inc, y_k_grid_inc, aft, vmax=max_val, cmap='BuGn', norm=colors.PowerNorm(gamma=0.5))
@@ -255,22 +257,22 @@ max_val = np.max(aft)
 #plt.savefig(output_dir+"orbs_ft.png", dpi=200, bbox_inches='tight')
 #plt.close()
 
-print("Made orbital ft plot: %.3f" % (time.time()-time1))
+#print("Made orbital ft plot: %.3f" % (time.time()-time1))
 
 ### ----------------------------------------------------------------
 ### Crop and take FT
 ### ----------------------------------------------------------------
 time1 = time.time()
 
-dx = x_arr[1]-x_arr[0]
+dx_ang = (x_arr[1]-x_arr[0])/ang_2_bohr
 
-crop_i_l = int(args.crop_x_l*ang_2_bohr//dx)
-crop_i_r = int(args.crop_x_r*ang_2_bohr//dx)
+crop_i_l = int(args.crop_x_l//dx_ang)
+crop_i_r = int(args.crop_x_r//dx_ang)
 
 modif_sel_morbs_avg = np.copy(sel_morbs_avg[crop_i_l:crop_i_r, :])
 modif_sel_morbs_avg = remove_row_average(modif_sel_morbs_avg)
-modif_sel_morbs_avg = add_padding(modif_sel_morbs_avg, dx, 400.0)
-k_arr, aft, dk, bzboundary, bzb_index = fourier_transform(modif_sel_morbs_avg, dx, 4.26)
+modif_sel_morbs_avg = add_padding(modif_sel_morbs_avg, dx_ang, 400.0)
+k_arr, aft, dk, bzboundary, bzb_index = fourier_transform(modif_sel_morbs_avg, dx_ang, 4.26)
 
 k_grid_inc, y_k_grid_inc = np.meshgrid(k_arr, y_arr_inc, indexing='ij')
 
@@ -296,12 +298,12 @@ f, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(3*12, int(eval_reg_size_n[1]/ev
 
 plt.subplots_adjust(left=0.0, right=1.0, wspace=0.0)
 
-max_val = 0.5*np.max(sel_morbs)
+max_val = 0.25*np.max(sel_morbs)
 ax1.pcolormesh(x_grid_inc, y_grid_inc, sel_morbs, vmax=max_val, vmin=-max_val, cmap='seismic') # seismic bwr
 ax1.xaxis.set_visible(False)
 ax1.axhline(n_homo*eval_reg_size[1], color='lightgray')
 
-max_val = 0.3*np.max(sel_morbs_avg)
+max_val = 0.1*np.max(sel_morbs_avg)
 ax2.pcolormesh(x_grid_inc, y_grid_inc, sel_morbs_avg, vmax=max_val, cmap='BuGn', norm=colors.PowerNorm(gamma=0.5))
 ax2.xaxis.set_visible(False)
 ax2.yaxis.set_visible(False)
@@ -309,7 +311,7 @@ ax2.axvline(args.crop_x_l*ang_2_bohr, color='lightgray')
 ax2.axvline(args.crop_x_r*ang_2_bohr, color='lightgray')
 ax2.axhline(n_homo*eval_reg_size[1], color='lightgray')
 
-max_val = 0.5*np.max(aft)
+max_val = 0.25*np.max(aft)
 ax3.pcolormesh(k_grid_inc, y_k_grid_inc, aft, vmax=max_val, cmap='BuGn')
 ax3.xaxis.set_visible(False)
 ax3.yaxis.set_visible(False)
@@ -321,7 +323,7 @@ ytick_labels = ["HOMO%+d e=%.4f" % (ind-i_homo, morb_energies[ind]) for ind in s
 ax1.set_yticks(ytick_pos)
 ax1.set_yticklabels(ytick_labels)
 
-plt.savefig(output_dir+"orb_analysis.png", dpi=300, bbox_inches='tight')
+plt.savefig(output_dir+"orb_analysis_h%.1f.png"%args.sts_plane_height, dpi=300, bbox_inches='tight')
 plt.close()
 
 print("Final plot: %.3f" % (time.time()-time1))
