@@ -15,7 +15,14 @@ CROP_DIST_R=5.0
 CROP_DEF_L=1
 CROP_DEF_R=1
 
-if ls | grep -q L60
+LAT_PARAM=4.26
+
+if ls | grep -q cnt1212
+then
+  LAT_PARAM=2.45951214675
+fi
+
+if ls | grep -q cnt120-L60
 then
   CROP_DIST_L=256.95
   CROP_DIST_R=363.23
@@ -23,7 +30,7 @@ then
   CROP_DEF_R=0
 fi
 
-if ls | grep -q L50
+if ls | grep -q cnt120-L50
 then
   CROP_DIST_L=192.13
   CROP_DIST_R=328.27
@@ -31,7 +38,7 @@ then
   CROP_DEF_R=0
 fi
 
-if ls | grep -q L100-15
+if ls | grep -q cnt120-L100-15
 then
   CROP_DIST_L=443.13
   CROP_DIST_R=579.27
@@ -39,7 +46,7 @@ then
   CROP_DEF_R=0
 fi
 
-if ls | grep -q L12
+if ls | grep -q cnt120-L12
 then
   CROP_DIST_L=14.26
   CROP_DIST_R=120.54
@@ -47,7 +54,7 @@ then
   CROP_DEF_R=0
 fi
 
-if ls | grep -q L15
+if ls | grep -q cnt120-L15
 then
   CROP_DIST_L=18.00
   CROP_DIST_R=154.00
@@ -73,6 +80,7 @@ python3 ./ftsts_1d_ldos_from_npz.py \
   --padding_x 300.0 \
   --emin -0.7 \
   --emax 0.7 \
+  --lat_param $LAT_PARAM \
   --gammas 1.0 \
   --vmax_coefs 1.0
 
@@ -95,6 +103,7 @@ python3 ./ftsts_1d_ldos_from_npz.py \
   --padding_x 300.0 \
   --emin -0.7 \
   --emax 0.7 \
+  --lat_param $LAT_PARAM \
   --gammas 1.0 \
   --vmax_coefs 1.0
 
@@ -111,6 +120,7 @@ python3 ./orbital_analysis_from_npz.py \
   --crop_x_l $CROP_DIST_L \
   --crop_x_r $CROP_DIST_R \
   --work_function 4.36
+  --lat_param $LAT_PARAM \
 
 # --------------------------------------
 echo
@@ -125,5 +135,6 @@ python3 ./orbital_analysis_from_npz.py \
   --crop_x_l $CROP_DIST_L \
   --crop_x_r $CROP_DIST_R \
   --work_function 4.36
+  --lat_param $LAT_PARAM \
 
 echo "#### DONE: " $(pwd)

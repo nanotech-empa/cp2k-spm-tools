@@ -73,6 +73,12 @@ parser.add_argument(
     default=None,
     help="Cube file containing the hartree potential." \
          "Only needed if sts_plane_height is out of the morb eval region.")
+ parser.add_argument(
+     '--lat_param',
+     type=float,
+     metavar='A',
+     required=True,
+     help="Lattice parameter of the system (needed for plotting).")
 
 
 args = parser.parse_args()
@@ -244,7 +250,7 @@ def fourier_transform(ldos, dx, lattice_param):
 #dx_ang = (x_arr[1]-x_arr[0])/ang_2_bohr
 #modif_sel_morbs_avg = remove_row_average(sel_morbs_avg)
 #modif_sel_morbs_avg = add_padding(modif_sel_morbs_avg, dx_ang, 400.0)
-#k_arr, aft, dk, bzboundary, bzb_index = fourier_transform(modif_sel_morbs_avg, dx_ang, 4.26)
+#k_arr, aft, dk, bzboundary, bzb_index = fourier_transform(modif_sel_morbs_avg, dx_ang, args.lat_param)
 #
 #k_grid_inc, y_k_grid_inc = np.meshgrid(k_arr, y_arr_inc, indexing='ij')
 #
@@ -272,7 +278,7 @@ crop_i_r = int(args.crop_x_r//dx_ang)
 modif_sel_morbs_avg = np.copy(sel_morbs_avg[crop_i_l:crop_i_r, :])
 modif_sel_morbs_avg = remove_row_average(modif_sel_morbs_avg)
 modif_sel_morbs_avg = add_padding(modif_sel_morbs_avg, dx_ang, 400.0)
-k_arr, aft, dk, bzboundary, bzb_index = fourier_transform(modif_sel_morbs_avg, dx_ang, 4.26)
+k_arr, aft, dk, bzboundary, bzb_index = fourier_transform(modif_sel_morbs_avg, dx_ang, args.lat_param)
 
 k_grid_inc, y_k_grid_inc = np.meshgrid(k_arr, y_arr_inc, indexing='ij')
 
@@ -316,7 +322,7 @@ ax3.pcolormesh(k_grid_inc, y_k_grid_inc, aft, vmax=max_val, cmap='gist_ncar')
 ax3.xaxis.set_visible(False)
 ax3.yaxis.set_visible(False)
 ax3.axhline(n_homo*eval_reg_size[1], color='lightgray')
-ax3.set_xlim([0.0, 3.8])
+ax3.set_xlim([0.0, 3*bzboundary])
 
 ytick_pos = np.linspace(0.5*eval_reg_size[1], (len(select)-0.5)*eval_reg_size[1], len(select))
 ytick_labels = ["HOMO%+d e=%.4f" % (ind-i_homo, morb_energies[ind]) for ind in select]

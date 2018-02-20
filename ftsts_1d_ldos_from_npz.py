@@ -101,6 +101,13 @@ parser.add_argument(
     type=float,
     default=0.7,
     help="Max value of energy.")
+parser.add_argument(
+    '--lat_param',
+    type=float,
+    metavar='A',
+    required=True,
+    help="Lattice parameter of the system (needed for alignment and some plots).")
+
 
 parser.add_argument(
     '--gammas',
@@ -274,7 +281,7 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
         crop_x_r = x_arr_whole[index_r] - args.crop_dist_r
 
     # align cropping, such that remaining area is a multiple of lattice parameter (minus dx!)
-    lattice_param = 3*1.42
+    lattice_param = args.lat_param
     crop_len = crop_x_r - crop_x_l
     crop_len_goal = np.round(crop_len/lattice_param)*lattice_param - dx
     extra_shift = (crop_len_goal - crop_len)/2
@@ -400,7 +407,7 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
     k_grid, e_k_grid = np.meshgrid(k_arr, e_arr, indexing='ij')
 
     gamma_ldos = 0.5
-    vmax_coef_ldos = 0.3
+    vmax_coef_ldos = 0.5
 
     for gamma in args.gammas:
         for vmax_coef in args.vmax_coefs:
@@ -425,8 +432,8 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
                             vmax=vmax_coef*np.max(aft),
                             cmap='gist_ncar')
             ax2.set_ylim([np.min(e_arr), np.max(e_arr)])
-            ax2.set_xlim([0.0, 3.8])
-            ax2.text(3.4, e_arr[0]+0.01, "max=%.2e"%np.max(aft), color='red')
+            ax2.set_xlim([0.0, 3*bzboundary])
+            ax2.text(3*bzboundary-0.25, e_arr[0]+0.01, "max=%.2e"%np.max(aft), color='red')
             ax2.set_xlabel("k (1/angstrom)")
             ax2.set_ylabel("E (eV)")
 

@@ -3,7 +3,7 @@
 #SBATCH --nodes=1 # the number of ranks (total)
 #SBATCH --ntasks-per-node=12 # the number of ranks per node
 #SBATCH --cpus-per-task=1 # use this for threaded applications
-#SBATCH --time=5:00:00 
+#SBATCH --time=3:00:00 
 #SBATCH --constraint=gpu
 #SBATCH --partition=normal
 
