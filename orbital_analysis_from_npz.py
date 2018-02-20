@@ -303,16 +303,16 @@ ax1.pcolormesh(x_grid_inc, y_grid_inc, sel_morbs, vmax=max_val, vmin=-max_val, c
 ax1.xaxis.set_visible(False)
 ax1.axhline(n_homo*eval_reg_size[1], color='lightgray')
 
-max_val = 0.1*np.max(sel_morbs_avg)
-ax2.pcolormesh(x_grid_inc, y_grid_inc, sel_morbs_avg, vmax=max_val, cmap='BuGn', norm=colors.PowerNorm(gamma=0.5))
+max_val = 0.25*np.max(sel_morbs_avg)
+ax2.pcolormesh(x_grid_inc, y_grid_inc, sel_morbs_avg, vmax=max_val, cmap='gist_ncar', norm=colors.PowerNorm(gamma=0.5))
 ax2.xaxis.set_visible(False)
 ax2.yaxis.set_visible(False)
 ax2.axvline(args.crop_x_l*ang_2_bohr, color='lightgray')
 ax2.axvline(args.crop_x_r*ang_2_bohr, color='lightgray')
 ax2.axhline(n_homo*eval_reg_size[1], color='lightgray')
 
-max_val = 0.25*np.max(aft)
-ax3.pcolormesh(k_grid_inc, y_k_grid_inc, aft, vmax=max_val, cmap='BuGn')
+max_val = 0.5*np.max(aft)
+ax3.pcolormesh(k_grid_inc, y_k_grid_inc, aft, vmax=max_val, cmap='gist_ncar')
 ax3.xaxis.set_visible(False)
 ax3.yaxis.set_visible(False)
 ax3.axhline(n_homo*eval_reg_size[1], color='lightgray')
@@ -323,7 +323,7 @@ ytick_labels = ["HOMO%+d e=%.4f" % (ind-i_homo, morb_energies[ind]) for ind in s
 ax1.set_yticks(ytick_pos)
 ax1.set_yticklabels(ytick_labels)
 
-plt.savefig(output_dir+"orb_analysis_h%.1f.png"%args.sts_plane_height, dpi=300, bbox_inches='tight')
+plt.savefig(output_dir+"orb_analysis_%s_h%.1f.png"%(geom_name, args.sts_plane_height), dpi=200, bbox_inches='tight')
 plt.close()
 
 print("Final plot: %.3f" % (time.time()-time1))

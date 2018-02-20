@@ -409,7 +409,8 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
 
             ax1.pcolormesh(x_grid_whole, e_grid_whole, ldos_raw,
                             norm=colors.PowerNorm(gamma=gamma_ldos),
-                            vmax=vmax_coef_ldos*np.max(ldos_raw))
+                            vmax=vmax_coef_ldos*np.max(ldos_raw),
+                            cmap='gist_ncar')
             ax1.axvline(crop_x_l_final, color='r')
             ax1.axvline(crop_x_r_final, color='r')
             ax1.text(crop_x_l_final+1.0, e_arr_whole[0]+0.01, "%.2f"%crop_x_l_final, color='red')
@@ -421,7 +422,8 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
 
             ax2.pcolormesh(k_grid, e_k_grid, aft,
                             norm=colors.PowerNorm(gamma=gamma),
-                            vmax=vmax_coef*np.max(aft))
+                            vmax=vmax_coef*np.max(aft),
+                            cmap='gist_ncar')
             ax2.set_ylim([np.min(e_arr), np.max(e_arr)])
             ax2.set_xlim([0.0, 3.8])
             ax2.text(3.4, e_arr[0]+0.01, "max=%.2e"%np.max(aft), color='red')
