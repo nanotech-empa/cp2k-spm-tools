@@ -200,6 +200,7 @@ if rank == 0:
 ### -----------------------------------------
 
 height_above_atoms = args.z_top # angstroms
+height_below_atoms = 1.0 # below !
 
 top_atom_z = np.max(at_positions[:, 2]) # Bohr
 z_top = top_atom_z + height_above_atoms*ang_2_bohr
