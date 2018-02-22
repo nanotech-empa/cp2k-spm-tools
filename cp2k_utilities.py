@@ -1004,8 +1004,10 @@ def extrapolate_morbs(morb_planes, morb_energies, dv,
 
 def get_hartree_plane_above_top_atom(hart_cube_data, height):
     """ Returns the hartree plane above topmost atom in z direction
+
     arguments:
         height - angstrom
+        
     returns:
         hartree potential on the plane in hartree units and without any energy shift
     """

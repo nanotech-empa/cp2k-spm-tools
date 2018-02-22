@@ -163,7 +163,7 @@ if plane_index > len(z_arr) - 1:
         time1 = time.time()
         hart_cube_data = cu.read_cube_file(args.hartree_file)
         print("Read hartree: %.3f" % (time.time()-time1))
-        hart_plane = cu.get_hartree_plane_above_top_atom(hart_cube_data, height)
+        hart_plane = cu.get_hartree_plane_above_top_atom(hart_cube_data, args.sts_plane_height)
         hart_plane -= ref_energy/hart_2_ev
         print("Hartree on extrapolation plane: min: %.4f; max: %.4f; avg: %.4f (eV)" % (
                                                         np.min(hart_plane)*hart_2_ev,
@@ -432,8 +432,8 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
                             vmax=vmax_coef*np.max(aft),
                             cmap='gist_ncar')
             ax2.set_ylim([np.min(e_arr), np.max(e_arr)])
-            ax2.set_xlim([0.0, 3*bzboundary])
-            ax2.text(3*bzboundary-0.25, e_arr[0]+0.01, "max=%.2e"%np.max(aft), color='red')
+            ax2.set_xlim([0.0, 5*bzboundary])
+            ax2.text(5*bzboundary-0.25, e_arr[0]+0.01, "max=%.2e"%np.max(aft), color='red')
             ax2.set_xlabel("k (1/angstrom)")
             ax2.set_ylabel("E (eV)")
 

@@ -62,6 +62,11 @@ then
   CROP_DEF_R=0
 fi
 
+if [ $CROP_DEF_L == 1 ]
+then
+  echo "!!!Warning: No custom cropping defined, orb analysis won't work!!!"
+fi
+
 # --------------------------------------
 echo
 echo "#### FTSTS h=1, no extrap"
@@ -83,6 +88,7 @@ python3 ./ftsts_1d_ldos_from_npz.py \
   --lat_param $LAT_PARAM \
   --gammas 1.0 \
   --vmax_coefs 1.0
+
 
 
 # --------------------------------------
@@ -119,8 +125,8 @@ python3 ./orbital_analysis_from_npz.py \
   --nlumo 50 \
   --crop_x_l $CROP_DIST_L \
   --crop_x_r $CROP_DIST_R \
-  --work_function 4.36
-  --lat_param $LAT_PARAM \
+  --work_function 4.36 \
+  --lat_param $LAT_PARAM
 
 # --------------------------------------
 echo
@@ -134,7 +140,7 @@ python3 ./orbital_analysis_from_npz.py \
   --nlumo 50 \
   --crop_x_l $CROP_DIST_L \
   --crop_x_r $CROP_DIST_R \
-  --work_function 4.36
-  --lat_param $LAT_PARAM \
+  --work_function 4.36 \
+  --lat_param $LAT_PARAM
 
 echo "#### DONE: " $(pwd)

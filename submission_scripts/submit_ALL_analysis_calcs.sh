@@ -22,6 +22,7 @@ List=(
     "cp2k_cnt_12_0/L12-ideal-no-ends"
     "cp2k_cnt_12_0/L15-ideal"
     "cp2k_cnt_12_12/L50-ideal/diag/"
+    "cp2k_cnt_12_0/L50-15-h-A-AB/diag/"
 )
 
 for DATAPATH in "${List[@]}" 

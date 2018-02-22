@@ -73,12 +73,12 @@ parser.add_argument(
     default=None,
     help="Cube file containing the hartree potential." \
          "Only needed if sts_plane_height is out of the morb eval region.")
- parser.add_argument(
-     '--lat_param',
-     type=float,
-     metavar='A',
-     required=True,
-     help="Lattice parameter of the system (needed for plotting).")
+parser.add_argument(
+    '--lat_param',
+    type=float,
+    metavar='A',
+    required=True,
+    help="Lattice parameter of the system (needed for plotting).")
 
 
 args = parser.parse_args()
@@ -119,7 +119,7 @@ if plane_index > len(z_arr) - 1:
         time1 = time.time()
         hart_cube_data = cu.read_cube_file(args.hartree_file)
         print("Read hartree: %.3f" % (time.time()-time1))
-        hart_plane = cu.get_hartree_plane_above_top_atom(hart_cube_data, height)
+        hart_plane = cu.get_hartree_plane_above_top_atom(hart_cube_data, args.sts_plane_height)
         hart_plane -= ref_energy/hart_2_ev
         print("Hartree on extrapolation plane: min: %.4f; max: %.4f; avg: %.4f (eV)" % (
                                                         np.min(hart_plane)*hart_2_ev,
@@ -322,7 +322,7 @@ ax3.pcolormesh(k_grid_inc, y_k_grid_inc, aft, vmax=max_val, cmap='gist_ncar')
 ax3.xaxis.set_visible(False)
 ax3.yaxis.set_visible(False)
 ax3.axhline(n_homo*eval_reg_size[1], color='lightgray')
-ax3.set_xlim([0.0, 3*bzboundary])
+ax3.set_xlim([0.0, 5*bzboundary])
 
 ytick_pos = np.linspace(0.5*eval_reg_size[1], (len(select)-0.5)*eval_reg_size[1], len(select))
 ytick_labels = ["HOMO%+d e=%.4f" % (ind-i_homo, morb_energies[ind]) for ind in select]
