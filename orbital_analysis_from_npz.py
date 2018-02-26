@@ -153,6 +153,11 @@ for i, en in enumerate(morb_energies):
 n_homo = args.nhomo
 n_lumo = args.nlumo
 
+if n_lumo > len(morb_energies) - i_homo - 1:
+    n_lumo = len(morb_energies) - i_homo - 1
+if n_homo > i_homo + 1:
+    n_homo = i_homo + 1
+
 select = np.arange(i_homo - n_homo + 1, i_homo + n_lumo + 1, 1)
 
 sel_morbs = np.zeros((eval_reg_size_n[0], len(select)*eval_reg_size_n[1]))
@@ -300,7 +305,14 @@ print("Made orbital ft plot: %.3f" % (time.time()-time1))
 
 time1 = time.time()
 
-f, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(3*12, int(eval_reg_size_n[1]/eval_reg_size_n[0]*12*len(select))))
+fig_x_size = 3*12
+fig_y_size = int(eval_reg_size_n[1]/eval_reg_size_n[0]*12*len(select))
+max_size = (2**16-1)/200
+if fig_y_size > max_size:
+    fig_x_size = int(fig_x_size*max_size/fig_y_size)
+    fig_y_size = max_size
+
+f, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(fig_x_size, fig_y_size))
 
 plt.subplots_adjust(left=0.0, right=1.0, wspace=0.0)
 

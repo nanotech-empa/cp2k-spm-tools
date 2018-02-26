@@ -1,25 +1,29 @@
 #!/bin/bash -l
 
-FOLDER="/scratch/snx3000/keimre/cp2k_cnt_12_0/"
+
+FOLDER="/scratch/snx3000/keimre/"
 
 List=(
-    "L50-15-h-AA-de/diag/"
-    "L50-15-h-AA-se/diag/"
-    "L50-15-h-AB1-de/diag/"
-    "L50-15-h-AB1-se/diag/"
-    "L50-ideal-de/diag/"
-    "L50-ideal-se/diag/"
-    "L60-12-h-AA/diag/"
-    "L60-12-h-AAx/diag/"
-    "L60-12-h-AAy/diag/"
-    "L60-12-h-ABA02A11/diag/"
-    "L60-12-oxy-AA/diag/"
-    "L60-12-vac-circular/diag/"
-    "L60-12-vac-opt-AA/diag/"
-    "L60-12-vac-opt-AA/diag/"
-    "L100-15-h-AA-se/diag/"
-    "L12-ideal"
-    "L12-ideal-no-ends"
+    "cp2k_cnt_12_0/L50-15-h-AA-de/diag/"
+    "cp2k_cnt_12_0/L50-15-h-AA-se/diag/"
+    "cp2k_cnt_12_0/L50-15-h-AB1-de/diag/"
+    "cp2k_cnt_12_0/L50-15-h-AB1-se/diag/"
+    "cp2k_cnt_12_0/L50-ideal-de/diag/"
+    "cp2k_cnt_12_0/L50-ideal-se/diag/"
+    "cp2k_cnt_12_0/L60-12-h-AA/diag/"
+    "cp2k_cnt_12_0/L60-12-h-AAx/diag/"
+    "cp2k_cnt_12_0/L60-12-h-AAy/diag/"
+    "cp2k_cnt_12_0/L60-12-h-ABA02A11/diag/"
+    "cp2k_cnt_12_0/L60-12-oxy-AA/diag/"
+    "cp2k_cnt_12_0/L60-12-vac-circular/diag/"
+    "cp2k_cnt_12_0/L60-12-vac-opt-AA/diag/"
+    "cp2k_cnt_12_0/L60-12-vac-opt-AA/diag/"
+    "cp2k_cnt_12_0/L100-15-h-AA-se/diag/"
+    "cp2k_cnt_12_0/L12-ideal"
+    "cp2k_cnt_12_0/L12-ideal-no-ends"
+    "cp2k_cnt_12_0/L15-ideal"
+    "cp2k_cnt_12_12/L50-ideal/diag/"
+    "cp2k_cnt_12_0/L50-15-h-A-AB/diag/"
 )
 
 H_LIST=(
@@ -33,7 +37,7 @@ FWHM_LIST=(
     "0.05"
 )
 
-DEST_PATH="/scratch/snx3000/keimre/cp2k_cnt_12_0/postproc_output/"
+DEST_PATH="/scratch/snx3000/keimre/cnt_postproc_output/"
 
 rm -rf $DEST_PATH
 mkdir $DEST_PATH

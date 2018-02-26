@@ -8,19 +8,12 @@ rm -rf sts_output
 mkdir sts_output
 
 # --------------------------------------
-# Cropping 
+# Cropping in SPACE
 
 CROP_DIST_L=5.0
 CROP_DIST_R=5.0
 CROP_DEF_L=1
 CROP_DEF_R=1
-
-LAT_PARAM=4.26
-
-if ls | grep -q cnt1212
-then
-  LAT_PARAM=2.45951214675
-fi
 
 if ls | grep -q cnt120-L60
 then
@@ -54,6 +47,14 @@ then
   CROP_DEF_R=0
 fi
 
+if ls | grep -q cnt120-L2-
+then
+  CROP_DIST_L=14.80
+  CROP_DIST_R=27.40
+  CROP_DEF_L=0
+  CROP_DEF_R=0
+fi
+
 if ls | grep -q cnt120-L15
 then
   CROP_DIST_L=18.00
@@ -62,9 +63,34 @@ then
   CROP_DEF_R=0
 fi
 
+if ls | grep -q cnt1212-L50
+then
+  CROP_DIST_L=192.13
+  CROP_DIST_R=328.27
+  CROP_DEF_L=0
+  CROP_DEF_R=0
+fi
+
 if [ $CROP_DEF_L == 1 ]
 then
-  echo "!!!Warning: No custom cropping defined, orb analysis won't work!!!"
+  echo "#### Warning: No custom cropping defined, orb analysis won't work ####"
+  echo "#### Folder:" $(pwd)
+fi
+
+
+# --------------------------------------
+# Cropping in ENERGY and specifing LATTICE PARAMETER
+
+EMIN=-0.7
+EMAX=0.7
+
+LAT_PARAM=4.26
+
+if ls | grep -q cnt1212
+then
+  EMIN=-0.6
+  EMAX=0.6
+  LAT_PARAM=2.45951214675
 fi
 
 # --------------------------------------
@@ -83,8 +109,8 @@ python3 ./ftsts_1d_ldos_from_npz.py \
   --crop_defect_l $CROP_DEF_L \
   --crop_defect_r $CROP_DEF_R \
   --padding_x 300.0 \
-  --emin -0.7 \
-  --emax 0.7 \
+  --emin $EMIN \
+  --emax $EMAX \
   --lat_param $LAT_PARAM \
   --gammas 1.0 \
   --vmax_coefs 1.0
@@ -107,8 +133,8 @@ python3 ./ftsts_1d_ldos_from_npz.py \
   --crop_defect_l $CROP_DEF_L \
   --crop_defect_r $CROP_DEF_R \
   --padding_x 300.0 \
-  --emin -0.7 \
-  --emax 0.7 \
+  --emin $EMIN \
+  --emax $EMAX \
   --lat_param $LAT_PARAM \
   --gammas 1.0 \
   --vmax_coefs 1.0

@@ -433,7 +433,7 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
                             cmap='gist_ncar')
             ax2.set_ylim([np.min(e_arr), np.max(e_arr)])
             ax2.set_xlim([0.0, 5*bzboundary])
-            ax2.text(5*bzboundary-0.25, e_arr[0]+0.01, "max=%.2e"%np.max(aft), color='red')
+            ax2.text(5*bzboundary-0.6, e_arr[0]+0.01, "max=%.2e"%np.max(aft), color='red')
             ax2.set_xlabel("k (1/angstrom)")
             ax2.set_ylabel("E (eV)")
 
