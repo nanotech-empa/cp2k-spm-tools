@@ -147,8 +147,8 @@ python3 ./orbital_analysis_from_npz.py \
   --npz_file "$FOLDER"/morbs_h1_dx0.2.npz \
   --output_dir "$FOLDER"/sts_output \
   --sts_plane_height 1.0 \
-  --nhomo 50 \
-  --nlumo 50 \
+  --emin $EMIN \
+  --emax $EMAX \
   --crop_x_l $CROP_DIST_L \
   --crop_x_r $CROP_DIST_R \
   --work_function 4.36 \
@@ -162,8 +162,8 @@ python3 ./orbital_analysis_from_npz.py \
   --npz_file "$FOLDER"/morbs_h3_dx0.2.npz \
   --output_dir "$FOLDER"/sts_output \
   --sts_plane_height 5.0 \
-  --nhomo 50 \
-  --nlumo 50 \
+  --emin $EMIN \
+  --emax $EMAX \
   --crop_x_l $CROP_DIST_L \
   --crop_x_r $CROP_DIST_R \
   --work_function 4.36 \

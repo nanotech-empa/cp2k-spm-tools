@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 
-FOLDER="/scratch/snx3000/keimre/"
+FOLDER="/home/kristjan/sshfs/daint_scratch/"
 
 List=(
     "cp2k_cnt_12_0/L50-15-h-AA-de/diag/"
@@ -17,14 +17,22 @@ List=(
     "cp2k_cnt_12_0/L60-12-oxy-AA/diag/"
     "cp2k_cnt_12_0/L60-12-vac-circular/diag/"
     "cp2k_cnt_12_0/L60-12-vac-opt-AA/diag/"
-    "cp2k_cnt_12_0/L60-12-vac-opt-AA/diag/"
-    "cp2k_cnt_12_0/L100-15-h-AA-se/diag/"
     "cp2k_cnt_12_0/L12-ideal"
     "cp2k_cnt_12_0/L12-ideal-no-ends"
-    "cp2k_cnt_12_0/L15-ideal"
-    "cp2k_cnt_12_12/L50-ideal/diag/"
     "cp2k_cnt_12_0/L50-15-h-A-AB/diag/"
+    "cp2k_cnt_12_12/L50-ideal/diag/"
+    "cp2k_cnt_12_0/L15-ideal"
+    "cp2k_cnt_12_0/L15-ideal-single-vac/"
+    "cp2k_cnt_12_0/L15-ideal-H2-ends/"
+    "cp2k_cnt_12_0/L15-ideal-H2-ends-single-vac/"
+#
+    "cp2k_cnt_12_0/L15-ideal-H2-end-2-fold/"
+    "cp2k_cnt_12_0/L15-ideal-H2-end-4-fold/"
+    "cp2k_cnt_12_0/L15-ideal-H2-ends-1-fold-de/"
+    "cp2k_cnt_12_0/L15-ideal-H2-ends-1-fold-se/"
+    "cp2k_cnt_12_0/L15-ideal-single-real-vac/"
 )
+
 
 H_LIST=(
     "1.0"
@@ -37,7 +45,7 @@ FWHM_LIST=(
     "0.05"
 )
 
-DEST_PATH="/scratch/snx3000/keimre/cnt_postproc_output/"
+DEST_PATH="/home/kristjan/local_work/ldos_ftsts_pictures/"
 
 rm -rf $DEST_PATH
 mkdir $DEST_PATH
@@ -51,12 +59,12 @@ do
     for H in "${H_LIST[@]}"
     do
         ORB_PIC=$(ls -tr | grep orb_a.*h$H.*\.png | tail -n 1)
-	mkdir ${DEST_PATH}h${H}
+	mkdir -p ${DEST_PATH}h${H}
 	cp $ORB_PIC ${DEST_PATH}h${H}
 	
 	for FWHM in "${FWHM_LIST[@]}"
 	do
-	    mkdir ${DEST_PATH}h${H}/fwhm$FWHM
+	    mkdir -p ${DEST_PATH}h${H}/fwhm$FWHM
 	    FTSTS_PIC=$(ls -tr | grep ldos.*h$H.*fwhm$FWHM.*\.png | tail -n 1)
 	    cp $FTSTS_PIC ${DEST_PATH}h${H}/fwhm$FWHM 
 	done

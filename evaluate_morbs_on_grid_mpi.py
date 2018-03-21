@@ -65,12 +65,24 @@ parser.add_argument(
     help='Highest energy value for selecting orbitals (eV).')
 
 parser.add_argument(
-    '--z_top',
+    '--x_extra',
     type=float,
-    metavar='H',
+    metavar='L',
     required=True,
-    help='Distance of the top plane of the evaluation region from \
-          topmost atom (angstroms).')
+    help='extra distance in x for evaluation region in addition to atom extent (angstroms).')
+parser.add_argument(
+    '--y_extra',
+    type=float,
+    metavar='L',
+    required=True,
+    help='extra distance in y for evaluation region in addition to atom extent (angstroms).')
+parser.add_argument(
+    '--z_extra',
+    type=float,
+    metavar='L',
+    required=True,
+    help='extra distance in z for evaluation region in addition to atom extent (angstroms).')
+
 parser.add_argument(
     '--dx',
     type=float,
@@ -83,12 +95,6 @@ parser.add_argument(
     metavar='D',
     default=18.0,
     help='Size of the region (in x and y) around the atom where each orbital is located.')
-parser.add_argument(
-    '--single_plane',
-    type=bool,
-    metavar='SP',
-    default=False,
-    help='Calculate only single plane of molecular orbitals at z_top')
 
 
 # Define all variables that must be later broadcasted
@@ -199,15 +205,18 @@ if rank == 0:
 ### Define morb evaluation region
 ### -----------------------------------------
 
-height_above_atoms = args.z_top # angstroms
-height_below_atoms = 1.0 # below !
+x_min = np.min(at_positions[:, 0]) - args.x_extra*ang_2_bohr # Bohr
+x_max = np.max(at_positions[:, 0]) + args.x_extra*ang_2_bohr # Bohr
 
-top_atom_z = np.max(at_positions[:, 2]) # Bohr
-z_top = top_atom_z + height_above_atoms*ang_2_bohr
-carb_positions = at_positions[np.array(at_elems)[:, 0] == 'C']
-z_bottom = np.min(carb_positions[:, 2]) - height_below_atoms*ang_2_bohr# Bohr
+y_min = np.min(at_positions[:, 1]) - args.y_extra*ang_2_bohr # Bohr
+y_max = np.max(at_positions[:, 1]) + args.y_extra*ang_2_bohr # Bohr
 
-eval_reg_size = np.array([cell[0], cell[1], z_top-z_bottom])
+z_min = np.min(at_positions[:, 2]) - args.z_extra*ang_2_bohr # Bohr
+z_max = np.max(at_positions[:, 2]) + args.z_extra*ang_2_bohr # Bohr
+
+eval_reg_size = np.array([x_max-x_min, y_max-y_min, z_max-z_min])
+
+eval_cell_origin = np.array([x_min, y_min, z_min])
 
 # Define real space grid
 # Cp2k chooses close to 0.08 angstroms (?)
@@ -217,24 +226,11 @@ step *= ang_2_bohr
 eval_reg_size_n = (np.round(eval_reg_size/step)).astype(int)
 dv = eval_reg_size/eval_reg_size_n
 
-# increase the z size such that top plane exactly matches z_top
-eval_reg_size[2] += dv[2]
-eval_reg_size_n[2] += 1
-
-# z array in bohr and wrt topmost atom
-z_arr = np.arange(0.0, eval_reg_size[2], dv[2]) + z_bottom - top_atom_z
-
-if args.single_plane:
-    eval_reg_size[2] = dv[2]
-    eval_reg_size_n[2] = 1
-    z_bottom = z_top
-    z_arr = np.array([height_above_atoms*ang_2_bohr])
-
 ### -----------------------------------------
 ### Calculate the molecular orbitals in the specified region
 ### -----------------------------------------
 
-morb_grids = cu.calc_morbs_in_region(eval_reg_size, eval_reg_size_n, z_bottom,
+morb_grids = cu.calc_morbs_in_3D_region(eval_reg_size, eval_reg_size_n, eval_cell_origin,
                 at_positions, at_elems,
                 basis_sets, morb_comp_scattered,
                 pbc_box_size = args.local_eval_box_size,
@@ -265,7 +261,7 @@ if rank == 0:
         morb_grids=all_morb_grids,
         morb_energies=morb_energies,
         dv=dv, # Bohr
-        z_arr=z_arr, # Bohr
+        eval_cell_origin=eval_cell_origin, # Bohr
         elim=elim,
         ref_energy=ref_energy,
         geom_label=geom_label)
