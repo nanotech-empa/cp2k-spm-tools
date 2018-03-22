@@ -539,242 +539,133 @@ def spherical_harmonic_grid(l, m, x_grid, y_grid, z_grid):
     print("No spherical harmonic found for l=%d, m=%d" % (l, m))
     return 0
 
-# Adds local 3D box to a global grid by wrapping the boundaries in X and Y
-# But not in Z
-def add_local_to_global_box(loc_grid, glob_grid, origin_diff):
-    loc_n = np.shape(loc_grid)[0:2]
-    glob_n = np.shape(glob_grid)[0:2]
-    od = origin_diff
 
-    # Move the origin_diff vector to the main global cell (not an image)
-    od = od % glob_n
-
-    inds = []
-    l_inds = []
-
-    for i in range(len(glob_n)):
-        ixs = [[od[i], od[i] + loc_n[i]]]
-        l_ixs = [0]
-        while ixs[-1][1] > glob_n[i]:
-            overshoot = ixs[-1][1]-glob_n[i]
-            ixs[-1][1] = glob_n[i]
-            l_ixs.append(l_ixs[-1]+glob_n[i]-ixs[-1][0])
-            ixs.append([0, overshoot])
-        l_ixs.append(loc_n[i])
-
-        inds.append(ixs)
-        l_inds.append(l_ixs)
-
-    l_ixs = l_inds[0]
-    l_iys = l_inds[1]
-    for i, ix in enumerate(inds[0]):
-        for j, iy in enumerate(inds[1]):
-            glob_grid[ix[0]:ix[1], iy[0]:iy[1], :] += loc_grid[l_ixs[i]:l_ixs[i+1], l_iys[j]:l_iys[j+1], :]
-
-# Adds local 2D or 3D grid to a global grid by wrapping the extending boundaries
-def add_local_to_global_grid(loc_grid, glob_grid, origin_diff, pbc_off=False):
+def add_local_to_global_grid(loc_grid, glob_grid, origin_diff, wrap=(True, True, True)):
+    """
+    Method to add a grid to another one
+    Arguments:
+    loc_grid -- grid that will be added to the glob_grid
+    glob_grid -- defines "wrapping" boundaries
+    origin_diff -- difference of origins between the grids; ignored for directions without wrapping
+    wrap -- specifies in which directions to wrap and take PBC into account
+    """
     loc_n = np.shape(loc_grid)
     glob_n = np.shape(glob_grid)
     od = origin_diff
 
-    if pbc_off:
-        gsi = od.clip(min=0) # glob_start_indexes
-        gei = (od+loc_n).clip(max=glob_n) # glob_end_indexes
-        lsi = (-1*od).clip(min=0)
-        lei = (-od + glob_n).clip(max=loc_n)
-        if len(od) == 2:
-            glob_grid[gsi[0]:gei[0], gsi[1]:gei[1]] = loc_grid[lsi[0]:lei[0], lsi[1]:lei[1]]
-        else:
-            glob_grid[gsi[0]:gei[0], gsi[1]:gei[1], gsi[2]:gei[2]] = loc_grid[lsi[0]:lei[0], lsi[1]:lei[1], lsi[2]:lei[2]]
-        return
-
-    # Move the origin_diff vector to the main global cell (not an image)
-    od = od % glob_n
-
     inds = []
     l_inds = []
 
     for i in range(len(glob_n)):
-        ixs = [[od[i], od[i] + loc_n[i]]]
-        l_ixs = [0]
-        while ixs[-1][1] > glob_n[i]:
-            overshoot = ixs[-1][1]-glob_n[i]
-            ixs[-1][1] = glob_n[i]
-            l_ixs.append(l_ixs[-1]+glob_n[i]-ixs[-1][0])
-            ixs.append([0, overshoot])
-        l_ixs.append(loc_n[i])
+        
+        if wrap[i]:
+            # Move the origin_diff vector to the main global cell if wrapping is enabled
+            od[i] = od[i] % glob_n[i]
 
-        inds.append(ixs)
-        l_inds.append(l_ixs)
+            ixs = [[od[i], od[i] + loc_n[i]]]
+            l_ixs = [0]
+            while ixs[-1][1] > glob_n[i]:
+                overshoot = ixs[-1][1]-glob_n[i]
+                ixs[-1][1] = glob_n[i]
+                l_ixs.append(l_ixs[-1]+glob_n[i]-ixs[-1][0])
+                ixs.append([0, overshoot])
+            l_ixs.append(loc_n[i])
 
-    if len(inds) == 2:
-        l_ixs = l_inds[0]
-        l_iys = l_inds[1]
-        for i, ix in enumerate(inds[0]):
-            for j, iy in enumerate(inds[1]):
-                glob_grid[ix[0]:ix[1], iy[0]:iy[1]] += loc_grid[l_ixs[i]:l_ixs[i+1], l_iys[j]:l_iys[j+1]]
-    elif len(inds) == 3:
-        l_ixs = l_inds[0]
-        l_iys = l_inds[1]
-        l_izs = l_inds[2]
-        for i, ix in enumerate(inds[0]):
-            for j, iy in enumerate(inds[1]):
-                for k, iz in enumerate(inds[2]):
-                    glob_grid[ix[0]:ix[1], iy[0]:iy[1], iz[0]:iz[1]] += \
-                        loc_grid[l_ixs[i]:l_ixs[i+1], l_iys[j]:l_iys[j+1], l_izs[k]:l_izs[k+1]]
+            inds.append(ixs)
+            l_inds.append(l_ixs)
+        else:
+            inds.append([-1])
+            l_inds.append([-1])
 
-
-# Puts the molecular orbitals onto a plane.
-# All inputs are needed to be in [a.u.], except for pbc_box (angstrom)
-def calc_morb_planes(plane_size, plane_size_n, plane_z,
-                     at_positions, at_elems,
-                     basis_sets, morb_composition, pbc_box = 12.0):
-
-    time1 = time.time()
-
-    dv = plane_size/plane_size_n
-    x_arr = np.arange(0, plane_size[0], dv[0])
-    y_arr = np.arange(0, plane_size[1], dv[1])
-    x_grid, y_grid = np.meshgrid(x_arr, y_arr, indexing='ij')
-
-    # Define small grid for orbital evaluation
-    # and convenient PBC implementation
-    loc_cell = np.array([pbc_box,  pbc_box])*ang_2_bohr
-    x_arr_loc = np.arange(0, loc_cell[0], dv[0])
-    y_arr_loc = np.arange(0, loc_cell[1], dv[1])
-    loc_cell_n = np.array([len(x_arr_loc), len(y_arr_loc)])
-    # Define it such that the origin is somewhere
-    # in the middle but exactly on a grid point
-    mid_ixs = (loc_cell_n/2).astype(int)
-    x_arr_loc -= x_arr_loc[mid_ixs[0]]
-    y_arr_loc -= y_arr_loc[mid_ixs[1]]
-    x_grid_loc, y_grid_loc = np.meshgrid(x_arr_loc, y_arr_loc, indexing='ij')
-
-    # Some info
-    print("Main plane:   ", plane_size, plane_size_n)
-    print("Local plane: ", loc_cell, loc_cell_n)
-
-    num_morbs = len(morb_composition[0][0][0][0])
-
-    morb_planes = [np.zeros(plane_size_n) for _ in range(num_morbs)]
-
-    morb_planes_local = np.zeros((num_morbs, loc_cell_n[0], loc_cell_n[1]))
-
-    print("---- Setup: %.4f" % (time.time() - time1))
-
-    time_radial_calc = 0.0
-    time_spherical = 0.0
-    time_loc_glob_add = 0.0
-    time_loc_lmorb_add = 0.0
+    l_ixs = l_inds[0]
+    l_iys = l_inds[1]
+    l_izs = l_inds[2]
+    for i, ix in enumerate(inds[0]):
+        for j, iy in enumerate(inds[1]):
+            for k, iz in enumerate(inds[2]):
+                if wrap[0]:
+                    i_gl_x = slice(ix[0], ix[1])
+                    i_lc_x = slice(l_ixs[i], l_ixs[i+1])
+                else:
+                    i_gl_x = slice(None)
+                    i_lc_x = slice(None)
+                if wrap[1]:
+                    i_gl_y = slice(iy[0], iy[1])
+                    i_lc_y = slice(l_iys[j], l_iys[j+1])
+                else:
+                    i_gl_y = slice(None)
+                    i_lc_y = slice(None)
+                if wrap[2]:
+                    i_gl_z = slice(iz[0], iz[1])
+                    i_lc_z = slice(l_izs[k], l_izs[k+1])
+                else:
+                    i_gl_z = slice(None)
+                    i_lc_z = slice(None)
+                
+                glob_grid[i_gl_x, i_gl_y, i_gl_z] += loc_grid[i_lc_x, i_lc_y, i_lc_z]
 
 
-    for i_at in range(len(at_positions)):
-        elem = at_elems[i_at][0]
-        pos = at_positions[i_at]
 
-        # how does the position match with the grid?
-        int_shift = (pos[0:2]/dv).astype(int)
-        frac_shift = pos[0:2]/dv - int_shift
-        origin_diff = int_shift - mid_ixs
-
-        # Shift the local grid such that origin is on the atom
-        x_grid_rel_loc = x_grid_loc - frac_shift[0]*dv[0]
-        y_grid_rel_loc = y_grid_loc - frac_shift[1]*dv[1]
-
-        z_rel = plane_z - pos[2]
-
-        r_vec_2 = x_grid_rel_loc**2 + y_grid_rel_loc**2 + z_rel**2
-
-        morb_planes_local.fill(0.0)
-
-        for i_shell, shell in enumerate(basis_sets[elem]):
-            l = shell[0]
-            es = shell[1]
-            cs = shell[2]
-
-            # Calculate the radial part of the atomic orbital
-            time2 = time.time()
-            radial_part = np.zeros(loc_cell_n)
-            for e, c in zip(es, cs):
-                radial_part += c*np.exp(-1.0*e*r_vec_2)
-            time_radial_calc += time.time() - time2
-
-            for i, m in enumerate(range(-l, l+1, 1)):
-                time2 = time.time()
-                atomic_orb = radial_part*spherical_harmonic_grid(l, m,
-                                                                 x_grid_rel_loc,
-                                                                 y_grid_rel_loc,
-                                                                 z_rel)
-                time_spherical += time.time() - time2
-
-                i_set = 0 # SHOULD START SUPPORTING MULTIPLE SET BASES AT SOME POINT
-                coef_arr = morb_composition[i_at][i_set][i_shell][i]
-
-                time2 = time.time()
-
-                #morb_planes_local += np.einsum('i,jk', coef_arr, atomic_orb)
-
-                morb_planes_local += np.outer(coef_arr, atomic_orb).reshape(
-                                 num_morbs, loc_cell_n[0], loc_cell_n[1])
-
-                time_loc_lmorb_add += time.time() - time2
-
-        time2 = time.time()
-        for i_mo in range(num_morbs):
-            add_local_to_global_grid(morb_planes_local[i_mo], morb_planes[i_mo], origin_diff)
-        time_loc_glob_add += time.time() - time2
-
-    print("---- Radial calc time : %4f" % time_radial_calc)
-    print("---- Spherical calc time : %4f" % time_spherical)
-    print("---- Loc -> loc_morb time : %4f" % time_loc_lmorb_add)
-    print("---- loc_morb -> glob time : %4f" % time_loc_glob_add)
-    print("---- Total time: %.4f"%(time.time() - time1))
-
-    return morb_planes
-
-
-# Puts the molecular orbitals onto a specified region. For a plane, just specify eval_reg_size_n[2] = 1
-# All inputs are needed to be in [a.u.], except for pbc_box (angstrom)
-# In z direction (index 2), no local grid is used and no cutoff value and additionally PBC is not taken into account)
-def calc_morbs_in_region(eval_cell, eval_cell_n, eval_reg_z,
+def calc_morbs_in_region(global_cell, global_cell_n,
                          at_positions, at_elems,
                          basis_sets, morb_composition,
-                         pbc_box_size = 16.0,
-                         print_info=True):
+                         x_eval_region = None,
+                         y_eval_region = None,
+                         z_eval_region = None,
+                         eval_cutoff = 16.0,
+                         print_info = True):
+    """ 
+    Puts the molecular orbitals onto a specified grid
+    Arguments:
+    global_cell -- global cell size (x, y, z) in [au]
+    global_cell_n -- global cell discretization (x, y, z)
+    at_positions -- atomic positions in [au]
+    at_elems -- elements of atoms
+    x_eval_region -- x evaluation (min, max). If min == max, then evaluation only works on a plane.
+                     If set, no PBC applied in direction and also no eval_cutoff.
+    eval_cutoff -- cutoff for orbital evaluation if eval_region is None
+    """
 
     time1 = time.time()
 
-    dv = eval_cell/eval_cell_n
+    dv = global_cell/global_cell_n
+    eval_cutoff *= ang_2_bohr
 
-    pbc_box_size *= ang_2_bohr
-
-    # Define small grid for orbital evaluation
+    # Define local grid for orbital evaluation
     # and convenient PBC implementation
-    loc_cell = np.array([pbc_box_size,  pbc_box_size, eval_cell[2]])
-    x_arr_loc = np.arange(0, loc_cell[0], dv[0])
-    y_arr_loc = np.arange(0, loc_cell[1], dv[1])
-    z_arr_loc = np.arange(0, loc_cell[2], dv[2])
-    z_arr_loc += eval_reg_z
+    eval_regions = [x_eval_region, y_eval_region, z_eval_region]
+    loc_cell_arrays = []
+    mid_ixs = np.zeros(3, dtype=int)
+    loc_cell_n = np.zeros(3, dtype=int)
+    eval_cell_n = np.zeros(3, dtype=int)
+    for i in range(3):
+        if eval_regions[i] is None:
+            # Define range in i direction with 0.0 at index mid_ixs[i]
+            loc_arr = np.arange(0, eval_cutoff, dv[i])
+            mid_ixs[i] = int(len(loc_arr)/2)
+            loc_arr -= loc_arr[mid_ixs[i]]
+            loc_cell_arrays.append(loc_arr)
+            eval_cell_n[i] = global_cell_n[i]
+        else:
+            # Define the specified range in direction i
+            v_min, v_max = eval_regions[i]
+            loc_cell_arrays.append(np.linspace(v_min, v_max, int(np.round((v_max-v_min)/dv[i]))+1))
+            mid_ixs[i] = -1
+            eval_cell_n[i] = len(loc_cell_arrays[i])
+        loc_cell_n[i] = len(loc_cell_arrays[i])
 
-    loc_cell_n = np.array([len(x_arr_loc), len(y_arr_loc), len(z_arr_loc)])
-    # Define it such that the origin is somewhere
-    # in the middle but exactly on a grid point
-    mid_ixs = (loc_cell_n/2).astype(int)
-    x_arr_loc -= x_arr_loc[mid_ixs[0]]
-    y_arr_loc -= y_arr_loc[mid_ixs[1]]
-
-    x_grid_loc, y_grid_loc, z_grid_loc = np.meshgrid(x_arr_loc, y_arr_loc, z_arr_loc, indexing='ij')
+    loc_cell_grids = np.meshgrid(loc_cell_arrays[0], loc_cell_arrays[1], loc_cell_arrays[2], indexing='ij')
 
     num_morbs = len(morb_composition[0][0][0][0])
     morb_grids = 0 # release memory from previous run (needed in some rare cases)
-    #morb_grids = [np.zeros(eval_cell_n) for _ in range(num_morbs)]
     morb_grids = np.zeros((num_morbs, eval_cell_n[0], eval_cell_n[1], eval_cell_n[2]))
     morb_grids_local = np.zeros((num_morbs, loc_cell_n[0], loc_cell_n[1], loc_cell_n[2]))
 
     # Some info
     if print_info:
-        print("Eval cell:   ", eval_cell, eval_cell_n)
-        print("Local cell: ", loc_cell, loc_cell_n)
+        print("Global cell:   ", global_cell_n)
+        print("Eval cell:   ", eval_cell_n)
+        print("local cell: ", loc_cell_n)
         print("---- Setup: %.4f" % (time.time() - time1))
 
     time_radial_calc = 0.0
@@ -785,134 +676,23 @@ def calc_morbs_in_region(eval_cell, eval_cell_n, eval_reg_z,
     for i_at in range(len(at_positions)):
         elem = at_elems[i_at][0]
         pos = at_positions[i_at]
-
-        # how does the position match with the grid?
-        int_shift = (pos[0:2]/dv[0:2]).astype(int)
-        frac_shift = pos[0:2]/dv[0:2] - int_shift
-        origin_diff = int_shift - mid_ixs[0:2]
-
-        # Shift the local grid such that origin is on the atom
-        x_grid_rel_loc = x_grid_loc - frac_shift[0]*dv[0]
-        y_grid_rel_loc = y_grid_loc - frac_shift[1]*dv[1]
-
-        z_grid_rel_loc = z_grid_loc - pos[2]
-
-        r_vec_2 = x_grid_rel_loc**2 + y_grid_rel_loc**2 + z_grid_rel_loc**2
-
-        morb_grids_local.fill(0.0)
-
-        for i_shell, shell in enumerate(basis_sets[elem]):
-            l = shell[0]
-            es = shell[1]
-            cs = shell[2]
-
-            # Calculate the radial part of the atomic orbital
-            time2 = time.time()
-            radial_part = np.zeros(loc_cell_n)
-            for e, c in zip(es, cs):
-                radial_part += c*np.exp(-1.0*e*r_vec_2)
-            time_radial_calc += time.time() - time2
-
-            for i, m in enumerate(range(-l, l+1, 1)):
-                time2 = time.time()
-                atomic_orb = radial_part*spherical_harmonic_grid(l, m,
-                                                                 x_grid_rel_loc,
-                                                                 y_grid_rel_loc,
-                                                                 z_grid_rel_loc)
-                time_spherical += time.time() - time2
-
-                i_set = 0 # SHOULD START SUPPORTING MULTIPLE SET BASES AT SOME POINT
-                coef_arr = morb_composition[i_at][i_set][i_shell][i]
-
-                time2 = time.time()
-                for i_mo in range(num_morbs):
-                    morb_grids_local[i_mo] += coef_arr[i_mo]*atomic_orb
-
-                # slow:
-                #morb_grids_local += np.outer(coef_arr, atomic_orb).reshape(
-                #                 num_morbs, loc_cell_n[0], loc_cell_n[1], loc_cell_n[2])
-                time_loc_lmorb_add += time.time() - time2
-
-        time2 = time.time()
-        for i_mo in range(num_morbs):
-            add_local_to_global_box(morb_grids_local[i_mo], morb_grids[i_mo], origin_diff)
-        time_loc_glob_add += time.time() - time2
-
-    if print_info:
-        print("---- Radial calc time : %4f" % time_radial_calc)
-        print("---- Spherical calc time : %4f" % time_spherical)
-        print("---- Loc -> loc_morb time : %4f" % time_loc_lmorb_add)
-        print("---- loc_morb -> glob time : %4f" % time_loc_glob_add)
-        print("---- Total time: %.4f"%(time.time() - time1))
-
-    return morb_grids
-
-
-# Puts the molecular orbitals onto a specified region.
-# All inputs are needed to be in [a.u.], except for pbc_box (angstrom)
-def calc_morbs_in_3D_region(eval_cell, eval_cell_n, eval_cell_origin,
-                         at_positions, at_elems,
-                         basis_sets, morb_composition,
-                         pbc_box_size = 16.0,
-                         print_info=True):
-
-    time1 = time.time()
-
-    dv = eval_cell/eval_cell_n
-
-    pbc_box_size *= ang_2_bohr
-
-    # Define small grid for orbital evaluation
-    # and convenient PBC implementation
-    loc_cell = np.array([pbc_box_size,  pbc_box_size, pbc_box_size])
-    x_arr_loc = np.arange(0, loc_cell[0], dv[0])
-    y_arr_loc = np.arange(0, loc_cell[1], dv[1])
-    z_arr_loc = np.arange(0, loc_cell[2], dv[2])
-
-    loc_cell_n = np.array([len(x_arr_loc), len(y_arr_loc), len(z_arr_loc)])
-    # Define it such that the origin is somewhere
-    # in the middle but exactly on a grid point
-    mid_ixs = (loc_cell_n/2).astype(int)
-    x_arr_loc -= x_arr_loc[mid_ixs[0]]
-    y_arr_loc -= y_arr_loc[mid_ixs[1]]
-    z_arr_loc -= z_arr_loc[mid_ixs[2]]
-
-    x_grid_loc, y_grid_loc, z_grid_loc = np.meshgrid(x_arr_loc, y_arr_loc, z_arr_loc, indexing='ij')
-
-    num_morbs = len(morb_composition[0][0][0][0])
-    morb_grids = 0 # release memory from previous run (needed in some rare cases)
-    #morb_grids = [np.zeros(eval_cell_n) for _ in range(num_morbs)]
-    morb_grids = np.zeros((num_morbs, eval_cell_n[0], eval_cell_n[1], eval_cell_n[2]))
-    morb_grids_local = np.zeros((num_morbs, loc_cell_n[0], loc_cell_n[1], loc_cell_n[2]))
-
-    # Some info
-    if print_info:
-        print("Eval cell:   ", eval_cell, eval_cell_n)
-        print("Local cell: ", loc_cell, loc_cell_n)
-        print("---- Setup: %.4f" % (time.time() - time1))
-
-    time_radial_calc = 0.0
-    time_spherical = 0.0
-    time_loc_glob_add = 0.0
-    time_loc_lmorb_add = 0.0
-
-    for i_at in range(len(at_positions)):
-        elem = at_elems[i_at][0]
-        pos = at_positions[i_at] - eval_cell_origin
 
         # how does the position match with the grid?
         int_shift = (pos/dv).astype(int)
         frac_shift = pos/dv - int_shift
         origin_diff = int_shift - mid_ixs
 
-        print(at_positions[i_at], pos, int_shift, origin_diff)
-
         # Shift the local grid such that origin is on the atom
-        x_grid_rel_loc = x_grid_loc - frac_shift[0]*dv[0]
-        y_grid_rel_loc = y_grid_loc - frac_shift[1]*dv[1]
-        z_grid_rel_loc = z_grid_loc - frac_shift[2]*dv[2]
+        rel_loc_cell_grids = []
+        for i, loc_grid in enumerate(loc_cell_grids):
+            if eval_regions[i] is None:
+                rel_loc_cell_grids.append(loc_grid - frac_shift[i]*dv[i])
+            else:
+                rel_loc_cell_grids.append(loc_grid - pos[i])
 
-        r_vec_2 = x_grid_rel_loc**2 + y_grid_rel_loc**2 + z_grid_rel_loc**2
+        r_vec_2 = rel_loc_cell_grids[0]**2 + \
+                  rel_loc_cell_grids[1]**2 + \
+                  rel_loc_cell_grids[2]**2
 
         morb_grids_local.fill(0.0)
 
@@ -931,9 +711,9 @@ def calc_morbs_in_3D_region(eval_cell, eval_cell_n, eval_cell_origin,
             for i, m in enumerate(range(-l, l+1, 1)):
                 time2 = time.time()
                 atomic_orb = radial_part*spherical_harmonic_grid(l, m,
-                                                                 x_grid_rel_loc,
-                                                                 y_grid_rel_loc,
-                                                                 z_grid_rel_loc)
+                                                                 rel_loc_cell_grids[0],
+                                                                 rel_loc_cell_grids[1],
+                                                                 rel_loc_cell_grids[2])
                 time_spherical += time.time() - time2
 
                 i_set = 0 # SHOULD START SUPPORTING MULTIPLE SET BASES AT SOME POINT
@@ -950,7 +730,7 @@ def calc_morbs_in_3D_region(eval_cell, eval_cell_n, eval_cell_origin,
 
         time2 = time.time()
         for i_mo in range(num_morbs):
-            add_local_to_global_grid(morb_grids_local[i_mo], morb_grids[i_mo], origin_diff, pbc_off=False)
+            add_local_to_global_grid(morb_grids_local[i_mo], morb_grids[i_mo], origin_diff, wrap=(mid_ixs != -1))
         time_loc_glob_add += time.time() - time2
 
     if print_info:
@@ -967,14 +747,12 @@ def calc_morbs_in_3D_region(eval_cell, eval_cell_n, eval_cell_origin,
 ### MISC
 ### ---------------------------------------------------------------------------
 
-def write_cube_file(filename, file_xyz, cell, cell_n, data):
+def write_cube_file(filename, file_xyz, cell, cell_n, data, origin = np.array([0.0, 0.0, 0.0])):
 
     # Read atomic positions (a.u.)
     positions, elems_nrs = read_atoms(file_xyz)
 
     natoms = len(positions)
-    origin = np.array([0.0, 0.0, 0.0])
-    origin *= ang_2_bohr
 
     f = open(filename, 'w')
 
