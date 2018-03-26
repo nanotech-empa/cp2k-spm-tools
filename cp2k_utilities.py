@@ -7,6 +7,10 @@ import time
 import copy
 import sys
 
+import re
+import io
+import ase
+
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
 
@@ -51,31 +55,13 @@ def read_cp2k_input(cp2k_input_file):
     return elem_basis_name, cell
 
 # Read atomic positions from .xyz file (in Bohr radiuses)
-def read_atoms(file_xyz):
-    # Read atomic positions (in angstrom)
-    data = np.genfromtxt(file_xyz, dtype=None, skip_header=2)
-    data = np.atleast_1d(data)
-    elems_nrs = []
-    positions = []
-    elem_nr = {'H': 1,
-               'C': 6,
-               'N': 7,
-               'O': 8,
-               'Na': 11,
-               'Br': 35,
-               'Au': 79}
-    for line in data:
-        elem = line[0].decode("utf-8")
-        if len(line) > 4:
-            nr = line[4]
-        elif elem in elem_nr:
-            nr = elem_nr[elem]
-        else:
-            print("Warning: element not recognized!")
-            nr = 0
-        elems_nrs.append([elem, nr])
-        positions.append(np.array([line[1], line[2], line[3]]) * ang_2_bohr)
-    return np.array(positions), elems_nrs
+def read_xyz(file_xyz):
+    with open(file_xyz) as f:
+        fxyz_contents = f.read()
+    # Replace custom elements (e.g. for spin-pol calcs)
+    fxyz_contents = re.sub("([a-zA-Z]+)[0-9]+", r"\1", fxyz_contents)
+    atoms = ase.io.read(io.StringIO(fxyz_contents), format="xyz")
+    return atoms
 
 # Modify atomic positions such that atoms are centered to the cell
 def center_atoms_to_cell(at_positions, cell):
@@ -115,27 +101,33 @@ def read_fermi_from_cp2k_out(cp2k_out_file):
 
 def magic_basis_normalization(basis_sets_):
     basis_sets = copy.deepcopy(basis_sets_)
-    for elem, bs in basis_sets.items():
-        for shell in bs:
-            l = shell[0]
-            exps = shell[1]
-            coefs = shell[2]
-            nexps = len(exps)
+    for elem, bsets in basis_sets.items():
+        for bset in bsets:
+            for shell in bset:
+                l = shell[0]
+                exps = shell[1]
+                coefs = shell[2]
+                nexps = len(exps)
 
-            norm_factor = 0
-            for i in range(nexps-1):
-                for j in range(i+1, nexps):
-                    norm_factor += 2*coefs[i]*coefs[j]*(2*np.sqrt(exps[i]*exps[j])/(exps[i]+exps[j]))**((2*l+3)/2)
+                norm_factor = 0
+                for i in range(nexps-1):
+                    for j in range(i+1, nexps):
+                        norm_factor += 2*coefs[i]*coefs[j]*(2*np.sqrt(exps[i]*exps[j])/(exps[i]+exps[j]))**((2*l+3)/2)
 
-            for i in range(nexps):
-                norm_factor += coefs[i]**2
+                for i in range(nexps):
+                    norm_factor += coefs[i]**2
 
-            for i in range(nexps):
-                coefs[i] = coefs[i]*exps[i]**((2*l+3)/4)/np.sqrt(norm_factor)
+                for i in range(nexps):
+                    coefs[i] = coefs[i]*exps[i]**((2*l+3)/4)/np.sqrt(norm_factor)
 
     return basis_sets
 
 def read_basis_functions(basis_set_file, elem_basis_name):
+    """ Reads the basis sets from basis_set_file specified in elem_basis_name
+
+    returns:
+    basis_sets["Element"] = 
+    """
     basis_sets = {}
     with open(basis_set_file) as f:
         lines = f.readlines()
@@ -151,6 +143,9 @@ def read_basis_functions(basis_set_file, elem_basis_name):
                     nsets = int(lines[i+1])
                     cursor = 2
                     for j in range(nsets):
+                        
+                        basis_functions.append([])
+
                         comp = [int(x) for x in lines[i+cursor].split()]
                         n_princ, l_min, l_max, n_exp = comp[:4]
                         l_arr = np.arange(l_min, l_max+1, 1)
@@ -171,7 +166,7 @@ def read_basis_functions(basis_set_file, elem_basis_name):
                         indx = 0
                         for l, nl in zip(l_arr, n_basisf_for_l):
                             for il in range(nl):
-                                basis_functions.append([l, exps, coeffs[:, indx]])
+                                basis_functions[-1].append([l, exps, coeffs[:, indx]])
                                 indx += 1
                         cursor += n_exp + 1
 
@@ -221,7 +216,11 @@ def load_restart_wfn_file(restart_file, emin, emax):
     morb_composition = []
     morb_energies = []
     morb_occs = []
-    homo_inds = []
+
+    # different HOMO indexes (for debugging and matching direct cube output)
+    loc_homo_inds = []  # indexes wrt to seleced morbitals
+    glob_homo_inds = [] # global indexes, corresponds to WFN nr (counting start from 1)
+    cp2k_homo_inds = [] # cp2k homo indexes, takes also smearing into account (counting start from 1)
 
     for ispin in range(nspin):
         nmo, homo, lfomo, nelectron = inpf.read_ints()
@@ -233,11 +232,9 @@ def load_restart_wfn_file(restart_file, emin, emax):
         
         # Note that "homo" is affected by smearing. to have the correct, T=0K homo:
         if nspin == 1:
-            i_homo = nelectron - 1
-        else:
             i_homo = int(nelectron/2) - 1
-        
-        homo_inds.append(i_homo)
+        else:
+            i_homo = nelectron - 1
 
         # list containing all eigenvalues and occupancies of the molecular orbitals
         evals_occs = inpf.read_reals()
@@ -246,7 +243,7 @@ def load_restart_wfn_file(restart_file, emin, emax):
         evals = evals_occs[:int(len(evals_occs)/2)]
         occs = evals_occs[int(len(evals_occs)/2):]
         
-        print("HOMO EN", evals[i_homo])
+        print("HOMO energy", evals[i_homo])
 
         # convert evals from hartree to eV
         evals *= hart_2_ev
@@ -294,7 +291,10 @@ def load_restart_wfn_file(restart_file, emin, emax):
             if evals[imo] < emin:
                 continue
             if evals[imo] > emax:
-                break
+                if ispin != nspin-1:
+                    continue
+                else:
+                    break
             if first_imo == -1:
                 print("First molecular index in energy range: ", imo)
                 first_imo = imo
@@ -327,9 +327,14 @@ def load_restart_wfn_file(restart_file, emin, emax):
         
         morb_energies.append(evals[first_imo:first_imo+n_sel_morbs])
         morb_occs.append(occs[first_imo:first_imo+n_sel_morbs])
+
+        loc_homo_inds.append(i_homo - first_imo)
+        glob_homo_inds.append(i_homo + 1)
+        cp2k_homo_inds.append(homo)
         ### ---------------------------------------------------------------------
         
     inpf.close()
+    homo_inds = [loc_homo_inds, glob_homo_inds, cp2k_homo_inds]
     return morb_composition, morb_energies, morb_occs, homo_inds
 
 ### ---------------------------------------------------------------------------
@@ -634,7 +639,7 @@ def add_local_to_global_grid(loc_grid, glob_grid, origin_diff, wrap=(True, True,
 
 
 def calc_morbs_in_region(global_cell, global_cell_n,
-                         at_positions, at_elems,
+                         ase_atoms,
                          basis_sets, morb_composition,
                          x_eval_region = None,
                          y_eval_region = None,
@@ -683,11 +688,6 @@ def calc_morbs_in_region(global_cell, global_cell_n,
 
     loc_cell_grids = np.meshgrid(loc_cell_arrays[0], loc_cell_arrays[1], loc_cell_arrays[2], indexing='ij')
 
-    num_morbs = len(morb_composition[0][0][0][0])
-    morb_grids = 0 # release memory from previous run (needed in some rare cases)
-    morb_grids = np.zeros((num_morbs, eval_cell_n[0], eval_cell_n[1], eval_cell_n[2]))
-    morb_grids_local = np.zeros((num_morbs, loc_cell_n[0], loc_cell_n[1], loc_cell_n[2]))
-
     # Some info
     if print_info:
         print("Global cell: ", global_cell_n)
@@ -700,9 +700,21 @@ def calc_morbs_in_region(global_cell, global_cell_n,
     time_loc_glob_add = 0.0
     time_loc_lmorb_add = 0.0
 
-    for i_at in range(len(at_positions)):
-        elem = at_elems[i_at][0]
-        pos = at_positions[i_at]
+    nspin = len(morb_composition)
+
+    num_morbs = []
+    morb_grids = []
+    morb_grids_local = []
+
+    for ispin in range(nspin):
+        num_morbs.append(len(morb_composition[ispin][0][0][0][0]))
+        morb_grids.append(np.zeros((num_morbs[ispin], eval_cell_n[0], eval_cell_n[1], eval_cell_n[2])))
+        morb_grids_local.append(np.zeros((num_morbs[ispin], loc_cell_n[0], loc_cell_n[1], loc_cell_n[2])))
+
+
+    for i_at in range(len(ase_atoms)):
+        elem = ase_atoms[i_at].symbol
+        pos = ase_atoms[i_at].position * ang_2_bohr
 
         # how does the position match with the grid?
         int_shift = (pos/dv).astype(int)
@@ -721,43 +733,46 @@ def calc_morbs_in_region(global_cell, global_cell_n,
                   rel_loc_cell_grids[1]**2 + \
                   rel_loc_cell_grids[2]**2
 
-        morb_grids_local.fill(0.0)
+        for ispin in range(nspin):
+            morb_grids_local[ispin].fill(0.0)
 
-        for i_shell, shell in enumerate(basis_sets[elem]):
-            l = shell[0]
-            es = shell[1]
-            cs = shell[2]
+        for i_set, bset in enumerate(basis_sets[elem]):
+            for i_shell, shell in enumerate(bset):
+                l = shell[0]
+                es = shell[1]
+                cs = shell[2]
 
-            # Calculate the radial part of the atomic orbital
-            time2 = time.time()
-            radial_part = np.zeros(loc_cell_n)
-            for e, c in zip(es, cs):
-                radial_part += c*np.exp(-1.0*e*r_vec_2)
-            time_radial_calc += time.time() - time2
-
-            for i, m in enumerate(range(-l, l+1, 1)):
+                # Calculate the radial part of the atomic orbital
                 time2 = time.time()
-                atomic_orb = radial_part*spherical_harmonic_grid(l, m,
-                                                                 rel_loc_cell_grids[0],
-                                                                 rel_loc_cell_grids[1],
-                                                                 rel_loc_cell_grids[2])
-                time_spherical += time.time() - time2
+                radial_part = np.zeros(loc_cell_n)
+                for e, c in zip(es, cs):
+                    radial_part += c*np.exp(-1.0*e*r_vec_2)
+                time_radial_calc += time.time() - time2
 
-                i_set = 0 # SHOULD START SUPPORTING MULTIPLE SET BASES AT SOME POINT
-                coef_arr = morb_composition[i_at][i_set][i_shell][i]
+                for i_orb, m in enumerate(range(-l, l+1, 1)):
+                    time2 = time.time()
+                    atomic_orb = radial_part*spherical_harmonic_grid(l, m,
+                                                                    rel_loc_cell_grids[0],
+                                                                    rel_loc_cell_grids[1],
+                                                                    rel_loc_cell_grids[2])
+                    time_spherical += time.time() - time2
+                    time2 = time.time()
 
-                time2 = time.time()
-                for i_mo in range(num_morbs):
-                    morb_grids_local[i_mo] += coef_arr[i_mo]*atomic_orb
+                    for i_spin in range(nspin):
+                        coef_arr = morb_composition[i_spin][i_at][i_set][i_shell][i_orb]
 
-                # slow:
-                #morb_grids_local += np.outer(coef_arr, atomic_orb).reshape(
-                #                 num_morbs, loc_cell_n[0], loc_cell_n[1], loc_cell_n[2])
-                time_loc_lmorb_add += time.time() - time2
+                        for i_mo in range(num_morbs[i_spin]):
+                            morb_grids_local[i_spin][i_mo] += coef_arr[i_mo]*atomic_orb
+
+                        # slow:
+                        #morb_grids_local += np.outer(coef_arr, atomic_orb).reshape(
+                        #                 num_morbs, loc_cell_n[0], loc_cell_n[1], loc_cell_n[2])
+                    time_loc_lmorb_add += time.time() - time2
 
         time2 = time.time()
-        for i_mo in range(num_morbs):
-            add_local_to_global_grid(morb_grids_local[i_mo], morb_grids[i_mo], origin_diff, wrap=(mid_ixs != -1))
+        for i_spin in range(nspin):
+            for i_mo in range(num_morbs[i_spin]):
+                add_local_to_global_grid(morb_grids_local[i_spin][i_mo], morb_grids[i_spin][i_mo], origin_diff, wrap=(mid_ixs != -1))
         time_loc_glob_add += time.time() - time2
 
     if print_info:
@@ -774,12 +789,13 @@ def calc_morbs_in_region(global_cell, global_cell_n,
 ### MISC
 ### ---------------------------------------------------------------------------
 
-def write_cube_file(filename, file_xyz, cell, cell_n, data, origin = np.array([0.0, 0.0, 0.0])):
+def write_cube_file(filename, ase_atoms, cell, cell_n, data, origin = np.array([0.0, 0.0, 0.0])):
 
     # Read atomic positions (a.u.)
-    positions, elems_nrs = read_atoms(file_xyz)
+    positions = ase_atoms.positions * ang_2_bohr
+    numbers = ase_atoms.get_atomic_numbers()
 
-    natoms = len(positions)
+    natoms = len(ase_atoms)
 
     f = open(filename, 'w')
 
@@ -795,10 +811,8 @@ def write_cube_file(filename, file_xyz, cell, cell_n, data, origin = np.array([0
         f.write("%5d %12.6f %12.6f %12.6f\n"%(cell_n[i], dv_br[i][0], dv_br[i][1], dv_br[i][2]))
 
     for i in range(natoms):
-        at_x = positions[i][0]
-        at_y = positions[i][1]
-        at_z = positions[i][2]
-        f.write("%5d %12.6f %12.6f %12.6f %12.6f\n"%(elems_nrs[i][1], 0.0, at_x, at_y, at_z))
+        at_x, at_y, at_z = positions[i]
+        f.write("%5d %12.6f %12.6f %12.6f %12.6f\n"%(numbers[i], 0.0, at_x, at_y, at_z))
 
     data.tofile(f, sep='\n', format='%12.6e')
 
