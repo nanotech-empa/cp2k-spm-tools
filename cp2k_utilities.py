@@ -36,7 +36,7 @@ def read_cp2k_input(cp2k_input_file):
                         elem_basis_name[elem] = basis
                         break
             # Have we found the CELL info?
-            if parts[0] == "ABC":
+            if parts[0] == "ABC":   
                 if parts[1] == "[angstrom]":
                     cell[0] = float(parts[2])
                     cell[1] = float(parts[3])
@@ -141,9 +141,11 @@ def read_basis_functions(basis_set_file, elem_basis_name):
         lines = f.readlines()
         for i in range(len(lines)):
             parts = lines[i].split()
+            if len(parts) == 0:
+                continue
             if parts[0] in elem_basis_name:
                 elem = parts[0]
-                if parts[1] == elem_basis_name[elem] or parts[2] == elem_basis_name[elem]:
+                if parts[1] == elem_basis_name[elem] or (len(parts) > 2 and parts[2] == elem_basis_name[elem]):
                     # We have found the correct basis set
                     basis_functions = []
                     nsets = int(lines[i+1])
@@ -168,7 +170,7 @@ def read_basis_functions(basis_set_file, elem_basis_name):
 
                         indx = 0
                         for l, nl in zip(l_arr, n_basisf_for_l):
-                            for i in range(nl):
+                            for il in range(nl):
                                 basis_functions.append([l, exps, coeffs[:, indx]])
                                 indx += 1
                         cursor += n_exp + 1
@@ -181,16 +183,21 @@ def read_basis_functions(basis_set_file, elem_basis_name):
 ### RESTART file loading and processing
 ### ---------------------------------------------------------------------------
 
-# Coefficients for molecular orbitals that match the energy range
-# NB: If Fermi energy is passed as "None", it will be set to HOMO energy
-# RETURNS: morb_composition[imo][iatom][iset][ishell][iorb (m)]
-# AND corresponding eigenvalues (eV) and occupancies for the morbitals
-# Energies in ev
-def load_restart_wfn_file(restart_file, emin, emax, fermi):
+def load_restart_wfn_file(restart_file, emin, emax):
+    """ Reads the molecular orbitals from cp2k restart wavefunction file in specified energy range
+    Note that the energy range is in eV and with respect to HOMO energy.
+    
+    Return:
+    morb_composition[ispin][iatom][iset][ishell][iorb] = coefs[i_mo]
+    morb_energies[ispin] = energies[i_mo] in eV with respect to HOMO
+    morb_occs[ispin] = occupancies[i_mo]
+    homo_inds[ispin] = homo_index_for_ispin
+    """
 
     inpf = scipy.io.FortranFile(restart_file, 'r')
 
     natom, nspin, nao, nset_max, nshell_max = inpf.read_ints()
+    #print(natom, nspin, nao, nset_max, nshell_max)
     # natom - number of atoms
     # nspin - number of spins
     # nao - number of atomic orbitals
@@ -199,46 +206,91 @@ def load_restart_wfn_file(restart_file, emin, emax, fermi):
     #           atom's contains 1, then this value will still be 3)
     # nshell_max - maximum number of shells in each set
 
-    if nspin > 1:
-        print("Spin-polarized input is not supported.")
-        return
-
     # number of sets in the basis set for each atom
     nset_info = inpf.read_ints()
+    #print(nset_info)
 
     # number of shells in each of the sets
     nshell_info = inpf.read_ints()
+    #print(nshell_info)
 
     # number of orbitals in each shell
     nso_info = inpf.read_ints()
+    #print(nso_info)
 
     morb_composition = []
+    morb_energies = []
+    morb_occs = []
+    homo_inds = []
 
     for ispin in range(nspin):
         nmo, homo, lfomo, nelectron = inpf.read_ints()
+        #print("nmo, homo, lfomo, nelectron", nmo, homo, lfomo, nelectron)
         # nmo - number of molecular orbitals
         # homo - index of the HOMO
         # lfomo - ???
         # nelectron - number of electrons
+        
+        # Note that "homo" is affected by smearing. to have the correct, T=0K homo:
+        if nspin == 1:
+            i_homo = nelectron - 1
+        else:
+            i_homo = int(nelectron/2) - 1
+        
+        homo_inds.append(i_homo)
 
         # list containing all eigenvalues and occupancies of the molecular orbitals
         evals_occs = inpf.read_reals()
+        #print(evals_occs)
 
         evals = evals_occs[:int(len(evals_occs)/2)]
         occs = evals_occs[int(len(evals_occs)/2):]
+        
+        print("HOMO EN", evals[i_homo])
 
         # convert evals from hartree to eV
         evals *= hart_2_ev
-
-        if fermi == None:
-            fermi = evals[homo-1]
-
-        evals -= fermi
+        
+        # Take HOMO energy as reference value (also emin, emax are wrt to this)
+        evals -= evals[i_homo]
 
         first_imo = -1
-
+        
+        ### ---------------------------------------------------------------------
+        ### Build up the structure of python lists to hold the morb_composition
+        
+        morb_composition.append([]) # 1: spin index
+        shell_offset = 0
+        norb_offset = 0
+        orb_offset = 0
+        for iatom in range(natom):
+            nset = nset_info[iatom]
+            morb_composition[-1].append([]) # 2: atom index
+            for iset in range(nset):
+                nshell = nshell_info[shell_offset]
+                shell_offset += 1
+                morb_composition[-1][-1].append([]) # 3: set index
+                ishell = 0
+                while ishell < nshell:
+                    norb = nso_info[norb_offset]
+                    norb_offset += 1
+                    if norb == 0:
+                        continue
+                    ishell += 1
+                    morb_composition[-1][-1][-1].append([]) # 4: shell index (l)
+                    for iorb in range(norb):
+                        morb_composition[-1][-1][-1][-1].append([]) # 5: orb index (m)
+                        # And this will contain the array of coeffs corresponding to each MO
+                        orb_offset += 1
+        ### ---------------------------------------------------------------------
+        
+        ### ---------------------------------------------------------------------
+        ### Read the coefficients from file and put to the morb_composition list
+        
         for imo in range(nmo):
             coefs = inpf.read_reals()
+            #print(coefs)
+            #print(evals[imo])
             if evals[imo] < emin:
                 continue
             if evals[imo] > emax:
@@ -246,64 +298,39 @@ def load_restart_wfn_file(restart_file, emin, emax, fermi):
             if first_imo == -1:
                 print("First molecular index in energy range: ", imo)
                 first_imo = imo
-            current_morb_comp = []
-
-            shell_offset = 0
-            norb_offset = 0
+                
             orb_offset = 0
-
-            for iatom in range(natom):
-                nset = nset_info[iatom]
-                current_morb_comp.append([]) # atom index
-                for iset in range(nset):
-                    nshell = nshell_info[shell_offset]
-                    shell_offset += 1
-                    current_morb_comp[-1].append([]) # set index
-                    ishell = 0
-                    while ishell < nshell:
-                        norb = nso_info[norb_offset]
-                        norb_offset += 1
-                        if norb == 0:
-                            continue
-                        ishell += 1
-                        current_morb_comp[-1][-1].append([]) # shell index (l)
-                        for iorb in range(norb):
-                            current_morb_comp[-1][-1][-1].append(coefs[orb_offset]) # orb index (m)
+            
+            for iatom in range(len(morb_composition[ispin])):
+                for iset in range(len(morb_composition[ispin][iatom])):
+                    for ishell in range(len(morb_composition[ispin][iatom][iset])):
+                        for iorb in range(len(morb_composition[ispin][iatom][iset][ishell])):
+                            morb_composition[ispin][iatom][iset][ishell][iorb].append(coefs[orb_offset])
                             orb_offset += 1
-            morb_composition.append(current_morb_comp)
-
+        ### ---------------------------------------------------------------------
+        
+        ### ---------------------------------------------------------------------
+        # Convert i_mo layer to numpy array
+        for iatom in range(len(morb_composition[ispin])):
+            for iset in range(len(morb_composition[ispin][iatom])):
+                for ishell in range(len(morb_composition[ispin][iatom][iset])):
+                    for iorb in range(len(morb_composition[ispin][iatom][iset][ishell])):
+                        morb_composition[ispin][iatom][iset][ishell][iorb] = np.array(
+                            morb_composition[ispin][iatom][iset][ishell][iorb]
+                        )
+        ### ---------------------------------------------------------------------
+        
+        ### ---------------------------------------------------------------------
+        ### Select and set energy and occupation values for morbitals
+        
+        n_sel_morbs = len(morb_composition[ispin][0][0][0][0])
+        
+        morb_energies.append(evals[first_imo:first_imo+n_sel_morbs])
+        morb_occs.append(occs[first_imo:first_imo+n_sel_morbs])
+        ### ---------------------------------------------------------------------
+        
     inpf.close()
-
-    coef_arr = np.empty(len(morb_composition))
-    morb_composition_rev = []
-
-    for iatom in range(len(morb_composition[0])):
-        morb_composition_rev.append([])
-        for iset in range(len(morb_composition[0][iatom])):
-            morb_composition_rev[-1].append([])
-            for ishell in range(len(morb_composition[0][iatom][iset])):
-                morb_composition_rev[-1][-1].append([])
-                for iorb in range(len(morb_composition[0][iatom][iset][ishell])):
-                    for imo in range(len(morb_composition)):
-                        coef_arr[imo] = morb_composition[imo][iatom][iset][ishell][iorb]
-                    morb_composition_rev[-1][-1][-1].append(np.copy(coef_arr))
-
-
-    ref_energy = fermi
-    n_sel_morbs = len(morb_composition)
-
-    morb_energies = evals[first_imo:first_imo+n_sel_morbs]
-    morb_occs = occs[first_imo:first_imo+n_sel_morbs]
-
-    i_homo = 0
-    for i, en in enumerate(morb_energies):
-        if en > 0.0:
-            i_homo = i - 1
-            break
-        if np.abs(en) < 1e-6:
-            i_homo = i
-
-    return morb_composition_rev, morb_energies, morb_occs, ref_energy, i_homo
+    return morb_composition, morb_energies, morb_occs, homo_inds
 
 ### ---------------------------------------------------------------------------
 ### MOLOG FILE loading and processing
@@ -663,8 +690,8 @@ def calc_morbs_in_region(global_cell, global_cell_n,
 
     # Some info
     if print_info:
-        print("Global cell:   ", global_cell_n)
-        print("Eval cell:   ", eval_cell_n)
+        print("Global cell: ", global_cell_n)
+        print("Eval cell: ", eval_cell_n)
         print("local cell: ", loc_cell_n)
         print("---- Setup: %.4f" % (time.time() - time1))
 
@@ -809,7 +836,7 @@ def read_cube_file(cube_file):
     positions /= ang_2_bohr
 
     # Option 1: less memory usage but might be slower
-    data = np.empty(shape[0]*shape[1]*shape[2], dtype=np.float32)
+    data = np.empty(shape[0]*shape[1]*shape[2], dtype=float)
     cursor = 0
     for i, line in enumerate(f):
         ls = line.split()
