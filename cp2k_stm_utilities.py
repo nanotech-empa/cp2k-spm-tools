@@ -1,3 +1,7 @@
+""" Tools to perform STM/STS analysis on CP2K calculations
+
+- Kristjan Eimre
+""" 
 
 import os
 import numpy as np
