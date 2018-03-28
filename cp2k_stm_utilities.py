@@ -14,6 +14,7 @@ import sys
 import re
 import io
 import ase
+import ase.io
 
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
@@ -247,15 +248,10 @@ def load_restart_wfn_file(restart_file, emin, emax):
         evals = evals_occs[:int(len(evals_occs)/2)]
         occs = evals_occs[int(len(evals_occs)/2):]
         
-        print("HOMO energy", evals[i_homo])
-
-        # convert evals from hartree to eV
         evals *= hart_2_ev
-        
-        # Take HOMO energy as reference value (also emin, emax are wrt to this)
-        evals -= evals[i_homo]
 
-        first_imo = -1
+        print("S%d nmo: %d, [eV] H-1 %.8f Homo %.8f H+1 %.8f" % (ispin, nmo,
+                            evals[i_homo-1], evals[i_homo], evals[i_homo+1]))
         
         ### ---------------------------------------------------------------------
         ### Build up the structure of python lists to hold the morb_composition
@@ -288,22 +284,28 @@ def load_restart_wfn_file(restart_file, emin, emax):
         ### ---------------------------------------------------------------------
         ### Read the coefficients from file and put to the morb_composition list
         
+        morb_energies.append([])
+        morb_occs.append([])
+
+        first_imo = -1
+
         for imo in range(nmo):
             coefs = inpf.read_reals()
-            #print(coefs)
-            #print(evals[imo])
-            if evals[imo] < emin:
+            if evals[imo] - evals[i_homo] < emin - 1.0:
                 continue
-            if evals[imo] > emax:
-                if ispin != nspin-1:
-                    continue
-                else:
+            if evals[imo] - evals[i_homo] > emax + 1.0:
+                if ispin == nspin - 1:
                     break
+                else:
+                    continue
+            
             if first_imo == -1:
-                print("First molecular index in energy range: ", imo)
                 first_imo = imo
-                
+
             orb_offset = 0
+
+            morb_energies[ispin].append(evals[imo])
+            morb_occs[ispin].append(occs[imo])
             
             for iatom in range(len(morb_composition[ispin])):
                 for iset in range(len(morb_composition[ispin][iatom])):
@@ -323,23 +325,46 @@ def load_restart_wfn_file(restart_file, emin, emax):
                             morb_composition[ispin][iatom][iset][ishell][iorb]
                         )
         ### ---------------------------------------------------------------------
-        
-        ### ---------------------------------------------------------------------
-        ### Select and set energy and occupation values for morbitals
-        
-        n_sel_morbs = len(morb_composition[ispin][0][0][0][0])
-        
-        morb_energies.append(evals[first_imo:first_imo+n_sel_morbs])
-        morb_occs.append(occs[first_imo:first_imo+n_sel_morbs])
 
         loc_homo_inds.append(i_homo - first_imo)
         glob_homo_inds.append(i_homo + 1)
         cp2k_homo_inds.append(homo)
-        ### ---------------------------------------------------------------------
+
+    ### ---------------------------------------------------------------------
+    # reference energy for RKS is just HOMO, but for UKS will be average of both HOMOs
+
+    if nspin == 1:
+        ref_energy = morb_energies[0][loc_homo_inds[0]]
+    else:
+        ref_energy = (morb_energies[0][loc_homo_inds[0]] +
+                      morb_energies[1][loc_homo_inds[1]]) / 2
+    
+    ### ---------------------------------------------------------------------
+    ### Select orbitals and energy and occupation values in specified range
+    
+    for ispin in range(nspin):
+        morb_energies[ispin] -= ref_energy
+        first_imo = np.searchsorted(morb_energies[ispin], emin)
+        last_imo = np.searchsorted(morb_energies[ispin], emax) - 1
+        if last_imo < first_imo:
+            print("Warning: No orbitals found in specified energy range!")
+            continue
+        morb_energies[ispin] = morb_energies[ispin][first_imo:last_imo+1]
+        morb_occs[ispin] = morb_occs[ispin][first_imo:last_imo+1]
+
+        for iatom in range(len(morb_composition[ispin])):
+            for iset in range(len(morb_composition[ispin][iatom])):
+                for ishell in range(len(morb_composition[ispin][iatom][iset])):
+                    for iorb in range(len(morb_composition[ispin][iatom][iset][ishell])):
+                        morb_composition[ispin][iatom][iset][ishell][iorb] = \
+                            morb_composition[ispin][iatom][iset][ishell][iorb][first_imo:last_imo+1]
+
+        loc_homo_inds[ispin] -= first_imo
+    ### ---------------------------------------------------------------------
         
     inpf.close()
     homo_inds = [loc_homo_inds, glob_homo_inds, cp2k_homo_inds]
-    return morb_composition, morb_energies, morb_occs, homo_inds
+    return morb_composition, morb_energies, morb_occs, homo_inds, ref_energy
 
 ### ---------------------------------------------------------------------------
 ### MOLOG FILE loading and processing
@@ -657,7 +682,7 @@ def calc_morbs_in_region(global_cell, global_cell_n,
     global_cell_n -- global cell discretization (x, y, z)
     at_positions -- atomic positions in [au]
     at_elems -- elements of atoms
-    x_eval_region -- x evaluation (min, max). If min == max, then evaluation only works on a plane.
+    x_eval_region -- x evaluation (min, max) in [au]. If min == max, then evaluation only works on a plane.
                      If set, no PBC applied in direction and also no eval_cutoff.
     eval_cutoff -- cutoff for orbital evaluation if eval_region is None
     """
