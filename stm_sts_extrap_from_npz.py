@@ -13,7 +13,7 @@ import argparse
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
 
-import cp2k_utilities as cu
+import cp2k_stm_utilities as cu
 
 parser = argparse.ArgumentParser(
     description="Extrapolates supplied molecular orbitals " \
