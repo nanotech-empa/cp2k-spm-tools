@@ -924,7 +924,7 @@ def extrapolate_morbs(morb_planes, morb_energies, dv,
     """
     time1 = time.time()
 
-    if work_function == None and hart_plane == None:
+    if work_function is None and hart_plane is None:
         print("You must specify either the WF or the hartree plane.")
         return None
 
@@ -994,6 +994,11 @@ def get_hartree_plane_above_top_atom(hart_cube_data, height):
 
     topmost_atom_z = np.max(hart_atomic_pos[:, 2]) # Angstrom
     hart_plane_z = height + topmost_atom_z
+
+    #print("height", height)
+    #print("topmost_atom_z", topmost_atom_z)
+    #print("hart_cell[2, 2]", hart_cell[2, 2])
+
     hart_plane_index = int(np.round(hart_plane_z/hart_cell[2, 2]*np.shape(hart_cube)[2]))
 
     return hart_cube[:, :, hart_plane_index]

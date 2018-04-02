@@ -7,13 +7,14 @@ import sys
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import matplotlib.ticker
 
 import argparse
 
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
 
-import cp2k_stm_utilities as cu
+import cp2k_stm_utilities as csu
 
 parser = argparse.ArgumentParser(
     description="Extrapolates supplied molecular orbitals " \
@@ -90,6 +91,24 @@ parser.add_argument(
     type=float,
     default=0.1,
     help="Full width at half maximum for STS gaussian broadening. (eV)")
+parser.add_argument(
+    '--sts_elim',
+    nargs='*',
+    type=float,
+    help=("Energy limits (emin, emax) for STS (eV)."
+          "Default is to take the whole calculated energy range.")
+)
+
+parser.add_argument(
+    '--skip_data_output',
+    action='store_true',
+    help="Switch to skip outputting the STM picture data to files.")
+parser.set_defaults(skip_data_output=False)
+parser.add_argument(
+    '--skip_figs',
+    action='store_true',
+    help="Switch to skip outputting figures.")
+parser.set_defaults(skip_figs=False)
 
 
 args = parser.parse_args()
@@ -98,28 +117,40 @@ time0 = time.time()
 
 npz_file_data = np.load(args.npz_file)
 
-morb_grids = npz_file_data['morb_grids']
-morb_energies = npz_file_data['morb_energies']
-dv = npz_file_data['dv']
+x_arr = npz_file_data['x_arr']
+y_arr = npz_file_data['y_arr']
 z_arr = npz_file_data['z_arr']
+mol_bbox = npz_file_data['mol_bbox']
 elim = npz_file_data['elim']
 ref_energy = npz_file_data['ref_energy']
+geom_label = npz_file_data['geom_label']
 
-z_top = z_arr[-1]
-eval_reg_size_n = np.shape(morb_grids[0])
-eval_reg_size = dv * eval_reg_size_n
+morb_grids = [npz_file_data['morb_grids_s1']]
+morb_energies = [npz_file_data['morb_energies_s1']]
+homo_inds = [npz_file_data['homo_s1']]
 
-x_arr = np.arange(0.0, eval_reg_size_n[0]*dv[0], dv[0])/ang_2_bohr
-y_arr = np.arange(0.0, eval_reg_size_n[1]*dv[1], dv[1])/ang_2_bohr
+if 'morb_grids_s2' in npz_file_data:
+    morb_grids.append(npz_file_data['morb_grids_s2'])
+    morb_energies.append(npz_file_data['morb_energies_s2'])
+    homo_inds.append(npz_file_data['homo_s2'])
+
+eval_reg_size = np.array([x_arr[-1] - x_arr[0], y_arr[-1] - y_arr[0], z_arr[-1] - z_arr[0]])
+eval_reg_size_n = morb_grids[0][0].shape
+
+if eval_reg_size_n[2] == 1:
+    print("Note: only a single plane was evaluated, const-current output will be skipped.")
+    dv = np.array([x_arr[1] - x_arr[0], y_arr[1] - y_arr[0], x_arr[1] - x_arr[0]])
+else:
+    dv = np.array([x_arr[1] - x_arr[0], y_arr[1] - y_arr[0], z_arr[1] - z_arr[0]])
+
+nspin = len(morb_grids)
+
+# z_arr with respect to topmost atom
+z_arr -= mol_bbox[5]
+
 x_grid, y_grid = np.meshgrid(x_arr, y_arr, indexing='ij')
-
-i_homo = 0
-for i, en in enumerate(morb_energies):
-    if en > 0.0:
-        i_homo = i - 1
-        break
-    if np.abs(en) < 1e-6:
-        i_homo = i
+x_grid /= ang_2_bohr
+y_grid /= ang_2_bohr
 
 def get_plane_index(z, z_arr, dz):
     return int(np.round((z-z_arr[0])/dz))
@@ -133,61 +164,66 @@ figure_size_xy = (figure_size*eval_reg_size[0]/eval_reg_size[1]+1.0, figure_size
 ### -----------------------------------------
 
 time1 = time.time()
-hart_cube_data = cu.read_cube_file(args.hartree_file)
-hart_cube = hart_cube_data[-1]
-hart_cell = hart_cube_data[5]
-hart_atomic_pos = hart_cube_data[-2]
+hart_cube_data = csu.read_cube_file(args.hartree_file)
 print("Read hartree: %.3f" % (time.time()-time1))
 
-topmost_atom_z = np.max(hart_atomic_pos[:, 2]) # Angstrom
-hart_plane_z = args.extrap_plane + topmost_atom_z
-hart_plane_index = int(np.round(hart_plane_z/hart_cell[2, 2]*np.shape(hart_cube)[2]))
-
-hart_plane = hart_cube[:, :, hart_plane_index] - ref_energy/hart_2_ev
+# Get Hartree plane, convert to eV and shift by ref (so it matches morb_energies) 
+hart_plane = csu.get_hartree_plane_above_top_atom(hart_cube_data, args.extrap_plane)*hart_2_ev - ref_energy
 
 print("Hartree on extrapolation plane: min: %.4f; max: %.4f; avg: %.4f (eV)" % (
-                                                np.min(hart_plane)*hart_2_ev,
-                                                np.max(hart_plane)*hart_2_ev,
-                                                np.mean(hart_plane)*hart_2_ev))
+                                                np.min(hart_plane),
+                                                np.max(hart_plane),
+                                                np.mean(hart_plane)))
 
-plt.figure(figsize=figure_size_xy)
-plt.pcolormesh(hart_plane.T*hart_2_ev, cmap='seismic')
-plt.colorbar()
-plt.axis('scaled')
-plt.savefig(args.output_dir+"/hartree.png", dpi=300, bbox_inches='tight')
-plt.close()
+if not args.skip_figs:
+    plt.figure(figsize=figure_size_xy)
+    plt.pcolormesh(hart_plane.T, cmap='seismic')
+    plt.colorbar()
+    plt.axis('scaled')
+    plt.savefig(args.output_dir+"/hartree.png", dpi=300, bbox_inches='tight')
+    plt.close()
 
 
 extrap_plane_index = get_plane_index(args.extrap_plane*ang_2_bohr, z_arr, dv[2])
-if extrap_plane_index >= np.shape(morb_grids[0])[2]:
-    print(z_arr[-1])
+if extrap_plane_index >= eval_reg_size_n[2]:
     print("Error: the extrapolation plane can't be outside the initial box (z_max = %.2f)"
            % (z_arr[-1]/ang_2_bohr))
     exit(1)
-extrap_morbs = cu.extrapolate_morbs(morb_grids, morb_energies, dv, extrap_plane_index,
-                                 args.extrap_extent*ang_2_bohr, hart_plane, False,
-                                 use_weighted_avg=True)
 
-total_morb_grids = np.concatenate((morb_grids, extrap_morbs), axis=3)
+total_morb_grids = []
+for ispin in range(nspin):
+    extrap_morbs = csu.extrapolate_morbs(morb_grids[ispin][:, :, :, extrap_plane_index],
+                                    morb_energies[ispin], dv,
+                                    args.extrap_extent*ang_2_bohr, False,
+                                    hart_plane=hart_plane/hart_2_ev,
+                                    use_weighted_avg=True)
+
+    total_morb_grid = np.concatenate((morb_grids[ispin], extrap_morbs), axis=3)
+    total_morb_grids.append(total_morb_grid)
+
+extended_region_n = np.shape(total_morb_grids[0])
 
 # In bohr and wrt topmost atom
-total_z_arr = np.arange(0.0, np.shape(total_morb_grids)[3]*dv[2], dv[2]) + z_arr[0]
+total_z_arr = np.arange(0.0, extended_region_n[3]*dv[2], dv[2]) + z_arr[0]
 
 ### -----------------------------------------
 ### Summing charge densities according to bias voltages
 ### -----------------------------------------
 
+# Sum up both spins
+
 charge_dens_arr = np.zeros((len(args.bias_voltages),
-                            total_morb_grids[0].shape[0],
-                            total_morb_grids[0].shape[1],
-                            total_morb_grids[0].shape[2]))
+                            extended_region_n[1],
+                            extended_region_n[2],
+                            extended_region_n[3]))
 
 for i_bias, bias in enumerate(args.bias_voltages):
-    for imo, morb_grid in enumerate(total_morb_grids):
-        if morb_energies[imo] > np.max([0.0, bias]):
-            break
-        if morb_energies[imo] >= np.min([0.0, bias]):
-            charge_dens_arr[i_bias] += morb_grid**2
+    for ispin in range(nspin):
+        for imo, morb_grid in enumerate(total_morb_grids[ispin]):
+            if morb_energies[ispin][imo] > np.max([0.0, bias]):
+                break
+            if morb_energies[ispin][imo] >= np.min([0.0, bias]):
+                charge_dens_arr[i_bias, :, :, :] += morb_grid**2
 
 ### -----------------------------------------
 ### Constant height STM
@@ -195,32 +231,68 @@ for i_bias, bias in enumerate(args.bias_voltages):
 
 time1 = time.time()
 
-for plane_height in args.stm_plane_heights:
-    for i_bias, bias in enumerate(args.bias_voltages):
-        plane_index = get_plane_index(plane_height*ang_2_bohr, total_z_arr, dv[2])
+class FormatScalarFormatter(matplotlib.ticker.ScalarFormatter):
+    def __init__(self, fformat="%1.1f", offset=True, mathText=True):
+        self.fformat = fformat
+        matplotlib.ticker.ScalarFormatter.__init__(self,useOffset=offset,
+                                                        useMathText=mathText)
+    def _set_format(self, vmin, vmax):
+        self.format = self.fformat
+        if self._useMathText:
+            self.format = '$%s$' % matplotlib.ticker._mathdefault(self.format)
 
-        plt.figure(figsize=figure_size_xy)
-        plot_data = charge_dens_arr[i_bias][:, :, plane_index]
-        plt.pcolormesh(x_grid, y_grid, plot_data, cmap='gist_heat')
-        plt.xlabel("x (angstrom)")
-        plt.ylabel("y (angstrom)")
-        plt.colorbar()
-        plt.axis('scaled')
-        plt.savefig(args.output_dir+"/stm_ch_v%.2f_h%.1f.png"%(bias, plane_height), dpi=300, bbox_inches='tight')
-        plt.close()
 
+def make_plot(x_grid, y_grid, data, fpath, title=None, vmin=None, vmax=None, cmap='gist_heat'):
+    plt.figure(figsize=figure_size_xy)
+    plt.pcolormesh(x_grid, y_grid, data, vmin=vmin, vmax=vmax, cmap=cmap)
+    plt.xlabel("x (angstrom)")
+    plt.ylabel("y (angstrom)")
+    if 1e-3 < np.max(data) < 1e3:
+        cb = plt.colorbar()
+    else:
+        cb = plt.colorbar(format=FormatScalarFormatter("%.1f"))
+    cb.formatter.set_powerlimits((-2, 2))
+    cb.update_ticks()
+    plt.title(title)
+    plt.axis('scaled')
+    plt.savefig(fpath, dpi=300, bbox_inches='tight')
+    plt.close()
+
+def make_series_plot(x_grid, y_grid, data, fpath):
     plt.figure(figsize=(figure_size_xy[1]*len(args.bias_voltages), figure_size_xy[0]))
     for i_bias, bias in enumerate(args.bias_voltages):
-        plane_index = get_plane_index(plane_height*ang_2_bohr, total_z_arr, dv[2])
         plt.subplot(1, len(args.bias_voltages), i_bias+1)
-        plot_data = charge_dens_arr[i_bias][:, :, plane_index]
-        plt.pcolormesh(y_grid, x_grid, plot_data, cmap='gist_heat')
+        plt.pcolormesh(x_grid, y_grid, data[:, :, i_bias], cmap='gist_heat')
         plt.axis('scaled')
-        plt.title(bias)
+        plt.title("V=%.2f"%bias)
         plt.xticks([])
         plt.yticks([])
-    plt.savefig(args.output_dir+"/stm_ch_h%.1f.png"%(plane_height), dpi=300, bbox_inches='tight')
+    plt.savefig(fpath, dpi=300, bbox_inches='tight')
     plt.close()
+
+const_height_data = np.zeros((
+    len(args.stm_plane_heights),
+    x_grid.shape[0], x_grid.shape[1],
+    len(args.bias_voltages)))
+
+for i_height, plane_height in enumerate(args.stm_plane_heights):
+    for i_bias, bias in enumerate(args.bias_voltages):
+        plane_index = get_plane_index(plane_height*ang_2_bohr, total_z_arr, dv[2])
+        const_height_data[i_height, :, :, i_bias] = charge_dens_arr[i_bias][:, :, plane_index]
+
+    if not args.skip_figs:
+        for i_bias, bias in enumerate(args.bias_voltages):
+            fpath = args.output_dir+"/stm_ch_v%.2f_h%.1f.png"%(bias, plane_height)
+            title = "h = %.1f; V = %.2f" % (plane_height, bias)
+            make_plot(x_grid, y_grid, const_height_data[i_height, :, :, i_bias], fpath, title=title)
+        
+        fpath = args.output_dir+"/stm_ch_h%.1f.png"%(plane_height)
+        make_series_plot(x_grid, y_grid, const_height_data[i_height], fpath)
+
+if not args.skip_data_output:
+    fpath = args.output_dir+"/stm_ch.npz"
+    np.savez(fpath, data=const_height_data, heights=args.stm_plane_heights, bias=args.bias_voltages,
+        x=x_arr/ang_2_bohr, y=y_arr/ang_2_bohr)
 
 print("Time taken to create CH images: %.1f" % (time.time() - time1))
 
@@ -232,10 +304,18 @@ def get_isosurf(data, value, z_vals, interp=True):
     rev_data = data[:, :, ::-1]
     rev_z_vals = z_vals[::-1]
 
-    indexes = np.argmax(rev_data > value, axis=2)
+    # Add a zero-layer at start to make sure we surpass it
+    zero_layer = np.zeros((data.shape[0], data.shape[1], 1))
+    rev_data = np.concatenate((zero_layer, rev_data), axis=2)
+    rev_z_vals = np.concatenate(([10.0], rev_z_vals))
 
-    # IF indexes are 0, then it probably didn't find the correct value
-    # And set it as the bottom surface
+    # Find first index that surpasses the isovalue
+    indexes = np.argmax(rev_data > value, axis=2)
+    # If an index is 0, no values in array are bigger than the specified
+    num_surpasses = (indexes == 0).sum()
+    if num_surpasses != 0:
+        print("Warning: The isovalue %.3e was not reached for %d pixels" % (value, num_surpasses))
+    # Set surpasses as the bottom surface
     indexes[indexes == 0] = len(z_vals) - 1
 
     if interp:
@@ -254,39 +334,35 @@ def get_isosurf(data, value, z_vals, interp=True):
 
     return rev_z_vals[indexes]
 
-time1 = time.time()
+if eval_reg_size_n[2] != 1:
 
-for isovalue in args.stm_isovalues:
-    for i_bias, bias in enumerate(args.bias_voltages):
-        const_cur_imag = get_isosurf(charge_dens_arr[i_bias], isovalue, total_z_arr, True)
+    time1 = time.time()
 
-        plt.figure(figsize=figure_size_xy)
-        plot_data = const_cur_imag/ang_2_bohr
-        max_val = np.max(plot_data)
+    const_curr_data = np.zeros((
+        len(args.stm_isovalues),
+        x_grid.shape[0], x_grid.shape[1],
+        len(args.bias_voltages)))
 
-        plt.pcolormesh(x_grid, y_grid, plot_data, vmax=max_val, cmap='gist_heat')
-        plt.xlabel("x (angstrom)")
-        plt.ylabel("y (angstrom)")
-        plt.colorbar()
-        plt.axis('scaled')
-        plt.savefig(args.output_dir+"/stm_cc_v%.2f_i%.1e.png"%(bias, isovalue), dpi=300, bbox_inches='tight')
-        plt.close()
+    for i_iso, isovalue in enumerate(args.stm_isovalues):
+        for i_bias, bias in enumerate(args.bias_voltages):
+            const_cur_imag = get_isosurf(charge_dens_arr[i_bias], isovalue, total_z_arr, True)
+            const_curr_data[i_iso, :, :, i_bias] = const_cur_imag/ang_2_bohr
 
-    plt.figure(figsize=(figure_size_xy[1]*len(args.bias_voltages), figure_size_xy[0]))
-    for i_bias, bias in enumerate(args.bias_voltages):
-        const_cur_imag = get_isosurf(charge_dens_arr[i_bias], isovalue, total_z_arr, True)
+        if not args.skip_figs:
+            for i_bias, bias in enumerate(args.bias_voltages):
+                fpath = args.output_dir+"/stm_cc_v%.2f_i%.1e.png"%(bias, isovalue)
+                title = "isov = %.1e; V = %.2f" % (isovalue, bias)
+                make_plot(x_grid, y_grid, const_curr_data[i_iso, :, :, i_bias], fpath, title=title)
+            
+            fpath = args.output_dir+"/stm_cc_i%.1e.png"%(isovalue)
+            make_series_plot(x_grid, y_grid, const_curr_data[i_iso], fpath)
 
-        plt.subplot(1, len(args.bias_voltages), i_bias+1)
-        plot_data = const_cur_imag/ang_2_bohr
-        plt.pcolormesh(y_grid, x_grid, plot_data, cmap='gist_heat')
-        plt.axis('scaled')
-        plt.title(bias)
-        plt.xticks([])
-        plt.yticks([])
-    plt.savefig(args.output_dir+"/stm_cc_i%.1e.png"%(isovalue), dpi=300, bbox_inches='tight')
-    plt.close()
+    if not args.skip_data_output:
+        fpath = args.output_dir+"/stm_cc.npz"
+        np.savez(fpath, data=const_curr_data, isovals=args.stm_isovalues, bias=args.bias_voltages,
+            x=x_arr/ang_2_bohr, y=y_arr/ang_2_bohr)
 
-print("Time taken to create CC images: %.1f" % (time.time() - time1))
+    print("Time taken to create CC images: %.1f" % (time.time() - time1))
 
 ### -----------------------------------------
 ### STS
@@ -294,7 +370,10 @@ print("Time taken to create CC images: %.1f" % (time.time() - time1))
 
 time1 = time.time()
 
-e_arr = np.arange(elim[0], elim[1]+args.sts_de, args.sts_de)
+if len(args.sts_elim) != 2:
+    e_arr = np.arange(elim[0], elim[1]+args.sts_de, args.sts_de)
+else:
+    e_arr = np.arange(args.sts_elim[0], args.sts_elim[1]+args.sts_de, args.sts_de)
 
 def calculate_ldos(de, fwhm, plane_index, e_arr, broad_type='g'):
     def lorentzian(x):
@@ -304,36 +383,41 @@ def calculate_ldos(de, fwhm, plane_index, e_arr, broad_type='g'):
         sigma = fwhm/2.3548
         return np.exp(-x**2/(2*sigma**2))/(sigma*np.sqrt(2*np.pi))
     pldos = np.zeros((eval_reg_size_n[0], eval_reg_size_n[1], len(e_arr)))
-    for i_mo, morb_grid in enumerate(total_morb_grids):
-        en = morb_energies[i_mo]
-        morb_plane = morb_grid[:, :, plane_index]**2
-        if broad_type == 'l':
-            morb_ldos_broad = np.einsum('ij,k', morb_plane, lorentzian(e_arr - en))
-        else:
-            morb_ldos_broad = np.einsum('ij,k', morb_plane, gaussian(e_arr - en))
-        pldos += morb_ldos_broad
+    for ispin in range(nspin):
+        for i_mo, morb_grid in enumerate(total_morb_grids[ispin]):
+            en = morb_energies[ispin][i_mo]
+            morb_plane = morb_grid[:, :, plane_index]**2
+            if broad_type == 'l':
+                morb_ldos_broad = np.einsum('ij,k', morb_plane, lorentzian(e_arr - en))
+            else:
+                morb_ldos_broad = np.einsum('ij,k', morb_plane, gaussian(e_arr - en))
+            pldos += morb_ldos_broad
     return pldos
 
-for plane_height in args.sts_plane_heights:
+sts_data = np.zeros((
+    len(args.sts_plane_heights),
+    x_grid.shape[0], x_grid.shape[1],
+    len(e_arr)))
+
+for i_height, plane_height in enumerate(args.sts_plane_heights):
     plane_index = get_plane_index(plane_height*ang_2_bohr, total_z_arr, dv[2])
 
     pldos = calculate_ldos(args.sts_de, args.sts_fwhm, plane_index, e_arr)
+    sts_data[i_height, :, :, :] = pldos
 
-    for i, energy in enumerate(e_arr):
-        plt.figure(figsize=figure_size_xy)
-        plot_data = pldos[:, :, i]
-
+    if not args.skip_figs:
         max_val = np.max(pldos)
         min_val = np.min(pldos)
 
-        plt.pcolormesh(x_grid, y_grid, plot_data, vmax=max_val, vmin=min_val, cmap='bwr')
-        plt.xlabel("x (angstrom)")
-        plt.ylabel("y (angstrom)")
-        plt.colorbar()
-        plt.title("h = %.2f; U = %.3f" % (plane_height, energy))
-        plt.axis('scaled')
-        plt.savefig(args.output_dir+"/sts_h%.2f_nr%d.png"%(plane_height, i), dpi=300, bbox_inches='tight')
-        plt.close()
+        for i, energy in enumerate(e_arr):
+            fpath = args.output_dir+"/sts_h%.2f_nr%d.png"%(plane_height, i)
+            title = "h = %.2f; U = %.3f" % (plane_height, energy)
+            make_plot(x_grid, y_grid, pldos[:, :, i], fpath, title=title, vmin=min_val, vmax=max_val,  cmap='bwr')
+
+if not args.skip_data_output:
+    fpath = args.output_dir+"/sts.npz"
+    np.savez(fpath, data=sts_data, heights=args.sts_plane_heights, e=e_arr,
+        x=x_arr/ang_2_bohr, y=y_arr/ang_2_bohr)
 
 print("Time taken to create STS images: %.1f" % (time.time() - time1))
 

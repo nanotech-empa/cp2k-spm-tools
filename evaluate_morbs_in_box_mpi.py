@@ -3,6 +3,7 @@ import numpy as np
 import time
 import copy
 import sys
+import re
 
 import argparse
 
@@ -36,7 +37,7 @@ parser.add_argument(
     required=True,
     help='.xyz file containing the geometry.')
 parser.add_argument(
-    '--restart_file',
+    '--wfn_file',
     metavar='FILENAME',
     required=True,
     help='Restart file containing the final wavefunction.')
@@ -44,7 +45,8 @@ parser.add_argument(
     '--output_file',
     metavar='FILENAME',
     required=True,
-    help='Output containing the molecular orbitals and supporting info.')
+    help='File, where to save the output containing the \
+          molecular orbitals and supporting info.')
 
 parser.add_argument(
     '--emin',
@@ -58,14 +60,19 @@ parser.add_argument(
     metavar='E',
     required=True,
     help='Highest energy value for selecting orbitals (eV).')
-
 parser.add_argument(
-    '--z_top',
-    type=float,
-    metavar='H',
+    '--eval_region',
+    type=str,
+    nargs=6,
+    metavar='X',
     required=True,
-    help='Distance of the top plane of the evaluation region from \
-          topmost atom (angstroms).')
+    help=("Specify evaluation region limits [xmin xmax ymin ymax zmin zmax] as a string:"
+          "'G' corresponds to global cell limit (also enables PBC if both of pair are 'G')"
+          "number (e.g. '2.5') specifies distance [ang] from furthest-extending atom"
+          "Number with element ('2.5C') correspondingly from furthest atom of elem."
+          "If '_P' is appended, only a plane is computed (the partner value is ignored)")
+)
+
 parser.add_argument(
     '--dx',
     type=float,
@@ -73,16 +80,13 @@ parser.add_argument(
     required=True,
     help='Spatial step for the grid (angstroms).')
 parser.add_argument(
-    '--local_eval_box_size',
+    '--eval_cutoff',
     type=float,
     metavar='D',
     default=18.0,
-    help='Size of the region (in x and y) around the atom where each orbital is located.')
-parser.add_argument(
-    '--single_plane',
-    action='store_true',
-    help='If set, calculate only single plane of molecular orbitals at z_top')
-parser.set_defaults(single_plane=False)
+    help=("Size of the region around the atom where each"
+          " orbital is evaluated (only used for ref '0').")
+)
 
 
 # Define all variables that must be later broadcasted
@@ -122,7 +126,7 @@ try:
 
         time1 = time.time()
         morb_composition, morb_energies, morb_occs, homo_inds, ref_energy = \
-            csu.load_restart_wfn_file(args.restart_file, args.emin, args.emax)
+            csu.load_restart_wfn_file(args.wfn_file, args.emin, args.emax)
         print("Found %d orbitals" % len(morb_energies[0]))
         print("Read restart: %.3f" % (time.time()-time1))
 
@@ -145,7 +149,6 @@ basis_sets = comm.bcast(basis_sets, root=0)
 ### -----------------------------------------
 ### Divide the molecular orbitals fairly between processors
 ### -----------------------------------------
-
 
 nspin = len(morb_composition)
 
@@ -170,7 +173,7 @@ for ispin in range(nspin):
             else:
                 ind_start += extra_morbs
                 ind_end = ind_start + morbs_per_rank
-            print("Rank %d works with orbitals %d:%d" %(i_rank, ind_start, ind_end))
+            print("S%d Rank %d works with orbitals %d:%d" %(ispin, i_rank, ind_start, ind_end))
 
             morb_comp_send = copy.deepcopy(morb_composition[ispin])
 
@@ -200,17 +203,61 @@ if rank == 0:
 ### Define morb evaluation region
 ### -----------------------------------------
 
-height_above_atoms = args.z_top # angstroms
-height_below_atoms = 1.5 # below !
+eval_regions_inp = [args.eval_region[0:2], args.eval_region[2:4], args.eval_region[4:6]]
+eval_regions = [[0, 0], [0, 0], [0, 0]]
 
-top_atom_z = np.max(ase_atoms.positions[:, 2]) # Bohr
-carb_positions = ase_atoms.positions[np.array(ase_atoms.get_chemical_symbols()) == 'C']
-bottom_c_z = np.min(carb_positions[:, 2])
+### Parse evaluation regions specified in input.................
 
-z_top = top_atom_z + height_above_atoms*ang_2_bohr
-z_bottom = bottom_c_z - height_below_atoms*ang_2_bohr# Bohr
+def is_number(s):
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
 
-print(z_bottom, z_top)
+for i in range(3):
+    if eval_regions_inp[i] == ['G', 'G']:
+        eval_regions[i] = None
+        continue
+    for j in range(2):
+        reg_str = eval_regions_inp[i][j]
+        single_plane = False
+        if reg_str.endswith("_P"):
+            single_plane = True
+            reg_str = reg_str[:-2]
+
+        if reg_str == 'G':
+            eval_regions[i][j] = 0.0 if j == 0 else cell[i]
+        elif is_number(reg_str):
+            val = float(reg_str)
+            eval_regions[i][j] = (np.min(ase_atoms.positions[:, i]) - val
+                                    if j == 0 else
+                                  np.max(ase_atoms.positions[:, i]) + val)
+            eval_regions[i][j] *= ang_2_bohr
+        else:
+            match = re.match(r"([0-9.]+)([a-zA-Z]+)", reg_str, re.I)
+            if match:
+                items = match.groups()
+                val = float(items[0])
+                elem = items[1]
+                elem_positions = ase_atoms.positions[np.array(ase_atoms.get_chemical_symbols()) == elem]
+                if len(elem_positions) == 0:
+                    print("Error: No element %s found. Exiting."%elem)
+                    exit(1)
+                eval_regions[i][j] = (np.min(elem_positions[:, i]) - val
+                                        if j == 0 else
+                                      np.max(elem_positions[:, i]) + val)
+                eval_regions[i][j] *= ang_2_bohr
+        if single_plane:
+            eval_regions[i][(j+1)%2] = eval_regions[i][j]
+            break
+
+if rank == 0:
+    print("Evaluation regions:")
+    print("     x:", eval_regions[0])
+    print("     y:", eval_regions[1])
+    print("     z:", eval_regions[2])
+
 
 # Define real space grid
 # Cp2k chooses close to 0.08 angstroms (?)
@@ -220,16 +267,6 @@ step *= ang_2_bohr
 global_size_n = (np.round(cell/step)).astype(int)
 dv = cell/global_size_n
 
-if args.single_plane:
-    z_bottom = z_top
-
-# Periodic and whole cell in x and y directions
-x_eval_region = None
-y_eval_region = None
-z_eval_region = [z_bottom, z_top]
-
-print("z_eval_region", z_eval_region)
-
 
 ### -----------------------------------------
 ### Calculate the molecular orbitals in the specified region
@@ -238,10 +275,10 @@ print("z_eval_region", z_eval_region)
 morb_grids = csu.calc_morbs_in_region(cell, global_size_n,
                 ase_atoms,
                 basis_sets, morb_comp_scattered,
-                x_eval_region = x_eval_region,
-                y_eval_region = y_eval_region,
-                z_eval_region = z_eval_region,
-                eval_cutoff = args.local_eval_box_size,
+                x_eval_region = eval_regions[0],
+                y_eval_region = eval_regions[1],
+                z_eval_region = eval_regions[2],
+                eval_cutoff = args.eval_cutoff,
                 print_info = (rank == 0))
 
 nspin = len(morb_grids)
@@ -271,22 +308,35 @@ for ispin in range(nspin):
 
 if rank == 0:
 
-    # z array in bohr and wrt topmost atom
-    z_arr = np.linspace(0.0, z_top-z_bottom, grid_shape[2])
-
+    coord_arrays = []
+    for i in range(3):
+        if eval_regions[i] is None:
+            coord_arrays.append(np.arange(0.0, cell[i], dv[i]))
+        else:
+            coord_arrays.append(np.linspace(eval_regions[i][0], eval_regions[i][1], grid_shape[i]))
 
     geom_base = os.path.basename(args.xyz_file)
     geom_label = os.path.splitext(geom_base)[0]
 
     time0 = time.time()
     elim = np.array([args.emin, args.emax])
+
+    mol_bbox = np.array([np.min(ase_atoms.positions[:, 0]),
+                         np.max(ase_atoms.positions[:, 0]),
+                         np.min(ase_atoms.positions[:, 1]),
+                         np.max(ase_atoms.positions[:, 1]),
+                         np.min(ase_atoms.positions[:, 2]),
+                         np.max(ase_atoms.positions[:, 2])]) * ang_2_bohr
     
     if nspin == 1:
         np.savez(args.output_file,
             morb_grids_s1=morb_grids_collected[0],
             morb_energies_s1=morb_energies[0],
-            dv=dv, # Bohr
-            z_arr=z_arr, # Bohr
+            homo_s1=homo_inds[0][0],
+            x_arr=coord_arrays[0], # Bohr
+            y_arr=coord_arrays[1], # Bohr
+            z_arr=coord_arrays[2], # Bohr
+            mol_bbox=mol_bbox,
             elim=elim,
             ref_energy=ref_energy,
             geom_label=geom_label)
@@ -294,10 +344,14 @@ if rank == 0:
         np.savez(args.output_file,
             morb_grids_s1=morb_grids_collected[0],
             morb_energies_s1=morb_energies[0],
+            homo_s1=homo_inds[0][0],
             morb_grids_s2=morb_grids_collected[1],
             morb_energies_s2=morb_energies[1],
-            dv=dv, # Bohr
-            z_arr=z_arr, # Bohr
+            homo_s2=homo_inds[0][1],
+            x_arr=coord_arrays[0], # Bohr
+            y_arr=coord_arrays[1], # Bohr
+            z_arr=coord_arrays[2], # Bohr
+            mol_bbox=mol_bbox,
             elim=elim,
             ref_energy=ref_energy,
             geom_label=geom_label)
