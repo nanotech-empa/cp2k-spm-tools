@@ -11,7 +11,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 
-import cp2k_utilities as cu
+import cp2k_stm_utilities as csu
 
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
@@ -133,91 +133,130 @@ output_dir = args.output_dir
 if output_dir[-1] != '/':
     output_dir += '/'
 
+
 npz_file_data = np.load(args.npz_file)
 
-morb_grids = npz_file_data['morb_grids']
-morb_energies = npz_file_data['morb_energies']
-dv = npz_file_data['dv']
+x_arr = npz_file_data['x_arr']
+y_arr = npz_file_data['y_arr']
 z_arr = npz_file_data['z_arr']
-emin, emax = npz_file_data['elim']
+mol_bbox = npz_file_data['mol_bbox']
+elim = npz_file_data['elim']
 ref_energy = npz_file_data['ref_energy']
-geom_name = npz_file_data['geom_label']
+geom_label = npz_file_data['geom_label']
 
-z_bottom = z_arr[0]
-z_top = z_arr[-1]
-plane_index = int(np.round((args.sts_plane_height*ang_2_bohr - z_bottom)/dv[2]))
+morb_grids = [npz_file_data['morb_grids_s1']]
+morb_energies = [npz_file_data['morb_energies_s1']]
+homo_inds = [npz_file_data['homo_s1']]
 
-num_morbs = np.shape(morb_grids)[0]
-eval_reg_size_n = np.shape(morb_grids[0])
-eval_reg_size = dv*eval_reg_size_n
+if 'morb_grids_s2' in npz_file_data:
+    morb_grids.append(npz_file_data['morb_grids_s2'])
+    morb_energies.append(npz_file_data['morb_energies_s2'])
+    homo_inds.append(npz_file_data['homo_s2'])
 
-if plane_index > len(z_arr) - 1:
-    # Extrapolation is needed!
+eval_reg_size = np.array([x_arr[-1] - x_arr[0], y_arr[-1] - y_arr[0], z_arr[-1] - z_arr[0]])
+eval_reg_size_n = morb_grids[0][0].shape
 
-    if args.work_function != None:
-        morb_planes = cu.extrapolate_morbs(morb_grids[:, :, :, -1], morb_energies, dv,
-                                             args.sts_plane_height*ang_2_bohr - z_top, True,
-                                             work_function=args.work_function/hart_2_ev)
-    elif args.hartree_file != None:
-
-        time1 = time.time()
-        hart_cube_data = cu.read_cube_file(args.hartree_file)
-        print("Read hartree: %.3f" % (time.time()-time1))
-        hart_plane = cu.get_hartree_plane_above_top_atom(hart_cube_data, args.sts_plane_height)
-        hart_plane -= ref_energy/hart_2_ev
-        print("Hartree on extrapolation plane: min: %.4f; max: %.4f; avg: %.4f (eV)" % (
-                                                        np.min(hart_plane)*hart_2_ev,
-                                                        np.max(hart_plane)*hart_2_ev,
-                                                        np.mean(hart_plane)*hart_2_ev))
-        morb_planes = cu.extrapolate_morbs(morb_grids[:, :, :, -1], morb_energies, dv,
-                                             args.sts_plane_height*ang_2_bohr - z_top, True,
-                                             hart_plane=hart_plane, use_weighted_avg=True)
-    else:
-        print("Work function or Hartree potential must be supplied if STS plane is out of region")
-        exit()
-
+if eval_reg_size_n[2] == 1:
+    dv = np.array([x_arr[1] - x_arr[0], y_arr[1] - y_arr[0], x_arr[1] - x_arr[0]])
 else:
-    morb_planes = np.zeros((num_morbs, eval_reg_size_n[0], eval_reg_size_n[1]))
-    for i_mo in range(num_morbs):
-        morb_planes[i_mo, :, :] =  morb_grids[i_mo, :, :, plane_index]
+    dv = np.array([x_arr[1] - x_arr[0], y_arr[1] - y_arr[0], z_arr[1] - z_arr[0]])
+
+nspin = len(morb_grids)
+
+# z_arr with respect to topmost atom
+z_arr -= mol_bbox[5]
+
+x_grid, y_grid = np.meshgrid(x_arr, y_arr, indexing='ij')
+x_grid /= ang_2_bohr
+y_grid /= ang_2_bohr
+
+def get_plane_index(z, z_arr, dz):
+    return int(np.round((z-z_arr[0])/dz))
+
+
+plane_index = get_plane_index(args.sts_plane_height*ang_2_bohr, z_arr, dv[2])
+
+morb_planes = []
+num_morbs = []
+
+for ispin in range(nspin):
+    num_morbs_s = np.shape(morb_grids[ispin])[0]
+    num_morbs.append(num_morbs_s)
+
+    if plane_index > len(z_arr) - 1:
+        # Extrapolation is needed!
+
+        extrap_plane_index = len(z_arr) - 1
+
+        if args.work_function != None:
+            extrap_planes = csu.extrapolate_morbs(morb_grids[ispin][:, :, :, extrap_plane_index],
+                                                morb_energies[ispin], dv,
+                                                args.sts_plane_height*ang_2_bohr, True,
+                                                work_function=args.work_function/hart_2_ev)
+        elif args.hartree_file != None:
+
+            time1 = time.time()
+            hart_cube_data = csu.read_cube_file(args.hartree_file)
+            print("Read hartree: %.3f" % (time.time()-time1))
+
+            # Get Hartree plane, convert to eV and shift by ref (so it matches morb_energies) 
+            hart_plane = csu.get_hartree_plane_above_top_atom(hart_cube_data, z_arr[-1])*hart_2_ev - ref_energy
+
+            print("Hartree on extrapolation plane: min: %.4f; max: %.4f; avg: %.4f (eV)" % (
+                                                            np.min(hart_plane),
+                                                            np.max(hart_plane),
+                                                            np.mean(hart_plane)))
+            
+            extrap_planes = csu.extrapolate_morbs(morb_grids[ispin][:, :, :, extrap_plane_index],
+                                                morb_energies[ispin], dv,
+                                                args.sts_plane_height*ang_2_bohr, True,
+                                                hart_plane=hart_plane/hart_2_ev, use_weighted_avg=True)
+        else:
+            print("Work function or Hartree potential must be supplied if STS plane is out of region")
+            exit()
+        
+        morb_planes.append(extrap_planes)
+
+    else:
+        morb_planes_s = np.zeros((num_morbs[ispin], eval_reg_size_n[0], eval_reg_size_n[1]))
+        for i_mo in range(num_morbs[ispin]):
+            morb_planes_s[i_mo, :, :] =  morb_grids[ispin][i_mo, :, :, plane_index]
+
+        morb_planes.append(morb_planes_s)
+
 
 ### ----------------------------------------------------------------
 ### Plot some orbitals for troubleshooting
 ### ----------------------------------------------------------------
 time1 = time.time()
 
-i_homo = 0
-for i, en in enumerate(morb_energies):
-    if en > 0.0:
-        i_homo = i - 1
-        break
-    if np.abs(en) < 1e-6:
-        i_homo = i
+n_homo = 5
+n_lumo = 5
 
-n_homo = 20
-n_lumo = 20
+for ispin in range(nspin):
 
-select = np.arange(i_homo - n_homo + 1, i_homo + n_lumo + 1, 1)
+    i_homo = homo_inds[ispin]
 
-sel_morbs = np.zeros((eval_reg_size_n[0], len(select)*eval_reg_size_n[1]))
+    select = np.arange(i_homo - n_homo + 1, i_homo + n_lumo + 1, 1)
 
-for i, i_mo in enumerate(select):
-    sel_morbs[:, i*eval_reg_size_n[1]:(i+1)*eval_reg_size_n[1]] = morb_planes[i_mo]
+    sel_morbs = np.zeros((eval_reg_size_n[0], len(select)*eval_reg_size_n[1]))
 
-x_arr = np.arange(0, eval_reg_size[0], dv[0])
-y_arr_inc = np.arange(0, len(select)*eval_reg_size[1], dv[1])
-x_grid_inc, y_grid_inc = np.meshgrid(x_arr, y_arr_inc, indexing='ij')
+    for i, i_mo in enumerate(select):
+        sel_morbs[:, i*eval_reg_size_n[1]:(i+1)*eval_reg_size_n[1]] = morb_planes[ispin][i_mo]
 
-max_val = np.max(sel_morbs)
+    y_arr_inc = np.linspace(0, len(select)*eval_reg_size[1], len(select)*eval_reg_size_n[1])
+    x_grid_inc, y_grid_inc = np.meshgrid(x_arr, y_arr_inc, indexing='ij')
 
-plt.figure(figsize=(12, int(eval_reg_size_n[1]/eval_reg_size_n[0]*12*len(select))))
-plt.pcolormesh(x_grid_inc, y_grid_inc, sel_morbs, vmax=max_val, vmin=-max_val, cmap='seismic') # seismic bwr
-plt.axis('off')
-plt.axhline(n_homo*eval_reg_size[1], color='lightgray')
-plt.savefig(output_dir+"orbs_h%.1f.png"%args.sts_plane_height, dpi=200, bbox_inches='tight')
-plt.close()
+    max_val = np.max(np.abs(sel_morbs))
 
-print("Made orbital plot: %.3f" % (time.time()-time1))
+    plt.figure(figsize=(12, int(eval_reg_size_n[1]/eval_reg_size_n[0]*12*len(select))))
+    plt.pcolormesh(x_grid_inc, y_grid_inc, sel_morbs, vmax=max_val, vmin=-max_val, cmap='seismic') # seismic bwr
+    plt.axis('off')
+    plt.axhline(n_homo*eval_reg_size[1], color='lightgray')
+    plt.savefig(output_dir+"orbs_s%d_h%.1f.png"%(ispin, args.sts_plane_height), dpi=200, bbox_inches='tight')
+    plt.close()
+
+print("Made orbital plots: %.3f" % (time.time()-time1))
 
 
 ### ----------------------------------------------------------------
@@ -225,6 +264,8 @@ print("Made orbital plot: %.3f" % (time.time()-time1))
 ### ----------------------------------------------------------------
 
 de = args.sts_de
+
+emin, emax = elim
 
 e_arr = np.arange(emin, emax+de, de)
 
@@ -244,16 +285,17 @@ def calculate_ldos(de, fwhm, broad_type):
 
     pldos = np.zeros((eval_reg_size_n[0], len(e_arr)))
 
-    for i_mo, morb_plane in enumerate(morb_planes):
-        en = morb_energies[i_mo]
-        avg_morb = np.mean(morb_plane**2, axis=1)
+    for ispin in range(nspin):
+        for i_mo, morb_plane in enumerate(morb_planes[ispin]):
+            en = morb_energies[ispin][i_mo]
+            avg_morb = np.mean(morb_plane**2, axis=1)
 
-        if broad_type == 'l':
-            morb_ldos_broad = np.outer(avg_morb, lorentzian(e_arr - en))
-        else:
-            morb_ldos_broad = np.outer(avg_morb, gaussian(e_arr - en))
+            if broad_type == 'l':
+                morb_ldos_broad = np.outer(avg_morb, lorentzian(e_arr - en))
+            else:
+                morb_ldos_broad = np.outer(avg_morb, gaussian(e_arr - en))
 
-        pldos += morb_ldos_broad
+            pldos += morb_ldos_broad
 
     return pldos
 
@@ -279,6 +321,8 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
     if args.crop_defect_r != 0:
         index_r = np.argmax(second_half) + len(first_half)
         crop_x_r = x_arr_whole[index_r] - args.crop_dist_r
+    if crop_x_r < 0.0:
+        crop_x_r = x_arr_whole[-1]
 
     # align cropping, such that remaining area is a multiple of lattice parameter (minus dx!)
     lattice_param = args.lat_param
@@ -412,30 +456,36 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
     for gamma in args.gammas:
         for vmax_coef in args.vmax_coefs:
 
-            f, (ax1, ax2) = plt.subplots(2, figsize=(18.0, 12.0))
+            f, (ax1, ax2) = plt.subplots(2, figsize=(7.0, 12.0))
 
-            ax1.pcolormesh(x_grid_whole, e_grid_whole, ldos_raw,
+            # Also convert everything in [ang] to [nm]
+
+            ax1.pcolormesh(x_grid_whole/10, e_grid_whole, ldos_raw,
                             norm=colors.PowerNorm(gamma=gamma_ldos),
                             vmax=vmax_coef_ldos*np.max(ldos_raw),
                             cmap='gist_ncar')
-            ax1.axvline(crop_x_l_final, color='r')
-            ax1.axvline(crop_x_r_final, color='r')
-            ax1.text(crop_x_l_final+1.0, e_arr_whole[0]+0.01, "%.2f"%crop_x_l_final, color='red')
-            ax1.text(crop_x_r_final+1.0, e_arr_whole[0]+0.01, "%.2f"%crop_x_r_final, color='red')
+            ax1.axvline(crop_x_l_final/10, color='r')
+            ax1.axvline(crop_x_r_final/10, color='r')
+            ax1.text((crop_x_l_final+1.0)/10, e_arr_whole[0]+0.01, "%.2f"%crop_x_l_final, color='red')
+            ax1.text((crop_x_r_final-1.0)/10, e_arr_whole[0]+0.01, "%.2f"%crop_x_r_final, color='red', horizontalalignment='right')
             ax1.axhline(e_arr[0], color='r')
             ax1.axhline(e_arr[-1], color='r')
-            ax1.set_xlabel("x (angstrom)")
+            ax1.set_xlabel("x (nm)")
             ax1.set_ylabel("E (eV)")
 
-            ax2.pcolormesh(k_grid, e_k_grid, aft,
+            ax2.pcolormesh(k_grid*10, e_k_grid, aft,
                             norm=colors.PowerNorm(gamma=gamma),
                             vmax=vmax_coef*np.max(aft),
                             cmap='gist_ncar')
             ax2.set_ylim([np.min(e_arr), np.max(e_arr)])
-            ax2.set_xlim([0.0, 5*bzboundary])
-            ax2.text(5*bzboundary-0.6, e_arr[0]+0.01, "max=%.2e"%np.max(aft), color='red')
-            ax2.set_xlabel("k (1/angstrom)")
+            ax2.set_xlim([0.0, 5*bzboundary*10])
+            ax2.text(6.8*bzboundary*10, e_arr[0]+0.01, "max=%.2e"%np.max(aft), color='red', horizontalalignment='right')
+            ax2.set_xlabel("k (1/nm)")
             ax2.set_ylabel("E (eV)")
+
+            ax2.axvline(2*bzboundary*10, color='red')
+            ax2.axvline(4*bzboundary*10, color='red')
+            ax2.axvline(6*bzboundary*10, color='red')
 
             plt.savefig(output_dir+figname+"_g%.1f_vmc%.1f.png"%(gamma, vmax_coef), dpi=300, bbox_inches='tight')
             plt.close()
@@ -456,7 +506,7 @@ for fwhm in fwhm_arr:
 
         time1 = time.time()
         print("----Postprocessing fwhm", fwhm)
-        ldos_postprocess(pldos, geom_name, height, fwhm, x_arr_ang, e_arr)
+        ldos_postprocess(pldos, geom_label, height, fwhm, x_arr_ang, e_arr)
         print("----Postprocessing time: %.2f"%(time.time()-time1))
 
 print("Completed in %.1f s" % (time.time()-time0))
