@@ -238,6 +238,11 @@ for ispin in range(nspin):
     i_homo = homo_inds[ispin]
 
     select = np.arange(i_homo - n_homo + 1, i_homo + n_lumo + 1, 1)
+    select_check = []
+    for i, i_mo in enumerate(select):
+        if i_mo >= 0 and i_mo < len(morb_planes[ispin]):
+            select_check.append(i_mo)
+    select = np.array(select_check)
 
     sel_morbs = np.zeros((eval_reg_size_n[0], len(select)*eval_reg_size_n[1]))
 
@@ -456,7 +461,7 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
     for gamma in args.gammas:
         for vmax_coef in args.vmax_coefs:
 
-            f, (ax1, ax2) = plt.subplots(2, figsize=(7.0, 12.0))
+            f, (ax1, ax2) = plt.subplots(2, figsize=(10.0, 12.0))
 
             # Also convert everything in [ang] to [nm]
 
@@ -478,7 +483,7 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
                             vmax=vmax_coef*np.max(aft),
                             cmap='gist_ncar')
             ax2.set_ylim([np.min(e_arr), np.max(e_arr)])
-            ax2.set_xlim([0.0, 5*bzboundary*10])
+            ax2.set_xlim([0.0, 7*bzboundary*10])
             ax2.text(6.8*bzboundary*10, e_arr[0]+0.01, "max=%.2e"%np.max(aft), color='red', horizontalalignment='right')
             ax2.set_xlabel("k (1/nm)")
             ax2.set_ylabel("E (eV)")

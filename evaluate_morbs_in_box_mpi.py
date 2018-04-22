@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import os
 import numpy as np
 import time
@@ -253,7 +254,7 @@ for i in range(3):
             break
 
 if rank == 0:
-    print("Evaluation regions:")
+    print("Evaluation regions (Bohr):")
     print("     x:", eval_regions[0])
     print("     y:", eval_regions[1])
     print("     z:", eval_regions[2])
@@ -311,7 +312,7 @@ if rank == 0:
     coord_arrays = []
     for i in range(3):
         if eval_regions[i] is None:
-            coord_arrays.append(np.arange(0.0, cell[i], dv[i]))
+            coord_arrays.append(np.linspace(0.0, cell[i]-dv[i], grid_shape[i]))
         else:
             coord_arrays.append(np.linspace(eval_regions[i][0], eval_regions[i][1], grid_shape[i]))
 

@@ -98,6 +98,23 @@ parser.add_argument(
     help=("Energy limits (emin, emax) for STS (eV)."
           "Default is to take the whole calculated energy range.")
 )
+parser.add_argument(
+    '--orb_plane_heights',
+    nargs='*',
+    type=float,
+    metavar='H',
+    help="List of heights for orbital evaluation. (angstroms)")
+parser.add_argument(
+    '--n_homo',
+    type=int,
+    metavar='N',
+    help="Number of HOMO orbitals to evaluate.")
+parser.add_argument(
+    '--n_lumo',
+    type=int,
+    metavar='N',
+    help="Number of LUMO orbitals to evaluate.")
+
 
 parser.add_argument(
     '--skip_data_output',
@@ -207,29 +224,8 @@ extended_region_n = np.shape(total_morb_grids[0])
 total_z_arr = np.arange(0.0, extended_region_n[3]*dv[2], dv[2]) + z_arr[0]
 
 ### -----------------------------------------
-### Summing charge densities according to bias voltages
+### Plotting methods
 ### -----------------------------------------
-
-# Sum up both spins
-
-charge_dens_arr = np.zeros((len(args.bias_voltages),
-                            extended_region_n[1],
-                            extended_region_n[2],
-                            extended_region_n[3]))
-
-for i_bias, bias in enumerate(args.bias_voltages):
-    for ispin in range(nspin):
-        for imo, morb_grid in enumerate(total_morb_grids[ispin]):
-            if morb_energies[ispin][imo] > np.max([0.0, bias]):
-                break
-            if morb_energies[ispin][imo] >= np.min([0.0, bias]):
-                charge_dens_arr[i_bias, :, :, :] += morb_grid**2
-
-### -----------------------------------------
-### Constant height STM
-### -----------------------------------------
-
-time1 = time.time()
 
 class FormatScalarFormatter(matplotlib.ticker.ScalarFormatter):
     def __init__(self, fformat="%1.1f", offset=True, mathText=True):
@@ -242,23 +238,37 @@ class FormatScalarFormatter(matplotlib.ticker.ScalarFormatter):
             self.format = '$%s$' % matplotlib.ticker._mathdefault(self.format)
 
 
-def make_plot(x_grid, y_grid, data, fpath, title=None, vmin=None, vmax=None, cmap='gist_heat'):
-    plt.figure(figsize=figure_size_xy)
-    plt.pcolormesh(x_grid, y_grid, data, vmin=vmin, vmax=vmax, cmap=cmap)
-    plt.xlabel("x (angstrom)")
-    plt.ylabel("y (angstrom)")
-    if 1e-3 < np.max(data) < 1e3:
-        cb = plt.colorbar()
-    else:
-        cb = plt.colorbar(format=FormatScalarFormatter("%.1f"))
-    cb.formatter.set_powerlimits((-2, 2))
-    cb.update_ticks()
-    plt.title(title)
+def make_plot(data, fpath, title=None, center0=False, vmin=None, vmax=None, cmap='gist_heat'):
+    if not isinstance(data, (list,)):
+        data = [data]
+    if not isinstance(center0, (list,)):
+        center0 = [center0]
+    if not isinstance(title, (list,)):
+        title = [title]
+
+    plt.figure(figsize=(figure_size_xy[0], len(data)*figure_size_xy[1]))
+    for i, data_e in enumerate(data):
+        plt.subplot(len(data), 1, i+1)
+        if center0[i]:
+            data_amax = np.max(np.abs(data_e))
+            plt.pcolormesh(x_grid, y_grid, data_e, vmin=-data_amax, vmax=data_amax, cmap=cmap)
+        else:
+            plt.pcolormesh(x_grid, y_grid, data_e, vmin=vmin, vmax=vmax, cmap=cmap)
+        plt.xlabel("x (angstrom)")
+        plt.ylabel("y (angstrom)")
+        if 1e-3 < np.max(data) < 1e3:
+            cb = plt.colorbar()
+        else:
+            cb = plt.colorbar(format=FormatScalarFormatter("%.1f"))
+        cb.formatter.set_powerlimits((-2, 2))
+        cb.update_ticks()
+        if i < len(title):
+            plt.title(title[i])
     plt.axis('scaled')
     plt.savefig(fpath, dpi=300, bbox_inches='tight')
     plt.close()
 
-def make_series_plot(x_grid, y_grid, data, fpath):
+def make_series_plot(data, fpath):
     plt.figure(figsize=(figure_size_xy[1]*len(args.bias_voltages), figure_size_xy[0]))
     for i_bias, bias in enumerate(args.bias_voltages):
         plt.subplot(1, len(args.bias_voltages), i_bias+1)
@@ -269,6 +279,54 @@ def make_series_plot(x_grid, y_grid, data, fpath):
         plt.yticks([])
     plt.savefig(fpath, dpi=300, bbox_inches='tight')
     plt.close()
+
+### -----------------------------------------
+### Saving HOMO and LUMO
+### -----------------------------------------
+
+
+for i_height, plane_height in enumerate(args.orb_plane_heights):
+    plane_index = get_plane_index(plane_height*ang_2_bohr, total_z_arr, dv[2])
+    if plane_index < 0:
+        print("Height %.1f is outside evaluation range, skipping." % plane_height)
+        continue
+    if not args.skip_figs:
+        for ispin in range(nspin):
+            for i_h in range(-args.n_homo+1, args.n_lumo+1):
+                ind = homo_inds[ispin] + i_h
+                if ind > len(morb_energies[ispin]) - 1:
+                    print("Homo %d is out of energy range, ignoring" % i_h)
+                    break
+                fpath = args.output_dir+"/orb_h%.1f_s%d_%02dhomo%d.png"%(plane_height, ispin, i_h+args.n_homo-1, i_h)
+                title = "homo %d, E=%.6f" % (i_h, morb_energies[ispin][ind])
+                plot_data = total_morb_grids[ispin][ind][:, :, plane_index]
+                make_plot([plot_data, plot_data**2], fpath, title=[title, "square"], center0=[True, False], cmap='seismic')
+
+### -----------------------------------------
+### Summing charge densities according to bias voltages
+### -----------------------------------------
+
+# Sum up both spins
+
+charge_dens_arr = np.zeros((len(args.bias_voltages),
+                            extended_region_n[1],
+                            extended_region_n[2],
+                            extended_region_n[3]))
+
+# NB Homo is only added to negative bias !
+for i_bias, bias in enumerate(args.bias_voltages):
+    for ispin in range(nspin):
+        for imo, morb_grid in enumerate(total_morb_grids[ispin]):
+            if morb_energies[ispin][imo] > np.max([0.0, bias]):
+                break
+            if morb_energies[ispin][imo] > np.min([0.0, bias]):
+                charge_dens_arr[i_bias, :, :, :] += morb_grid**2
+
+### -----------------------------------------
+### Constant height STM
+### -----------------------------------------
+
+time1 = time.time()
 
 const_height_data = np.zeros((
     len(args.stm_plane_heights),
@@ -284,10 +342,10 @@ for i_height, plane_height in enumerate(args.stm_plane_heights):
         for i_bias, bias in enumerate(args.bias_voltages):
             fpath = args.output_dir+"/stm_ch_v%.2f_h%.1f.png"%(bias, plane_height)
             title = "h = %.1f; V = %.2f" % (plane_height, bias)
-            make_plot(x_grid, y_grid, const_height_data[i_height, :, :, i_bias], fpath, title=title)
+            make_plot(const_height_data[i_height, :, :, i_bias], fpath, title=title)
         
         fpath = args.output_dir+"/stm_ch_h%.1f.png"%(plane_height)
-        make_series_plot(x_grid, y_grid, const_height_data[i_height], fpath)
+        make_series_plot(const_height_data[i_height], fpath)
 
 if not args.skip_data_output:
     fpath = args.output_dir+"/stm_ch.npz"
@@ -352,10 +410,10 @@ if eval_reg_size_n[2] != 1:
             for i_bias, bias in enumerate(args.bias_voltages):
                 fpath = args.output_dir+"/stm_cc_v%.2f_i%.1e.png"%(bias, isovalue)
                 title = "isov = %.1e; V = %.2f" % (isovalue, bias)
-                make_plot(x_grid, y_grid, const_curr_data[i_iso, :, :, i_bias], fpath, title=title)
+                make_plot(const_curr_data[i_iso, :, :, i_bias], fpath, title=title)
             
             fpath = args.output_dir+"/stm_cc_i%.1e.png"%(isovalue)
-            make_series_plot(x_grid, y_grid, const_curr_data[i_iso], fpath)
+            make_series_plot(const_curr_data[i_iso], fpath)
 
     if not args.skip_data_output:
         fpath = args.output_dir+"/stm_cc.npz"
@@ -412,7 +470,7 @@ for i_height, plane_height in enumerate(args.sts_plane_heights):
         for i, energy in enumerate(e_arr):
             fpath = args.output_dir+"/sts_h%.2f_nr%d.png"%(plane_height, i)
             title = "h = %.2f; U = %.3f" % (plane_height, energy)
-            make_plot(x_grid, y_grid, pldos[:, :, i], fpath, title=title, vmin=min_val, vmax=max_val,  cmap='bwr')
+            make_plot(pldos[:, :, i], fpath, title=title, vmin=min_val, vmax=max_val,  cmap='seismic')
 
 if not args.skip_data_output:
     fpath = args.output_dir+"/sts.npz"
