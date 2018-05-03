@@ -284,7 +284,6 @@ def make_series_plot(data, fpath):
 ### Saving HOMO and LUMO
 ### -----------------------------------------
 
-
 for i_height, plane_height in enumerate(args.orb_plane_heights):
     plane_index = get_plane_index(plane_height*ang_2_bohr, total_z_arr, dv[2])
     if plane_index < 0:

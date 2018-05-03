@@ -11,7 +11,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 
-import cp2k_stm_utilities as csu
+import atomistic_tools.cp2k_stm_utilities as csu
+import atomistic_tools.qe_utils as qeu
 
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
@@ -124,6 +125,13 @@ parser.add_argument(
     default=1.0,
     help='Only show proportion lower than specified on the color scale.')
 
+parser.add_argument(
+    '--qe_bands_dir',
+    type=str,
+    metavar='QE_DIR',
+    default=None,
+    help='If specified, also plots QE bands on top of FTSTS.')
+
 
 args = parser.parse_args()
 
@@ -133,6 +141,18 @@ output_dir = args.output_dir
 if output_dir[-1] != '/':
     output_dir += '/'
 
+### ----------------------------------------------------------------
+### Load QE bands
+### ----------------------------------------------------------------
+if args.qe_bands_dir is not None:
+    qe_bands_dir = args.qe_bands_dir
+    if not qe_bands_dir.endswith('/'):
+        qe_bands_dir += '/'
+    qe_kpts, qe_bands, qe_fermi_en = qeu.read_band_data(qe_bands_dir)
+    # Shift QE bands such that VB onset is 0
+    qe_homo = qeu.vb_onset(qe_bands, qe_fermi_en)
+    qe_bands -= qe_homo
+### ----------------------------------------------------------------
 
 npz_file_data = np.load(args.npz_file)
 
@@ -491,6 +511,16 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
             ax2.axvline(2*bzboundary*10, color='red')
             ax2.axvline(4*bzboundary*10, color='red')
             ax2.axvline(6*bzboundary*10, color='red')
+
+            ### --------------------------------------------
+            ### Plot QE Bands
+            ### --------------------------------------------
+            
+            if args.qe_bands_dir is not None:
+                for qe_band in qe_bands:
+                    ax2.plot(qe_kpts[:, 0]*2, qe_band, '-', color='w')
+
+            ### --------------------------------------------
 
             plt.savefig(output_dir+figname+"_g%.1f_vmc%.1f.png"%(gamma, vmax_coef), dpi=300, bbox_inches='tight')
             plt.close()
