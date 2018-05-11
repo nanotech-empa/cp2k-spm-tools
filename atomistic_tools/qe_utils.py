@@ -179,3 +179,4 @@ def correct_band_crossings(kpts, eigvals_in, wfc_projs_in):
                             wfc_projs[i_spin, i_k+1:, :, i_band2] = orig_wfc
     
     return eigvals, wfc_projs
+
