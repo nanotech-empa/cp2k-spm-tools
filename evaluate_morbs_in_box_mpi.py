@@ -11,7 +11,7 @@ import argparse
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
 
-import cp2k_stm_utilities as csu
+import atomistic_tools.cp2k_stm_utilities as csu
 
 from mpi4py import MPI
 

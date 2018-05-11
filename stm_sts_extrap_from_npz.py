@@ -14,7 +14,7 @@ import argparse
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
 
-import cp2k_stm_utilities as csu
+import atomistic_tools.cp2k_stm_utilities as csu
 
 parser = argparse.ArgumentParser(
     description="Extrapolates supplied molecular orbitals " \
@@ -263,7 +263,7 @@ def make_plot(data, fpath, title=None, center0=False, vmin=None, vmax=None, cmap
         cb.formatter.set_powerlimits((-2, 2))
         cb.update_ticks()
         if i < len(title):
-            plt.title(title[i])
+            plt.title(title[i], loc='left')
     plt.axis('scaled')
     plt.savefig(fpath, dpi=300, bbox_inches='tight')
     plt.close()

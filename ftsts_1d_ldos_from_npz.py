@@ -489,12 +489,12 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
                             norm=colors.PowerNorm(gamma=gamma_ldos),
                             vmax=vmax_coef_ldos*np.max(ldos_raw),
                             cmap='gist_ncar')
-            ax1.axvline(crop_x_l_final/10, color='r')
-            ax1.axvline(crop_x_r_final/10, color='r')
-            ax1.text((crop_x_l_final+1.0)/10, e_arr_whole[0]+0.01, "%.2f"%crop_x_l_final, color='red')
-            ax1.text((crop_x_r_final-1.0)/10, e_arr_whole[0]+0.01, "%.2f"%crop_x_r_final, color='red', horizontalalignment='right')
-            ax1.axhline(e_arr[0], color='r')
-            ax1.axhline(e_arr[-1], color='r')
+            #ax1.axvline(crop_x_l_final/10, color='r')
+            #ax1.axvline(crop_x_r_final/10, color='r')
+            #ax1.text((crop_x_l_final+1.0)/10, e_arr_whole[0]+0.01, "%.2f"%crop_x_l_final, color='red')
+            #ax1.text((crop_x_r_final-1.0)/10, e_arr_whole[0]+0.01, "%.2f"%crop_x_r_final, color='red', horizontalalignment='right')
+            #ax1.axhline(e_arr[0], color='r')
+            #ax1.axhline(e_arr[-1], color='r')
             ax1.set_xlabel("x (nm)")
             ax1.set_ylabel("E (eV)")
 
@@ -503,14 +503,14 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
                             vmax=vmax_coef*np.max(aft),
                             cmap='gist_ncar')
             ax2.set_ylim([np.min(e_arr), np.max(e_arr)])
-            ax2.set_xlim([0.0, 7*bzboundary*10])
-            ax2.text(6.8*bzboundary*10, e_arr[0]+0.01, "max=%.2e"%np.max(aft), color='red', horizontalalignment='right')
+            ax2.set_xlim([0.0, 5*bzboundary*10])
+            #ax2.text(4.8*bzboundary*10, e_arr[0]+0.01, "max=%.2e"%np.max(aft), color='red', horizontalalignment='right')
             ax2.set_xlabel("k (1/nm)")
             ax2.set_ylabel("E (eV)")
 
             ax2.axvline(2*bzboundary*10, color='red')
             ax2.axvline(4*bzboundary*10, color='red')
-            ax2.axvline(6*bzboundary*10, color='red')
+            #ax2.axvline(6*bzboundary*10, color='red')
 
             ### --------------------------------------------
             ### Plot QE Bands
@@ -518,7 +518,7 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
             
             if args.qe_bands_dir is not None:
                 for qe_band in qe_bands:
-                    ax2.plot(qe_kpts[:, 0]*2, qe_band, '-', color='w')
+                    ax2.plot(2*qe_kpts[:, 0]*2*bzboundary*10, qe_band, '-', color='r', linewidth=1.0)
 
             ### --------------------------------------------
 
