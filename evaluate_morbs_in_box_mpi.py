@@ -67,11 +67,12 @@ parser.add_argument(
     nargs=6,
     metavar='X',
     required=True,
-    help=("Specify evaluation region limits [xmin xmax ymin ymax zmin zmax] as a string:"
-          "'G' corresponds to global cell limit (also enables PBC if both of pair are 'G')"
-          "number (e.g. '2.5') specifies distance [ang] from furthest-extending atom"
-          "Number with element ('2.5C') correspondingly from furthest atom of elem."
-          "If '_P' is appended, only a plane is computed (the partner value is ignored)")
+    help=("Specify evaluation region limits [xmin xmax ymin ymax zmin zmax] as a string: "
+          "'G' corresponds to global cell limit (also enables PBC if both of pair are 'G') "
+          "number and t/b (e.g. '2.5t') specifies distance [ang] from furthest-extending atom "
+          "in top (t) or bottom (b) direction. "
+          "Number with _element ('2.5t_C') correspondingly from furthest atom of elem. "
+          "If xmin=xmax (within 1e-4), then only a plane is evaluated ")
 )
 
 parser.add_argument(
@@ -222,43 +223,53 @@ for i in range(3):
         continue
     for j in range(2):
         reg_str = eval_regions_inp[i][j]
-        single_plane = False
-        if reg_str.endswith("_P"):
-            single_plane = True
-            reg_str = reg_str[:-2]
+
+        if '_' in reg_str:
+            elem = reg_str.split('_')[1]
+            reg_str = reg_str.split('_')[0]
+            sel_positions = ase_atoms.positions[np.array(ase_atoms.get_chemical_symbols()) == elem]
+            if len(sel_positions) == 0:
+                print("Error: No element %s found. Exiting."%elem)
+                exit(1)
+        else:
+            sel_positions = ase_atoms.positions
+
 
         if reg_str == 'G':
             eval_regions[i][j] = 0.0 if j == 0 else cell[i]
-        elif is_number(reg_str):
-            val = float(reg_str)
-            eval_regions[i][j] = (np.min(ase_atoms.positions[:, i]) - val
-                                    if j == 0 else
-                                  np.max(ase_atoms.positions[:, i]) + val)
-            eval_regions[i][j] *= ang_2_bohr
         else:
-            match = re.match(r"([0-9.]+)([a-zA-Z]+)", reg_str, re.I)
-            if match:
-                items = match.groups()
-                val = float(items[0])
-                elem = items[1]
-                elem_positions = ase_atoms.positions[np.array(ase_atoms.get_chemical_symbols()) == elem]
-                if len(elem_positions) == 0:
-                    print("Error: No element %s found. Exiting."%elem)
-                    exit(1)
-                eval_regions[i][j] = (np.min(elem_positions[:, i]) - val
-                                        if j == 0 else
-                                      np.max(elem_positions[:, i]) + val)
-                eval_regions[i][j] *= ang_2_bohr
-        if single_plane:
-            eval_regions[i][(j+1)%2] = eval_regions[i][j]
-            break
+            ref_at_pos = reg_str[-1]
+            ref_shift_str = reg_str[:-1]
+
+            if ref_at_pos != 't' and ref_at_pos != 'b':
+                print("Error:", reg_str, "needs to end with a 't' or 'b'")
+                exit(1)
+            if not is_number(ref_shift_str):
+                print("Error:", ref_shift_str, "needs to be a number")
+                exit(1)
+            ref_shift_val = float(ref_shift_str)
+
+            eval_regions[i][j] = (np.min(sel_positions[:, i]) + ref_shift_val
+                                    if ref_at_pos == 'b' else
+                                  np.max(sel_positions[:, i]) + ref_shift_val)
+            eval_regions[i][j] *= ang_2_bohr
+
+    if np.abs(eval_regions[i][0] - eval_regions[i][1]) < 1e-3:
+        eval_regions[i][0] = eval_regions[i][1]
+
+
+def minmax(arr):
+    return np.array([np.min(arr), np.max(arr)])
 
 if rank == 0:
     print("Evaluation regions (Bohr):")
     print("     x:", eval_regions[0])
     print("     y:", eval_regions[1])
     print("     z:", eval_regions[2])
-
+    print("Bounding box of atoms (Bohr):")
+    print("     x:", minmax(ase_atoms.positions[:, 0])*ang_2_bohr)
+    print("     y:", minmax(ase_atoms.positions[:, 1])*ang_2_bohr)
+    print("     z:", minmax(ase_atoms.positions[:, 2])*ang_2_bohr)
 
 # Define real space grid
 # Cp2k chooses close to 0.08 angstroms (?)
