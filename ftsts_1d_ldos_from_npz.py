@@ -48,6 +48,18 @@ parser.add_argument(
     type=float,
     metavar='FWHM',
     help='Full width half maximums for the broadening of each orbital.')
+parser.add_argument(
+    '--sts_line_pos',
+    type=float,
+    default=0.0,
+    metavar='LY',
+    help='STS line position (y coordinate) in [ang] wrt to the center.')
+parser.add_argument(
+    '--sts_line_fwhm',
+    type=float,
+    default=-1.0,
+    metavar='W',
+    help='STS line width (gaussian fwhm) in [ang]. If <0, then avg in Y.')
 
 parser.add_argument(
     '--work_function',
@@ -300,11 +312,11 @@ x_e_grid, e_grid = np.meshgrid(x_arr_ang, e_arr, indexing='ij')
 
 def calculate_ldos(de, fwhm, broad_type):
 
-    def lorentzian(x):
+    def lorentzian(x, fwhm):
         gamma = 0.5*fwhm
         return gamma/(np.pi*(x**2+gamma**2))
 
-    def gaussian(x):
+    def gaussian(x, fwhm):
         sigma = fwhm/2.3548
         return np.exp(-x**2/(2*sigma**2))/(sigma*np.sqrt(2*np.pi))
 
@@ -313,12 +325,24 @@ def calculate_ldos(de, fwhm, broad_type):
     for ispin in range(nspin):
         for i_mo, morb_plane in enumerate(morb_planes[ispin]):
             en = morb_energies[ispin][i_mo]
-            avg_morb = np.mean(morb_plane**2, axis=1)
+
+            if args.sts_line_fwhm < 0.0:
+                avg_morb = np.mean(morb_plane**2, axis=1)
+            else:
+                ### -------------------------------------------------------
+                ### Average the orbital along the defined line
+                ### -------------------------------------------------------
+                # define gaussian on the specified position with specified width
+                y_middle = (y_arr[-1]+y_arr[0])/2
+                gaussian_y_pos = y_middle + args.sts_line_pos*ang_2_bohr
+                y_gaussian = gaussian(y_arr-gaussian_y_pos, args.sts_line_fwhm*ang_2_bohr)
+                avg_morb = np.dot(morb_plane**2, y_gaussian)
+                ### -------------------------------------------------------
 
             if broad_type == 'l':
-                morb_ldos_broad = np.outer(avg_morb, lorentzian(e_arr - en))
+                morb_ldos_broad = np.outer(avg_morb, lorentzian(e_arr - en, fwhm))
             else:
-                morb_ldos_broad = np.outer(avg_morb, gaussian(e_arr - en))
+                morb_ldos_broad = np.outer(avg_morb, gaussian(e_arr - en, fwhm))
 
             pldos += morb_ldos_broad
 
@@ -463,6 +487,10 @@ def ldos_postprocess(ldos_raw, geom_name, height, fwhm, x_arr_whole, e_arr_whole
         args.crop_dist_l, 'f' if args.crop_defect_l == 0 else 't',
         args.crop_dist_r, 'f' if args.crop_defect_r == 0 else 't',
         args.emin, args.emax, args.padding_x)
+
+    if args.sts_line_fwhm > 0.0:
+        figname += "_ln%.1fw%.1f" % (args.sts_line_pos, args.sts_line_fwhm)
+
 
     np.savez(output_dir+figname,x_arr=k_arr, y_arr=e_arr, values=aft,
             x_label="k (1/angstrom)", y_label="E (eV)")
