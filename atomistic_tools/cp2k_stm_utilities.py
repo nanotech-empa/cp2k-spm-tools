@@ -55,8 +55,17 @@ def read_cp2k_input(cp2k_input_file):
                     cell[1] = float(parts[2])
                     cell[2] = float(parts[3])
 
+            if parts[0] == "A" or parts[0] == "B" or parts[0] == "C":
+                prim_vec = np.array([float(x) for x in parts[1:]])
+                if np.sum(prim_vec > 0.0) > 1:
+                    raise ValueError("Cell is not rectangular")
+                ind = np.argmax(prim_vec > 0.0)
+                cell[ind] = prim_vec[ind]
+
     cell *= ang_2_bohr
 
+    if any(cell < 1e-3):
+        raise ValueError("Cell " + str(cell) + " is invalid")
     return elem_basis_name, cell
 
 # Read atomic positions from .xyz file (in Bohr radiuses)
@@ -223,7 +232,7 @@ def load_restart_wfn_file(restart_file, emin, emax):
     morb_occs = []
 
     # different HOMO indexes (for debugging and matching direct cube output)
-    loc_homo_inds = []  # indexes wrt to seleced morbitals
+    loc_homo_inds = []  # indexes wrt to selected morbitals
     glob_homo_inds = [] # global indexes, corresponds to WFN nr (counting start from 1)
     cp2k_homo_inds = [] # cp2k homo indexes, takes also smearing into account (counting start from 1)
 
