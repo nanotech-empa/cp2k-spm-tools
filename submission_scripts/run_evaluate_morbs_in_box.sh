@@ -13,7 +13,7 @@ GEOM=$(ls -tr $FOLDER | grep .xyz | head -n 1)
 #  --output_file "$FOLDER"/morbs_dx0.2 \
 #  --emin -2.0 \
 #  --emax  2.0 \
-#  --eval_region G G G G 3.0t 3.0t \
+#  --eval_region G G G G 4.0t 4.0t \
 #  --dx 0.2 \
 #  --eval_cutoff 14.0 \
 
