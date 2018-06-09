@@ -231,6 +231,8 @@ def load_restart_wfn_file(restart_file, emin, emax):
     morb_energies = []
     morb_occs = []
 
+    homo_ens = []
+
     # different HOMO indexes (for debugging and matching direct cube output)
     loc_homo_inds = []  # indexes wrt to selected morbitals
     glob_homo_inds = [] # global indexes, corresponds to WFN nr (counting start from 1)
@@ -261,6 +263,7 @@ def load_restart_wfn_file(restart_file, emin, emax):
 
         print("S%d nmo: %d, [eV] H-1 %.8f Homo %.8f H+1 %.8f" % (ispin, nmo,
                             evals[i_homo-1], evals[i_homo], evals[i_homo+1]))
+        homo_ens.append(evals[i_homo])
         
         ### ---------------------------------------------------------------------
         ### Build up the structure of python lists to hold the morb_composition
@@ -343,10 +346,9 @@ def load_restart_wfn_file(restart_file, emin, emax):
     # reference energy for RKS is just HOMO, but for UKS will be average of both HOMOs
 
     if nspin == 1:
-        ref_energy = morb_energies[0][loc_homo_inds[0]]
+        ref_energy = homo_ens[0]
     else:
-        ref_energy = (morb_energies[0][loc_homo_inds[0]] +
-                      morb_energies[1][loc_homo_inds[1]]) / 2
+        ref_energy = (homo_ens[0] + homo_ens[1]) / 2
     
     ### ---------------------------------------------------------------------
     ### Select orbitals and energy and occupation values in specified range
