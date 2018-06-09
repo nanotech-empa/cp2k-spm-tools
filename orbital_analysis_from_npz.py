@@ -14,7 +14,7 @@ import matplotlib.gridspec as gridspec
 from matplotlib.patches import ConnectionPatch
 
 
-import cp2k_stm_utilities as csu
+import atomistic_tools.cp2k_stm_utilities as csu
 
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
@@ -378,8 +378,8 @@ for ispin in range(nspin):
     ax2.pcolormesh(x_grid_inc, y_grid_inc, broadened_sel_morbs_avg, vmax=max_val, cmap='gist_ncar', norm=colors.PowerNorm(gamma=0.5))
     ax2.xaxis.set_visible(False)
     ax2.yaxis.set_visible(False)
-    ax2.axvline(args.crop_x_l*ang_2_bohr, color='lightgray')
-    ax2.axvline(args.crop_x_r*ang_2_bohr, color='lightgray')
+    ax2.axvline(x_arr[crop_i_l], color='lightgray')
+    ax2.axvline(x_arr[crop_i_r], color='lightgray')
     ax2.axhline(n_homo*eval_reg_size[1], color='lightgray')
 
     max_val = np.max(broadened_sel_morbs_ft)

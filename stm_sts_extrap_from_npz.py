@@ -215,7 +215,7 @@ for ispin in range(nspin):
                                     hart_plane=hart_plane/hart_2_ev,
                                     use_weighted_avg=True)
 
-    total_morb_grid = np.concatenate((morb_grids[ispin], extrap_morbs), axis=3)
+    total_morb_grid = np.concatenate((morb_grids[ispin][:, :, :, :extrap_plane_index+1], extrap_morbs), axis=3)
     total_morb_grids.append(total_morb_grid)
 
 extended_region_n = np.shape(total_morb_grids[0])

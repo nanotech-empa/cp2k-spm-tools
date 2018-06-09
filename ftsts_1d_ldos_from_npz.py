@@ -195,6 +195,21 @@ else:
 
 nspin = len(morb_grids)
 
+print("-----------------------")
+print("Eval region (Bohr):")
+print("    x: %.2f %.2f" % (np.min(x_arr), np.max(x_arr)))
+print("    y: %.2f %.2f" % (np.min(y_arr), np.max(y_arr)))
+print("    z: %.2f %.2f" % (np.min(z_arr), np.max(z_arr)))
+print("Mol. bounding box (Bohr):")
+print("    x: %.2f %.2f" % (mol_bbox[0], mol_bbox[1]))
+print("    y: %.2f %.2f" % (mol_bbox[2], mol_bbox[3]))
+print("    z: %.2f %.2f" % (mol_bbox[4], mol_bbox[5]))
+print("----------------------")
+print("s0 mol. orbitals:")
+print("    num: %d" % len(morb_energies[0]))
+print("    elim: %.2f %.2f" % (np.min(morb_energies[0]), np.max(morb_energies[0])))
+print("----------------------")
+
 # z_arr with respect to topmost atom
 z_arr -= mol_bbox[5]
 
