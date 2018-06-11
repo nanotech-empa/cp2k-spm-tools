@@ -218,8 +218,6 @@ if mpi_rank == 0:
     print("     y:", minmax(ase_atoms.positions[:, 1])*ang_2_bohr)
     print("     z:", minmax(ase_atoms.positions[:, 2])*ang_2_bohr)
 
-exit()
-
 # Define real space grid
 # Cp2k chooses close to 0.08 angstroms (?)
 step = args.dx
