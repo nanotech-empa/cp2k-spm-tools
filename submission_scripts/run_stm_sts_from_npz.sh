@@ -11,7 +11,7 @@ python3 ./stm_sts_extrap_from_npz.py \
   --extrap_extent 8.0 \
   --output_dir "$FOLDER"/stm_output \
 \
-  --bias_voltages -1.0 2.0 \
+  --bias_voltages -1.0 -0.5 -0.1 0.1 0.5 1.0 \
   --stm_plane_heights 3.0 5.0 \
   --stm_isovalues  1e-7 1e-6 \
 \

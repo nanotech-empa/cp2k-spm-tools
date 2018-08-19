@@ -192,7 +192,8 @@ def read_basis_functions(basis_set_file, elem_basis_name):
 ### RESTART file loading and processing
 ### ---------------------------------------------------------------------------
 
-def load_restart_wfn_file(restart_file, emin, emax):
+
+def load_restart_wfn_file(restart_file, emin, emax, mpi_rank, mpi_size):
     """ Reads the molecular orbitals from cp2k restart wavefunction file in specified energy range
     Note that the energy range is in eV and with respect to HOMO energy.
     
@@ -207,7 +208,7 @@ def load_restart_wfn_file(restart_file, emin, emax):
 
     natom, nspin, nao, nset_max, nshell_max = inpf.read_ints()
     #print(natom, nspin, nao, nset_max, nshell_max)
-    # natom - number of atoms
+    # natom - number of atomsl
     # nspin - number of spins
     # nao - number of atomic orbitals
     # nset_max - maximum number of sets in the basis set
@@ -254,17 +255,36 @@ def load_restart_wfn_file(restart_file, emin, emax):
 
         # list containing all eigenvalues and occupancies of the molecular orbitals
         evals_occs = inpf.read_reals()
-        #print(evals_occs)
 
         evals = evals_occs[:int(len(evals_occs)/2)]
         occs = evals_occs[int(len(evals_occs)/2):]
         
         evals *= hart_2_ev
-
-        print("S%d nmo: %d, [eV] H-1 %.8f Homo %.8f H+1 %.8f" % (ispin, nmo,
-                            evals[i_homo-1], evals[i_homo], evals[i_homo+1]))
-        homo_ens.append(evals[i_homo])
+        homo_en = evals[i_homo]
+        homo_ens.append(homo_en)
         
+        try:
+            ind_start = np.where(evals >= homo_en + emin)[0][0]
+        except:
+            ind_start = 0
+        try:
+            ind_end = np.where(evals > homo_en + emax)[0][0] - 1
+        except:
+            ind_end = len(evals)-1
+        
+        num_selected_orbs = ind_end - ind_start + 1
+        
+        # Select orbitals for the current mpi rank
+        base_orb_per_rank = int(np.floor(num_selected_orbs/mpi_size))
+        extra_orbs =  num_selected_orbs - base_orb_per_rank*mpi_size
+        if mpi_rank < extra_orbs:
+            loc_ind_start = mpi_rank*(base_orb_per_rank + 1) + ind_start
+            loc_ind_end = (mpi_rank+1)*(base_orb_per_rank + 1) + ind_start - 1
+        else:
+            loc_ind_start = mpi_rank*(base_orb_per_rank) + extra_orbs + ind_start
+            loc_ind_end = (mpi_rank+1)*(base_orb_per_rank) + extra_orbs + ind_start - 1
+
+                
         ### ---------------------------------------------------------------------
         ### Build up the structure of python lists to hold the morb_composition
         
@@ -303,9 +323,9 @@ def load_restart_wfn_file(restart_file, emin, emax):
 
         for imo in range(nmo):
             coefs = inpf.read_reals()
-            if evals[imo] - evals[i_homo] < emin - 1.0:
+            if imo < loc_ind_start:
                 continue
-            if evals[imo] - evals[i_homo] > emax + 1.0:
+            if imo > loc_ind_end:
                 if ispin == nspin - 1:
                     break
                 else:
@@ -376,6 +396,7 @@ def load_restart_wfn_file(restart_file, emin, emax):
     inpf.close()
     homo_inds = [loc_homo_inds, glob_homo_inds, cp2k_homo_inds]
     return morb_composition, morb_energies, morb_occs, homo_inds, ref_energy
+
 
 ### ---------------------------------------------------------------------------
 ### MOLOG FILE loading and processing

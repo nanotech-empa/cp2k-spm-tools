@@ -97,7 +97,8 @@ cell = None
 ase_atoms = None
 basis_sets = None
 
-print("Starting rank %d/%d"%(mpi_rank, mpi_size))
+#print("Starting rank %d/%d"%(mpi_rank, mpi_size))
+time0 = time.time()
 
 ### -----------------------------------------
 ### SETUP (rank 0)
@@ -111,9 +112,9 @@ try:
         ### Read input files
         ### -----------------------------------------
 
-        time0 = time.time()
+        time1 = time.time()
         elem_basis_names, cell = csu.read_cp2k_input(args.cp2k_input)
-        print("Read cp2k input: %.3f" % (time.time()-time0))
+        print("Read cp2k input: %.3f" % (time.time()-time1))
 
         time1 = time.time()
         ase_atoms = csu.read_xyz(args.xyz_file)
@@ -217,6 +218,7 @@ if mpi_rank == 0:
     print("     x:", minmax(ase_atoms.positions[:, 0])*ang_2_bohr)
     print("     y:", minmax(ase_atoms.positions[:, 1])*ang_2_bohr)
     print("     z:", minmax(ase_atoms.positions[:, 2])*ang_2_bohr)
+    sys.stdout.flush()
 
 # Define real space grid
 # Cp2k chooses close to 0.08 angstroms (?)
@@ -231,18 +233,23 @@ dv = cell/global_size_n
 ### Divide the energy range between the processors
 ### -----------------------------------------
 
-emin_loc = args.emin + mpi_rank*(args.emax-args.emin)/mpi_size
-emax_loc = args.emin + (mpi_rank+1)*(args.emax-args.emin)/mpi_size - 1e-14
+#emin_loc = args.emin + mpi_rank*(args.emax-args.emin)/mpi_size
+#emax_loc = args.emin + (mpi_rank+1)*(args.emax-args.emin)/mpi_size - 1e-14
+
+time1 = time.time()
 
 morb_composition, morb_energies, morb_occs, homo_inds, ref_energy = \
-    csu.load_restart_wfn_file(args.wfn_file, emin_loc, emax_loc)
+    csu.load_restart_wfn_file(args.wfn_file, args.emin, args.emax, mpi_rank, mpi_size)
+
+if mpi_rank == 0:
+    print("Read restart: %.3f" % (time.time() - time1))
 
 nspin = len(morb_composition)
 
 for ispin in range(nspin):
     num_orbs = len(morb_composition[ispin][0][0][0][0])
     assert num_orbs == len(morb_energies[ispin])
-    print("S%d Rank %d energy range %.2f:%.2f; num orbs: %d" %(ispin, mpi_rank, emin_loc, emax_loc, num_orbs))
+    print("-- R%d/%d S%d num orbs: %d" %(mpi_rank, mpi_size, ispin, num_orbs))
 
 ### -----------------------------------------
 ### Calculate the molecular orbitals in the specified region
@@ -256,6 +263,8 @@ morb_grids = csu.calc_morbs_in_region(cell, global_size_n,
                 z_eval_region = eval_regions[2],
                 eval_cutoff = args.eval_cutoff,
                 print_info = (mpi_rank == 0))
+
+print("-- R%d/%d calculation time %.3fs" % (mpi_rank, mpi_size, time.time() - time0))
 
 grid_shape = morb_grids[0][0].shape
 
@@ -282,7 +291,16 @@ for ispin in range(nspin):
     else:
         recvbuf = None
 
-    comm.Gatherv(sendbuf=morb_grids_rav, recvbuf=(recvbuf, sendcounts), root=0)
+    ### -----------------------------------------------------------------------
+    ### Sending over 2 GB (MPI limit) will cause a segmentation fault
+    ### Therefore, gathering the data will be done in "chunks"
+    chunksize = grid_shape[0]
+    chunklens = [n//chunksize for n in sendcounts] if mpi_rank == 0 else None
+    chunktype = MPI.DOUBLE.Create_contiguous(chunksize).Commit()
+    comm.Gatherv(sendbuf=[morb_grids_rav, chunktype], recvbuf=[recvbuf, chunklens, chunktype], root=0)
+    chunktype.Free()
+    ### -----------------------------------------------------------------------
+    #comm.Gatherv(sendbuf=morb_grids_rav, recvbuf=[recvbuf, sendcounts], root=0)
 
     if mpi_rank == 0:
         total_num_morbs = np.sum(num_morbs)
@@ -291,7 +309,6 @@ for ispin in range(nspin):
         
 
 if mpi_rank == 0:
-
     coord_arrays = []
     for i in range(3):
         if eval_regions[i] is None:
@@ -341,4 +358,5 @@ if mpi_rank == 0:
             geom_label=geom_label)
 
     print("Saved the orbitals to file: %.2fs" % (time.time() - time1))
-    print("Total time taken for the whole run: %.2fs" % (time.time() - time0))
+    print("Finish! Total time %.3fs" % (time.time() - time0))
+
