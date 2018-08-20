@@ -266,14 +266,22 @@ morb_grids = csu.calc_morbs_in_region(cell, global_size_n,
 
 print("-- R%d/%d calculation time %.3fs" % (mpi_rank, mpi_size, time.time() - time0))
 
-grid_shape = morb_grids[0][0].shape
+
+if mpi_rank == 0:
+    grid_shape = morb_grids[0][0].shape
+else:
+    grid_shape = None
+grid_shape = comm.bcast(grid_shape, root=0)
 
 morb_grids_collected = []
 morb_energies_collected= []
 
 for ispin in range(nspin):
 
-    morb_grids_rav = morb_grids[ispin].ravel()
+    if len(morb_grids) < ispin+1:
+        morb_grids_rav = np.array()
+    else:
+        morb_grids_rav = morb_grids[ispin].ravel()
     # Collect local array sizes using the high-level mpi4py gather
     sendcounts = np.array(comm.gather(len(morb_grids_rav), 0))
 
