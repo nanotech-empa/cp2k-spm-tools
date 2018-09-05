@@ -270,7 +270,7 @@ def make_plot(data, fpath, title=None, center0=False, vmin=None, vmax=None, cmap
     plt.close()
 
 def make_series_plot(data, fpath):
-    plt.figure(figsize=(figure_size_xy[1]*len(args.bias_voltages), figure_size_xy[0]))
+    plt.figure(figsize=(figure_size_xy[0]*len(args.bias_voltages), figure_size_xy[1]))
     for i_bias, bias in enumerate(args.bias_voltages):
         plt.subplot(1, len(args.bias_voltages), i_bias+1)
         plt.pcolormesh(x_grid, y_grid, data[:, :, i_bias], cmap='gist_heat')
