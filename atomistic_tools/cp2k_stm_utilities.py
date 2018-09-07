@@ -969,7 +969,7 @@ def extrapolate_morbs(morb_planes, morb_energies, dv,
     else:
         out_shape = (num_morbs, eval_reg_size_n[0], eval_reg_size_n[1], int(extent/dv[2]))
     
-    if output_array:
+    if output_array is not None:
         if output_array.shape != out_shape:
             raise Exception("output_array doesn't have correct shape!")
         return_arr = False

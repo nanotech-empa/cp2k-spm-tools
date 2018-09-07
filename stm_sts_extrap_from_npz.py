@@ -212,16 +212,23 @@ if extrap_plane_index >= eval_reg_size_n[2]:
 
 total_morb_grids = []
 for ispin in range(nspin):
-    extrap_morbs = csu.extrapolate_morbs(morb_grids[ispin][:, :, :, extrap_plane_index],
-                                    morb_energies[ispin], dv,
-                                    args.extrap_extent*ang_2_bohr, False,
-                                    hart_plane=hart_plane/hart_2_ev,
-                                    use_weighted_avg=True)
-    # reduce memory usage...
-    total_morb_grid = morb_grids[ispin]
+    # ready the correct total grid to reduce memory usage...
+    tot_g_shape = np.array(morb_grids[ispin][:, :, :, :extrap_plane_index+1].shape)
+    tot_g_shape[3] += int(args.extrap_extent*ang_2_bohr/dv[2])
+    total_morb_grid = np.zeros(tot_g_shape)
+
+    total_morb_grid[:, :, :, :extrap_plane_index+1] = morb_grids[ispin][:, :, :, :extrap_plane_index+1]
+    # free old grid
     morb_grids[ispin] = None
 
-    total_morb_grid = np.concatenate((total_morb_grid[:, :, :, :extrap_plane_index+1], extrap_morbs), axis=3)
+    # Could probably use larger dz for extrapolation to reduce memory usage...
+    csu.extrapolate_morbs(total_morb_grid[:, :, :, extrap_plane_index],
+                            morb_energies[ispin], dv,
+                            args.extrap_extent*ang_2_bohr, False,
+                            hart_plane=hart_plane/hart_2_ev,
+                            use_weighted_avg=True,
+                            output_array=total_morb_grid[:, :, :, extrap_plane_index+1:])
+    
     total_morb_grids.append(total_morb_grid)
 
 extended_region_n = np.shape(total_morb_grids[0])
