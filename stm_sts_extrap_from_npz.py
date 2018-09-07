@@ -170,8 +170,10 @@ x_grid, y_grid = np.meshgrid(x_arr, y_arr, indexing='ij')
 x_grid /= ang_2_bohr
 y_grid /= ang_2_bohr
 
-def get_plane_index(z, z_arr, dz):
-    return int(np.round((z-z_arr[0])/dz))
+def get_plane_index(z, z_arr):
+    if z < z_arr[0] or z > z_arr[-1]:
+        print("Warning: z outside of z_arr!")
+    return (np.abs(z_arr - z)).argmin()
 
 # Size of all the figures:
 figure_size = 4
@@ -202,7 +204,7 @@ if not args.skip_figs:
     plt.close()
 
 
-extrap_plane_index = get_plane_index(args.extrap_plane*ang_2_bohr, z_arr, dv[2])
+extrap_plane_index = get_plane_index(args.extrap_plane*ang_2_bohr, z_arr)
 if extrap_plane_index >= eval_reg_size_n[2]:
     print("Error: the extrapolation plane can't be outside the initial box (z_max = %.2f)"
            % (z_arr[-1]/ang_2_bohr))
@@ -289,7 +291,7 @@ def make_series_plot(data, fpath):
 ### -----------------------------------------
 
 for i_height, plane_height in enumerate(args.orb_plane_heights):
-    plane_index = get_plane_index(plane_height*ang_2_bohr, total_z_arr, dv[2])
+    plane_index = get_plane_index(plane_height*ang_2_bohr, total_z_arr)
     if plane_index < 0:
         print("Height %.1f is outside evaluation range, skipping." % plane_height)
         continue
@@ -338,7 +340,7 @@ const_height_data = np.zeros((
 
 for i_height, plane_height in enumerate(args.stm_plane_heights):
     for i_bias, bias in enumerate(args.bias_voltages):
-        plane_index = get_plane_index(plane_height*ang_2_bohr, total_z_arr, dv[2])
+        plane_index = get_plane_index(plane_height*ang_2_bohr, total_z_arr)
         const_height_data[i_height, :, :, i_bias] = charge_dens_arr[i_bias][:, :, plane_index]
 
     if not args.skip_figs:
@@ -461,7 +463,7 @@ sts_data = np.zeros((
     len(e_arr)))
 
 for i_height, plane_height in enumerate(args.sts_plane_heights):
-    plane_index = get_plane_index(plane_height*ang_2_bohr, total_z_arr, dv[2])
+    plane_index = get_plane_index(plane_height*ang_2_bohr, total_z_arr)
 
     pldos = calculate_ldos(args.sts_de, args.sts_fwhm, plane_index, e_arr)
     sts_data[i_height, :, :, :] = pldos
