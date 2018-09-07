@@ -942,7 +942,8 @@ def resize_2d_arr_with_interpolation(array, new_shape):
 
 def extrapolate_morbs(morb_planes, morb_energies, dv,
                       extent, single_plane,
-                      work_function=None, hart_plane=None, use_weighted_avg=True):
+                      work_function=None, hart_plane=None, use_weighted_avg=True,
+                      output_array=None):
     """
     Extrapolate molecular orbitals from a specified plane to a box or another plane
     in case of "single_plane = True", the orbitals will be only extrapolated on
@@ -964,10 +965,17 @@ def extrapolate_morbs(morb_planes, morb_energies, dv,
     eval_reg_size_n = np.shape(morb_planes[0])
 
     if single_plane:
-        extrap_morbs = np.zeros((num_morbs, eval_reg_size_n[0], eval_reg_size_n[1]))
+        out_shape = (num_morbs, eval_reg_size_n[0], eval_reg_size_n[1])
     else:
-        extrap_morbs = np.zeros((num_morbs, eval_reg_size_n[0], eval_reg_size_n[1],
-                                 int(extent/dv[2])))
+        out_shape = (num_morbs, eval_reg_size_n[0], eval_reg_size_n[1], int(extent/dv[2]))
+    
+    if output_array:
+        if output_array.shape != out_shape:
+            raise Exception("output_array doesn't have correct shape!")
+        return_arr = False
+    else:
+        output_array = np.zeros(out_shape)
+        return_arr = True
 
     for morb_index in range(num_morbs):
 
@@ -1000,15 +1008,16 @@ def extrapolate_morbs(morb_planes, morb_energies, dv,
 
         if single_plane:
             prefactors = np.exp(-np.sqrt(kx_grid**2 + ky_grid**2 - 2*(energy - hartree_avg))*extent)
-            extrap_morbs[morb_index, :, :] = np.fft.irfft2(fourier*prefactors, morb_plane.shape)
+            output_array[morb_index, :, :] = np.fft.irfft2(fourier*prefactors, morb_plane.shape)
         else:
             prefactors = np.exp(-np.sqrt(kx_grid**2 + ky_grid**2 - 2*(energy - hartree_avg))*dv[2])
-            for iz in range(np.shape(extrap_morbs)[3]):
+            for iz in range(np.shape(output_array)[3]):
                 fourier *= prefactors
-                extrap_morbs[morb_index, :, :, iz] = np.fft.irfft2(fourier, morb_plane.shape)
+                output_array[morb_index, :, :, iz] = np.fft.irfft2(fourier, morb_plane.shape)
 
     print("Extrapolation time: %.3f s"%(time.time()-time1))
-    return extrap_morbs
+    if return_arr:
+        return output_array
 
 def get_hartree_plane_above_top_atom(hart_cube_data, height):
     """ Returns the hartree plane above topmost atom in z direction
