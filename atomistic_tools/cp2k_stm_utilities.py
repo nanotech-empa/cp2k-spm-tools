@@ -284,6 +284,8 @@ def load_restart_wfn_file(restart_file, emin, emax, mpi_rank, mpi_size):
             loc_ind_start = mpi_rank*(base_orb_per_rank) + extra_orbs + ind_start
             loc_ind_end = (mpi_rank+1)*(base_orb_per_rank) + extra_orbs + ind_start - 1
 
+        print("R%d/%d, loading indexes %d:%d / %d:%d"%(mpi_rank, mpi_size,
+            loc_ind_start, loc_ind_end, ind_start, ind_end))
                 
         ### ---------------------------------------------------------------------
         ### Build up the structure of python lists to hold the morb_composition

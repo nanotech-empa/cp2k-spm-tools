@@ -250,6 +250,16 @@ for ispin in range(nspin):
     num_orbs = len(morb_composition[ispin][0][0][0][0])
     assert num_orbs == len(morb_energies[ispin])
     print("-- R%d/%d S%d num orbs: %d" %(mpi_rank, mpi_size, ispin, num_orbs))
+    sys.stdout.flush()
+
+# If no orbitals were found, exit
+no_orbitals = False
+if mpi_rank == 0 and len(morb_energies[0]) == 0:
+    print("No orbitals found in the energy range, exiting!")
+    no_orbitals = True
+no_orbitals = comm.bcast(no_orbitals, root=0)
+if no_orbitals:
+    exit(1)
 
 ### -----------------------------------------
 ### Calculate the molecular orbitals in the specified region
