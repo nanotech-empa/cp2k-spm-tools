@@ -96,6 +96,9 @@ g1_end = homo_ind1 + 1 + args.n_lumo
 
 if g1_start < 0 or g1_end > len(morb_energies1):
     print("Not enough HOMO and/or LUMO orbitals evaluated!")
+    print("Found %d HOMO and %d LUMO orbitals." % (
+        homo_ind1+1,
+        len(morb_energies1) - homo_ind1 - 1))
     sys.stdout.flush()
     exit()
 
