@@ -67,7 +67,7 @@ def load_npz(npz_file):
 
     vol_elem = (x_arr[1]-x_arr[0])*(y_arr[1]-y_arr[0])*(z_arr[1]-z_arr[0])
     
-    return morb_grids, morb_energies, homo_ind, vol_eleml
+    return morb_grids, morb_energies, homo_ind, vol_elem
 
 morb_grids1, morb_energies1, homo_ind1, ve1 = load_npz(args.npz_file1)
 
