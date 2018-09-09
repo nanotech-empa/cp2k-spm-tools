@@ -91,7 +91,7 @@ if np.abs(ve1 -ve2) > 1e-3:
     sys.stdout.flush()
     exit()
 
-g1_start = homo_ind1 - args.n_homo
+g1_start = homo_ind1 + 1 - args.n_homo
 g1_end = homo_ind1 + 1 + args.n_lumo
 
 if g1_start < 0 or g1_end > len(morb_energies1):
