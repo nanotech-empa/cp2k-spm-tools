@@ -146,5 +146,5 @@ if mpi_rank == 0:
         overlap_matrix=overlap_matrix_collected,
         en_grp1=morb_energies1[g1_start:g1_end],
         en_grp2=morb_energies2,
-        homo_grp1=args.n_homo)
+        homo_grp1=args.n_homo-1)
     print("Finish! Total time: %.2fs" % (time.time() - time0))
