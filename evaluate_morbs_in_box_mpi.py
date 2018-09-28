@@ -118,7 +118,7 @@ try:
 
         time1 = time.time()
         ase_atoms = csu.read_xyz(args.xyz_file)
-        csu.center_atoms_to_cell(ase_atoms.positions, cell/ang_2_bohr)
+        #csu.center_atoms_to_cell(ase_atoms.positions, cell/ang_2_bohr)
         print("Read xyz: %.3f" % (time.time()-time1))
 
         time1 = time.time()
