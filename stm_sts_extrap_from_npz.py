@@ -83,6 +83,18 @@ parser.add_argument(
     metavar='H',
     help="List of heights for STS. (angstroms)")
 parser.add_argument(
+    '--sts_isovalues',
+    nargs='*',
+    type=float,
+    metavar='H',
+    help="List of constant current isovalues, which define STS surfaces together with voltages.")
+parser.add_argument(
+    '--sts_isov_bias',
+    nargs='*',
+    type=float,
+    metavar='H',
+    help="List of bias voltages corresponding to STS isovalues.")
+parser.add_argument(
     '--sts_de',
     type=float,
     default=0.05,
@@ -297,22 +309,35 @@ def make_series_plot(data, fpath):
 ### Saving HOMO and LUMO
 ### -----------------------------------------
 
+orbital_data = np.ones((
+    nspin,
+    len(args.orb_plane_heights),
+    args.n_homo + args.n_lumo,
+    x_grid.shape[0], x_grid.shape[1])) * (-1.0)
+
 for i_height, plane_height in enumerate(args.orb_plane_heights):
     plane_index = get_plane_index(plane_height*ang_2_bohr, total_z_arr)
     if plane_index < 0:
         print("Height %.1f is outside evaluation range, skipping." % plane_height)
         continue
-    if not args.skip_figs:
-        for ispin in range(nspin):
-            for i_h in range(-args.n_homo+1, args.n_lumo+1):
-                ind = homo_inds[ispin] + i_h
-                if ind > len(morb_energies[ispin]) - 1:
-                    print("Homo %d is out of energy range, ignoring" % i_h)
-                    break
+    for ispin in range(nspin):
+        for i_h in range(-args.n_homo+1, args.n_lumo+1):
+            ind = homo_inds[ispin] + i_h
+            if ind > len(morb_energies[ispin]) - 1:
+                print("Homo %d is out of energy range, ignoring" % i_h)
+                continue
+            orb_data = total_morb_grids[ispin][ind][:, :, plane_index]
+            orbital_data[ispin, i_height, i_h+args.n_homo-1] = orb_data
+            
+            if not args.skip_figs:
                 fpath = args.output_dir+"/orb_h%.1f_s%d_%02dhomo%d.png"%(plane_height, ispin, i_h+args.n_homo-1, i_h)
                 title = "homo %d, E=%.6f" % (i_h, morb_energies[ispin][ind])
-                plot_data = total_morb_grids[ispin][ind][:, :, plane_index]
-                make_plot([plot_data, plot_data**2], fpath, title=[title, "square"], center0=[True, False], cmap='seismic')
+                make_plot([orb_data, orb_data**2], fpath, title=[title, "square"], center0=[True, False], cmap='seismic')
+
+if not args.skip_data_output:
+    fpath = args.output_dir+"/orbs.npz"
+    np.savez(fpath, data=orbital_data, heights=args.orb_plane_heights, ihomo=args.n_homo-1,
+        x=x_arr/ang_2_bohr, y=y_arr/ang_2_bohr)
 
 ### -----------------------------------------
 ### Summing charge densities according to bias voltages
@@ -370,14 +395,14 @@ print("Time taken to create CH images: %.1f" % (time.time() - time1))
 ### Constant current STM
 ### -----------------------------------------
 
-def get_isosurf(data, value, z_vals, interp=True):
+def get_isosurf_indexes(data, value, interp=True):
     rev_data = data[:, :, ::-1]
-    rev_z_vals = z_vals[::-1]
-
+    
     # Add a zero-layer at start to make sure we surpass it
     zero_layer = np.zeros((data.shape[0], data.shape[1], 1))
     rev_data = np.concatenate((zero_layer, rev_data), axis=2)
-    rev_z_vals = np.concatenate(([10.0], rev_z_vals))
+    
+    nz = rev_data.shape[2]
 
     # Find first index that surpasses the isovalue
     indexes = np.argmax(rev_data > value, axis=2)
@@ -386,23 +411,26 @@ def get_isosurf(data, value, z_vals, interp=True):
     if num_surpasses != 0:
         print("Warning: The isovalue %.3e was not reached for %d pixels" % (value, num_surpasses))
     # Set surpasses as the bottom surface
-    indexes[indexes == 0] = len(z_vals) - 1
-
+    indexes[indexes == 0] = nz - 1
+    
     if interp:
-        z_val_plane = np.ones(np.shape(rev_data)[0:2])*z_vals[0]
+        indexes_float = indexes.astype(float)
         for ix in range(np.shape(rev_data)[0]):
             for iy in range(np.shape(rev_data)[1]):
                 ind = indexes[ix, iy]
-                if ind == len(z_vals) - 1:
+                if ind == nz - 1:
                     continue
                 val_g = rev_data[ix, iy, ind]
-                z_val_g = rev_z_vals[ind]
                 val_s = rev_data[ix, iy, ind - 1]
-                z_val_s = rev_z_vals[ind - 1]
-                z_val_plane[ix, iy] = (value - val_s)/(val_g - val_s)*(z_val_g - z_val_s) + z_val_s
-        return z_val_plane
+                indexes_float[ix, iy] = ind - (val_g-value)/(val_g-val_s)
+        return nz - indexes_float - 1
+    return nz - indexes.astype(float) - 1
 
-    return rev_z_vals[indexes]
+def index_with_interpolation(index_arr, array):
+    i = index_arr.astype(int)
+    remain = index_arr-i
+    iplus = np.clip(i+1, a_min=None, a_max=len(array)-1)
+    return array[iplus]*remain +(1-remain)*array[i]
 
 if eval_reg_size_n[2] != 1:
 
@@ -415,7 +443,9 @@ if eval_reg_size_n[2] != 1:
 
     for i_iso, isovalue in enumerate(args.stm_isovalues):
         for i_bias, bias in enumerate(args.bias_voltages):
-            const_cur_imag = get_isosurf(charge_dens_arr[i_bias], isovalue, total_z_arr, True)
+            const_cur_imag = index_with_interpolation(
+                    get_isosurf_indexes(charge_dens_arr[i_bias], isovalue, True),
+                    total_z_arr)
             const_curr_data[i_iso, :, :, i_bias] = const_cur_imag/ang_2_bohr
 
         if not args.skip_figs:
@@ -445,7 +475,12 @@ if len(args.sts_elim) != 2:
 else:
     e_arr = np.arange(args.sts_elim[0], args.sts_elim[1]+args.sts_de, args.sts_de)
 
-def calculate_ldos(de, fwhm, plane_index, e_arr, broad_type='g'):
+def calculate_ldos(de, fwhm, index, e_arr, broad_type='g'):
+    """
+    Calculates the 2D local density of states map
+    index either defines a constant-height plane (single int)
+    or a non-flat topography (2d np.array of indexes)
+    """
     def lorentzian(x):
         gamma = 0.5*fwhm
         return gamma/(np.pi*(x**2+gamma**2))
@@ -456,7 +491,10 @@ def calculate_ldos(de, fwhm, plane_index, e_arr, broad_type='g'):
     for ispin in range(nspin):
         for i_mo, morb_grid in enumerate(total_morb_grids[ispin]):
             en = morb_energies[ispin][i_mo]
-            morb_plane = morb_grid[:, :, plane_index]**2
+            if isinstance(index, np.ndarray):
+                morb_plane = index_with_interpolation_3d(index, morb_grid**2)
+            else:
+                morb_plane = morb_grid[:, :, plane_index]**2
             if broad_type == 'l':
                 morb_ldos_broad = np.einsum('ij,k', morb_plane, lorentzian(e_arr - en))
             else:
@@ -464,7 +502,11 @@ def calculate_ldos(de, fwhm, plane_index, e_arr, broad_type='g'):
             pldos += morb_ldos_broad
     return pldos
 
-sts_data = np.zeros((
+### -----------------------------------------
+### STS CH
+### -----------------------------------------
+
+sts_ch_data = np.zeros((
     len(args.sts_plane_heights),
     x_grid.shape[0], x_grid.shape[1],
     len(e_arr)))
@@ -473,7 +515,7 @@ for i_height, plane_height in enumerate(args.sts_plane_heights):
     plane_index = get_plane_index(plane_height*ang_2_bohr, total_z_arr)
 
     pldos = calculate_ldos(args.sts_de, args.sts_fwhm, plane_index, e_arr)
-    sts_data[i_height, :, :, :] = pldos
+    sts_ch_data[i_height, :, :, :] = pldos
 
     if not args.skip_figs:
         max_val = np.max(pldos)
@@ -483,12 +525,69 @@ for i_height, plane_height in enumerate(args.sts_plane_heights):
             fpath = args.output_dir+"/sts_h%.2f_nr%d.png"%(plane_height, i)
             title = "h = %.2f; U = %.3f" % (plane_height, energy)
             make_plot(pldos[:, :, i], fpath, title=title, vmin=min_val, vmax=max_val,  cmap='seismic')
-
+            
 if not args.skip_data_output:
-    fpath = args.output_dir+"/sts.npz"
-    np.savez(fpath, data=sts_data, heights=args.sts_plane_heights, e=e_arr,
+    fpath = args.output_dir+"/sts_ch.npz"
+    np.savez(fpath, data=sts_ch_data, heights=args.sts_plane_heights, e=e_arr,
         x=x_arr/ang_2_bohr, y=y_arr/ang_2_bohr)
 
-print("Time taken to create STS images: %.1f" % (time.time() - time1))
+print("Time taken to create CH-STS images: %.1f" % (time.time() - time1))
+
+### -----------------------------------------
+### STS CC
+### -----------------------------------------
+
+def take_2d_from_3d(val_arr,z_indices):
+    # Get number of columns and rows in values array
+    nx, ny, nz = val_arr.shape
+    # Get linear indices 
+    idx = z_indices + nz*np.arange(ny) + nz*ny*np.arange(nx)[:,None]
+    return val_arr.flatten()[idx]
+
+def index_with_interpolation_3d(index_arr, array_3d):
+    i = index_arr.astype(int)
+    remain = index_arr-i
+    iplus = np.clip(i+1, a_min=None, a_max=array_3d.shape[2]-1)
+    return take_2d_from_3d(array_3d, iplus)*remain +(1-remain)*take_2d_from_3d(array_3d, i)
+
+time1 = time.time()
+
+if len(args.sts_isovalues) != len(args.sts_isov_bias):
+    print("STS isovalues and bias voltages don't match, skipping CC-STS.")
+else:
+    sts_cc_data = np.zeros((
+        len(args.sts_isovalues),
+        x_grid.shape[0], x_grid.shape[1],
+        len(e_arr)))
+    
+    for i_iso, isoval in enumerate(args.sts_isovalues):
+        
+        bias = args.sts_isov_bias[i_iso]
+        try:
+            i_bias = args.bias_voltages.index(bias)
+        except:
+            print("Skipping CC-STS for bias %.2f." % bias)
+            continue
+        
+        i_isosurf = get_isosurf_indexes(charge_dens_arr[i_bias], isoval, True)
+
+        pldos = calculate_ldos(args.sts_de, args.sts_fwhm*2, i_isosurf, e_arr)
+        sts_cc_data[i_iso, :, :, :] = pldos
+
+        if not args.skip_figs:
+            max_val = np.max(pldos)
+            min_val = np.min(pldos)
+
+            for i, energy in enumerate(e_arr):
+                fpath = args.output_dir+"/sts_iso%.1e_v%.1f_nr%d.png"%(isoval, bias, i)
+                title = "iso = %.1e; v = %.1fV;  U = %.2f" % (isoval, bias, energy)
+                make_plot(pldos[:, :, i], fpath, title=title, vmin=min_val, vmax=max_val,  cmap='seismic')
+
+    if not args.skip_data_output:
+        fpath = args.output_dir+"/sts_cc.npz"
+        np.savez(fpath, data=sts_cc_data, isov=args.sts_isovalues, bias=args.sts_isov_bias, e=e_arr,
+            x=x_arr/ang_2_bohr, y=y_arr/ang_2_bohr)
+    
+print("Time taken to create CC-STS images: %.1f" % (time.time() - time1))
 
 print("Total time taken %.1f s" % (time.time() - time0))
