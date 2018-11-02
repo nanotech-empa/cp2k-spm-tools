@@ -226,7 +226,7 @@ total_morb_grids = []
 for ispin in range(nspin):
     # ready the correct total grid to reduce memory usage...
     tot_g_shape = np.array(morb_grids[ispin][:, :, :, :extrap_plane_index+1].shape)
-    tot_g_shape[3] += int(args.extrap_extent*ang_2_bohr/dv[2])
+    tot_g_shape[3] += int(np.round(args.extrap_extent*ang_2_bohr/dv[2]))
     total_morb_grid = np.zeros(tot_g_shape)
 
     total_morb_grid[:, :, :, :extrap_plane_index+1] = morb_grids[ispin][:, :, :, :extrap_plane_index+1]
