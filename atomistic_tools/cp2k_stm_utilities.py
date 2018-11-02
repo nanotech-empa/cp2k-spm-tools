@@ -1,6 +1,5 @@
-""" Tools to perform STM/STS analysis on CP2K calculations
-
-- Kristjan Eimre
+"""
+Tools to perform STM/STS analysis on orbitals evaluated on grid
 """ 
 
 import os
@@ -862,8 +861,8 @@ def write_cube_file(filename, ase_atoms, cell, cell_n, data, origin = np.array([
 
     f = open(filename, 'w')
 
-    f.write('title\n')
-    f.write('comment\n')
+    f.write(filename+'\n')
+    f.write('cube\n')
 
     dv_br = cell/cell_n
     dv_br = dv_br * np.diag([1, 1, 1])
@@ -969,7 +968,7 @@ def extrapolate_morbs(morb_planes, morb_energies, dv,
     if single_plane:
         out_shape = (num_morbs, eval_reg_size_n[0], eval_reg_size_n[1])
     else:
-        out_shape = (num_morbs, eval_reg_size_n[0], eval_reg_size_n[1], int(extent/dv[2]))
+        out_shape = (num_morbs, eval_reg_size_n[0], eval_reg_size_n[1], int(np.round(extent/dv[2])))
     
     if output_array is not None:
         if output_array.shape != out_shape:
