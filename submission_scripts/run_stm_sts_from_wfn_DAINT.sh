@@ -36,8 +36,8 @@ srun -n $SLURM_NTASKS --mpi=pmi2 python3 ./stm_sts_from_wfn.py \
   --eval_cutoff 14.0 \
   --extrap_extent 5.0 \
 \
-  --stm_isovalues 1e-8 1e-6 \
-  --stm_heights 3.0 5.0 \
-  --sts_de 0.05 \
-  --sts_fwhm 0.10 \
+  --sovalues 1e-8 1e-6 \
+  --heights 3.0 5.0 \
+  --de 0.05 \
+  --fwhm 0.10 \
 

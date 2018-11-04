@@ -100,24 +100,24 @@ parser.add_argument(
     help="The extent of the extrapolation region. (angstrom)")
 
 parser.add_argument(
-    '--stm_heights',
+    '--heights',
     nargs='*',
     type=float,
     metavar='H',
     help="List of heights for constant height STM pictures (wrt topmost atom).")
 parser.add_argument(
-    '--stm_isovalues',
+    '--isovalues',
     nargs='*',
     type=float,
     metavar='C',
     help="List of charge density isovalues for constant current STM pictures.")
 parser.add_argument(
-    '--sts_de',
+    '--de',
     type=float,
     default=0.05,
     help="Energy discretization for STS. (eV)")
 parser.add_argument(
-    '--sts_fwhm',
+    '--fwhm',
     type=float,
     default=0.1,
     help="Full width at half maximum for STS gaussian broadening. (eV)")
