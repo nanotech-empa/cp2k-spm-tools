@@ -195,7 +195,7 @@ stm = css.STM(mpi_comm = comm, cp2k_grid_orb = cp2k_grid_orb)
 stm.gather_global_energies()
 stm.divide_by_space()
 
-stm.calculate_maps(args.stm_isovalues, args.stm_heights, args.emin, args.emax, args.sts_de, args.sts_fwhm)
+stm.calculate_maps(args.isovalues, args.heights, args.emin, args.emax, args.de, args.fwhm)
 
 stm.collect_and_save_maps(path=args.output_file)
 
