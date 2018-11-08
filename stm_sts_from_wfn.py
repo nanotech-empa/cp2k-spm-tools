@@ -148,7 +148,7 @@ args = comm.bcast(args, root=0)
 ### Evaluate orbitals on the real-space grid
 ### ------------------------------------------------------
 
-cp2k_grid_orb = cgo.Cp2kGridOrbitals(mpi_rank, mpi_size, single_precision=False)
+cp2k_grid_orb = cgo.Cp2kGridOrbitals(mpi_rank, mpi_size, single_precision=True)
 cp2k_grid_orb.read_cp2k_input(args.cp2k_input_file)
 cp2k_grid_orb.read_xyz(args.xyz_file)
 cp2k_grid_orb.read_basis_functions(args.basis_set_file)
