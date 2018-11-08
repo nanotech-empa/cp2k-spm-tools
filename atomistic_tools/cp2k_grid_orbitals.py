@@ -308,7 +308,7 @@ class Cp2kGridOrbitals:
             
             else:
                 ind_start = i_homo - n_homo + 1
-                ind_end = i_homo + n_lumo + 1
+                ind_end = i_homo + n_lumo
 
             num_selected_orbs = ind_end - ind_start + 1
             
