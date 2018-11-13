@@ -152,7 +152,7 @@ cp2k_grid_orb = cgo.Cp2kGridOrbitals(mpi_rank, mpi_size, single_precision=True)
 cp2k_grid_orb.read_cp2k_input(args.cp2k_input_file)
 cp2k_grid_orb.read_xyz(args.xyz_file)
 cp2k_grid_orb.read_basis_functions(args.basis_set_file)
-cp2k_grid_orb.load_restart_wfn_file(args.wfn_file, emin=args.emin, emax=args.emax)
+cp2k_grid_orb.load_restart_wfn_file(args.wfn_file, emin=args.emin-2.0*args.fwhm, emax=args.emax+2.0*args.fwhm)
 
 print("R%d/%d: loaded wfn, %.2fs"%(mpi_rank, mpi_size, (time.time() - time0)))
 sys.stdout.flush()
