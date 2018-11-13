@@ -178,7 +178,7 @@ time1 = time.time()
 hart_cube = Cube()
 hart_cube.read_cube_file(args.hartree_file)
 extrap_plane_z = eval_reg[2][1] / ang_2_bohr - np.max(cp2k_grid_orb.ase_atoms.positions[:, 2])
-hart_plane = hart_cube.get_plane_above_topmost_atom(extrap_plane_z)
+hart_plane = hart_cube.get_plane_above_topmost_atom(extrap_plane_z) * hart_2_ev - cp2k_grid_orb.ref_energy
 
 cp2k_grid_orb.extrapolate_morbs(hart_plane=hart_plane)
 
