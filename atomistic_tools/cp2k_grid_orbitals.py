@@ -26,7 +26,7 @@ class Cp2kGridOrbitals:
     The orbitals will be equally divided between the mpi processes.
     """
     
-    def __init__(self, mpi_rank, mpi_size, mpi_comm=None, single_precision=True):
+    def __init__(self, mpi_rank=0, mpi_size=1, mpi_comm=None, single_precision=True):
 
         self.mpi_rank = mpi_rank
         self.mpi_size = mpi_size
