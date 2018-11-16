@@ -86,26 +86,30 @@ class FTSTS:
         sigma = fwhm/2.3548
         return np.exp(-x**2/(2*sigma**2))/(sigma*np.sqrt(2*np.pi))
 
-    def project_orbitals_1d(self, axis=0, gauss_pos=None, gauss_fwhm=5.0):
+    def project_orbitals_1d(self, axis=0, gauss_pos=None, gauss_fwhm=2.0):
 
         self.morbs_1d = []
 
-        cell_middle_point = self.origin + (self.dv*self.cell_n)/2.0
-
-        avg_axis = [0, 1]
-        avg_axis.remove(axis)
+        if axis != 0:
+            dv = np.swapaxes(self.dv, axis, 0)
+        else:
+            dv = self.dv
 
         for ispin in range(self.nspin):
             self.morbs_1d.append(np.zeros((self.cell_n[0], len(self.cp2k_grid_orb.morb_grids[ispin]))))
             for i_mo, morb_grid in enumerate(self.cp2k_grid_orb.morb_grids[ispin]):
-                en = self.cp2k_grid_orb.morb_energies[ispin][i_mo]
-                morb_plane = morb_grid[:, :, 0]
+                if axis != 0:
+                    morb_grid = np.swapaxes(morb_grid, axis, 0)
                 if gauss_pos is None:
-                    avg_morb = np.mean(morb_plane**2, axis=1)
+                    morb_1d = np.mean(morb_grid**2, axis=(1, 2))
                 else:
-                    raise NotImplementedError
+                    ny = morb_grid.shape[1]
+                    y_arr = np.linspace(-dv[1]*ny/2.0, dv[1]*ny/2.0, ny)
+                    y_gaussian = self.gaussian(y_arr-gauss_pos, gauss_fwhm)
+                    morb_plane = np.mean(morb_grid**2, axis=2)
+                    morb_1d = np.dot(morb_plane, y_gaussian)
 
-                self.morbs_1d[ispin][:, i_mo] = avg_morb
+                self.morbs_1d[ispin][:, i_mo] = morb_1d
 
     def take_fts(self, padding=1.0, remove_row_avg=True):
 
