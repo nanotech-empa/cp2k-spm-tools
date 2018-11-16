@@ -71,8 +71,6 @@ class Cp2kGridOrbitals:
         self.global_morb_energies = None
 
 
-
-
     ### -----------------------------------------
     ### General cp2k routines
     ### -----------------------------------------
@@ -123,6 +121,9 @@ class Cp2kGridOrbitals:
         if any(self.cell < 1e-3):
             raise ValueError("Cell " + str(self.cell) + " is invalid")
 
+        if self.ase_atoms is not None:
+            self.ase_atoms.cell = self.cell / ang_2_bohr
+
     def read_xyz(self, file_xyz):
         """ Read atomic positions from .xyz file (in Bohr radiuses) """
         with open(file_xyz) as f:
@@ -130,6 +131,10 @@ class Cp2kGridOrbitals:
         # Replace custom elements (e.g. for spin-pol calcs)
         fxyz_contents = re.sub("([a-zA-Z]+)[0-9]+", r"\1", fxyz_contents)
         self.ase_atoms = ase.io.read(io.StringIO(fxyz_contents), format="xyz")
+
+        if self.cell is not None:
+            self.ase_atoms.cell = self.cell / ang_2_bohr
+            
 
     ### -----------------------------------------
     ### Basis set routines
