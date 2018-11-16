@@ -48,7 +48,7 @@ def read_band_data(data_dir):
         kpts.append([float(i) for i in kpt_coords.text.split()])
         #print("    ",kpts[-1])
 
-        if nspin == 0:
+        if nspin == 1:
             # Find the file containing eigenvalues corresponding to this k-point
             eig_datafile_xml = kpt.find('DATAFILE')
             eig_vals[0].append(read_band_xml_datafile(eig_datafile_xml, data_dir))
