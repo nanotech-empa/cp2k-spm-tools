@@ -13,6 +13,18 @@ def read_scf_fermi(scf_out_file):
         print("Couldn't find Fermi energy!")
     return fermi
 
+def read_band_xml_datafile(eig_datafile_xml_node, data_dir):
+    eig_datafile = eig_datafile_xml_node.attrib['iotk_link']
+    eig_datafile = eig_datafile[2:] # remove "./" from start
+     # Go retrieve the eigenvalues
+    eig_file_xml = et.parse(data_dir+eig_datafile)
+    eig_file_root = eig_file_xml.getroot()
+
+    eigval_node = eig_file_root.find('EIGENVALUES')
+
+    # Convert from hartree to eV
+    eig_vals = [float(i)*27.21138602 for i in eigval_node.text.split()]
+    return eig_vals
 
 def read_band_data(data_dir):
 
@@ -22,10 +34,10 @@ def read_band_data(data_dir):
     # Find fermi
     band_info_node = data_file_root.find('BAND_STRUCTURE_INFO')
     fermi_en = float(band_info_node.find('FERMI_ENERGY').text)*27.21138602
-    print(fermi_en)
+    nspin = int(band_info_node.find('NUMBER_OF_SPIN_COMPONENTS').text)
 
     kpts = []
-    eig_vals = []
+    eig_vals = [[] for _ in range(nspin)]
 
     # Loop through all K-POINTS xml nodes
     for kpt in data_file_root.find('EIGENVALUES'):
@@ -36,23 +48,20 @@ def read_band_data(data_dir):
         kpts.append([float(i) for i in kpt_coords.text.split()])
         #print("    ",kpts[-1])
 
-        # Find the file containing eigenvalues corresponding to this k-point
-        eig_datafile_xml = kpt.find('DATAFILE')
-        eig_datafile = eig_datafile_xml.attrib['iotk_link']
-        eig_datafile = eig_datafile[2:] # remove "./" from start
-        #print("    ", eig_datafile)
+        if nspin == 0:
+            # Find the file containing eigenvalues corresponding to this k-point
+            eig_datafile_xml = kpt.find('DATAFILE')
+            eig_vals[0].append(read_band_xml_datafile(eig_datafile_xml, data_dir))
+        else:
+            eig_datafile_xml1 = kpt.find('DATAFILE.1')
+            eig_vals[0].append(read_band_xml_datafile(eig_datafile_xml1, data_dir))
+            eig_datafile_xml2 = kpt.find('DATAFILE.2')
+            eig_vals[1].append(read_band_xml_datafile(eig_datafile_xml2, data_dir))
 
-        # Go retrieve the eigenvalues
-        eig_file_xml = et.parse(data_dir+eig_datafile)
-        eig_file_root = eig_file_xml.getroot()
+    kpts = np.array(kpts)
+    eig_vals = [np.array(ev).T for ev in eig_vals]
 
-        eigval_node = eig_file_root.find('EIGENVALUES')
-
-        # Convert from hartree to eV
-        eig_vals.append([float(i)*27.21138602 for i in eigval_node.text.split()])
-        #print(eig_vals[-1])
-
-    return np.array(kpts), np.array(eig_vals).T, fermi_en
+    return kpts, eig_vals, fermi_en
 
 def vb_onset(bands, fermi_en):
     """
