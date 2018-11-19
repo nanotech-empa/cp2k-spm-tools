@@ -76,6 +76,19 @@ def vb_onset(bands, fermi_en):
     print("Error: VB onset not found!")
     return None
 
+def gap_middle(bands, fermi_en):
+    """
+    In case of metallic system, returns fermi energy,
+    otherwise the middle of the band-gap
+    """
+    # Start from the highest energy band and move down
+    for i in range(len(bands)-1, -1, -1):
+        if np.min(bands[i]) < fermi_en:
+            if np.max(bands[i]) > fermi_en:
+                return fermi_en
+            return 0.5*(np.max(bands[i]) + np.min(bands[i+1]))
+    return None
+
 
 def read_atomic_proj(atomic_proj_xml):
     """
