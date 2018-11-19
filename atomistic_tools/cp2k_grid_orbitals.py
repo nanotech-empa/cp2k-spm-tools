@@ -248,15 +248,15 @@ class Cp2kGridOrbitals:
 
         # number of sets in the basis set for each atom
         nset_info = inpf.read_ints()
-        #print(nset_info)
+        #print("nset_info", nset_info)
 
         # number of shells in each of the sets
         nshell_info = inpf.read_ints()
-        #print(nshell_info)
+        #print("nshell_info", nshell_info)
 
         # number of orbitals in each shell
         nso_info = inpf.read_ints()
-        #print(nso_info)
+        #print("nso_info", nso_info)
 
         self.morb_composition = []
         self.morb_energies = []
@@ -340,24 +340,27 @@ class Cp2kGridOrbitals:
             for iatom in range(natom):
                 nset = nset_info[iatom]
                 self.morb_composition[-1].append([]) # 2: atom index
-                for iset in range(nset):
+                for iset in range(nset_max):
                     nshell = nshell_info[shell_offset]
                     shell_offset += 1
-                    self.morb_composition[-1][-1].append([]) # 3: set index
-                    ishell = 0
-                    while ishell < nshell:
+                    if nshell != 0:
+                        self.morb_composition[-1][-1].append([]) # 3: set index
+                    shell_norbs = []
+                    for ishell in range(nshell_max):
                         norb = nso_info[norb_offset]
+                        shell_norbs.append(norb)
                         norb_offset += 1
                         if norb == 0:
                             continue
-                        ishell += 1
                         self.morb_composition[-1][-1][-1].append([]) # 4: shell index (l)
                         for iorb in range(norb):
                             self.morb_composition[-1][-1][-1][-1].append([]) # 5: orb index (m)
                             # And this will contain the array of coeffs corresponding to each MO
-                            orb_offset += 1
+
+                    #print("s%d, at %d, set %d, nshells %d: " % (ispin, iatom, iset, nshell), shell_norbs)
             ### ---------------------------------------------------------------------
-            
+
+
             ### ---------------------------------------------------------------------
             ### Read the coefficients from file and put to the morb_composition list
             
@@ -696,7 +699,6 @@ class Cp2kGridOrbitals:
 
                         for i_spin in range(nspin):
                             #print("---------------")
-                            #print(i_spin, i_at, i_set, i_shell, i_orb)
                             #print(i_spin, len(self.morb_composition))
                             #print(i_at, len(self.morb_composition[i_spin]))
                             #print(i_set, len(self.morb_composition[i_spin][i_at]))
