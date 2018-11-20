@@ -53,15 +53,26 @@ class FTSTS:
 
     def remove_row_average(self, ldos):
         ldos_no_avg = np.copy(ldos)
-        for i in range(np.shape(ldos)[1]):
+        for i in range(ldos.shape[1]):
             ldos_no_avg[:, i] -= np.mean(ldos[:, i])
         return ldos_no_avg
 
     def add_padding(self, ldos, amount_factor):
+        # assumes that first index is space
         pad_n = int(amount_factor*ldos.shape[0])
+        if pad_n == 0:
+            return ldos
         padded_ldos = np.zeros((np.shape(ldos)[0]+2*pad_n, np.shape(ldos)[1]))
         padded_ldos[pad_n:-pad_n] = ldos
         return padded_ldos
+    
+    def crop_padding(self, ldos, tol=1e-6):
+        # assumes that first index is space
+        max_for_every_x = np.max(ldos, axis=1)
+        i_crop_1 = np.argmax(max_for_every_x > tol)
+        i_crop_2 = len(max_for_every_x) - np.argmax(max_for_every_x[::-1] > tol)
+
+        return ldos[i_crop_1:i_crop_2]
 
     def fourier_transform(self, ldos):
 
@@ -111,17 +122,19 @@ class FTSTS:
 
                 self.morbs_1d[ispin][:, i_mo] = morb_1d
 
-    def take_fts(self, padding=1.0, remove_row_avg=True):
-
+    def take_fts(self, crop=True, remove_row_avg=True, padding=1.0):
         self.morb_fts = []
         for ispin in range(self.nspin):
+            tmp_morbs = self.morbs_1d[ispin]
+            if crop:
+                tmp_morbs = self.crop_padding(tmp_morbs)
             if remove_row_avg:
-                tmp_morbs = self.remove_row_average(self.morbs_1d[ispin])
-            else:
-                tmp_morbs = self.morbs_1d[ispin]
-            tmp_morbs = self.add_padding(tmp_morbs, padding)
+                tmp_morbs = self.remove_row_average(tmp_morbs)
+            if padding > 0.0:
+                tmp_morbs = self.add_padding(tmp_morbs, padding)
             self.k_arr, m_fts, self.dk = self.fourier_transform(tmp_morbs)
             self.morb_fts.append(m_fts)
+        #return tmp_morbs
 
     def make_ftldos(self, emin, emax, de, fwhm):
         
