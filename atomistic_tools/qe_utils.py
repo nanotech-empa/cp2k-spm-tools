@@ -63,6 +63,40 @@ def read_band_data(data_dir):
 
     return kpts, eig_vals, fermi_en
 
+def read_band_data_new_xml(xml_file):
+    """
+    Reads data from QE bands calculations (new XML)
+    Returns:
+      - kpts[i_kpt] = [kx, ky, kz] in [2*pi/a] 
+      - eigvals[i_kpt, i_band] in [eV]
+      - fermi_en in [eV]
+    """
+    
+    data_file_xml = et.parse(xml_file)
+    data_file_root = data_file_xml.getroot()
+
+    output_node = data_file_root.find('output')
+
+    # Find fermi
+    band_node = output_node.find('band_structure')
+    fermi_en = float(band_node.find('fermi_energy').text)*27.21138602
+    lsda = band_node.find('spinorbit').text
+
+    kpts = []
+    eigvals = []
+
+    for kpt in band_node.findall("ks_energies"):
+        k_coords = np.array(kpt.find('k_point').text.split(), dtype=float)
+        kpts.append(k_coords)
+
+        eig_vals = np.array(kpt.find('eigenvalues').text.split(), dtype=float)
+        eigvals.append(eig_vals*27.21138602)
+    kpts = np.array(kpts)
+    eigvals = np.array(eigvals)
+    
+    return kpts, eigvals, fermi_en
+
+
 def vb_onset(bands, fermi_en):
     """
     In case of metallic system, returns fermi energy,
