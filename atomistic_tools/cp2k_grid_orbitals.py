@@ -134,8 +134,10 @@ class Cp2kGridOrbitals:
 
         if self.cell is not None:
             self.ase_atoms.cell = self.cell / ang_2_bohr
-            
 
+    def center_atoms_to_cell(self):
+        self.ase_atoms.center()
+            
     ### -----------------------------------------
     ### Basis set routines
     ### -----------------------------------------
@@ -831,6 +833,75 @@ class Cp2kGridOrbitals:
             c = Cube(title="HOMO%+d"%orbital_nr, comment="cube", ase_atoms=self.ase_atoms,
                 origin=self.origin, cell=self.eval_cell*np.eye(3), data=self.morb_grids[spin][local_ind])
             c.write_cube_file(filename)
+    
+    def _orb_plane_above_atoms(self, grid, height):
+        """
+        Returns the 2d plane above topmost atom in z direction
+        height in [angstrom]
+        """
+        topmost_atom_z = np.max(self.ase_atoms.positions[:, 2]) # Angstrom
+        plane_z = (height + topmost_atom_z) * ang_2_bohr
+        plane_z_wrt_orig = plane_z - self.origin[2]
+
+        plane_index = int(np.round(plane_z_wrt_orig/self.eval_cell[2]*self.eval_cell_n[2]))
+        return grid[:, :, plane_index]
+
+    def collect_and_save_ch_orbitals(self, orbital_list, height_list, path = "./orb.npz"):
+        """
+        Save constant-height planes of selected orbitals at selected heights
+        orbital list wrt to HOMO
+        """
+        slice_list = []
+
+        for i_spin in range(self.nspin):
+            slice_list.append([])
+            for h in height_list:
+                slice_list[i_spin].append([])
+
+            for i_mo in range(len(self.morb_energies[i_spin])):
+                i_mo_wrt_homo = i_mo - self.homo_inds[0][i_spin]
+
+                if i_mo_wrt_homo in orbital_list:
+                    for i_h, h in enumerate(height_list):
+                        orb_plane = self._orb_plane_above_atoms(self.morb_grids[i_spin][i_mo], h)
+                        slice_list[i_spin][i_h].append(orb_plane)
+         
+        # indexes of the slice_list: [i_spin], [i_h], [i_mo], [nx x ny]
+        # gather to rank_0
+        final_list = []
+
+        for i_spin in range(self.nspin):
+            final_list.append([]) # i_spin
+            for i_h in range(len(height_list)):
+                plane_gather = self.mpi_comm.gather(slice_list[i_spin][i_h], root = 0)
+
+                if self.mpi_rank == 0:
+                    # flatten the list of lists to numpy
+                    flat_array = np.array([item for sublist in plane_gather for item in sublist])
+                    final_list[i_spin].append(flat_array)        
+
+        # select energy ranges
+        self.gather_global_energies()
+
+        if self.mpi_rank == 0:
+            # energy array
+            # for rank 0, the homo index is given by loc_homo_ind
+            save_energy_arr = []
+            for i_spin in range(self.nspin):
+                global_orb_list = [ind + self.homo_inds[0][i_spin] for ind in orbital_list]
+                save_energy_arr.append(self.global_morb_energies[i_spin][global_orb_list])
+            
+            # turn the spin and height dimensions to numpy as well
+            final_numpy = np.array([np.array(list_h) for list_h in final_list])
+            save_data = {}
+            save_data['orbitals'] = final_numpy
+            save_data['heights'] = np.array(height_list)
+            save_data['orb_list'] = np.array(orbital_list)
+            save_data['x_arr'] = np.arange(0.0, self.eval_cell_n[0]*self.dv[0] + self.dv[0]/2, self.dv[0]) + self.origin[0]
+            save_data['y_arr'] = np.arange(0.0, self.eval_cell_n[1]*self.dv[1] + self.dv[1]/2, self.dv[1]) + self.origin[1]
+            save_data['energies'] = np.array(save_energy_arr)
+            np.savez_compressed(path, **save_data)
+
 
     ### -----------------------------------------
     ### mpi communication

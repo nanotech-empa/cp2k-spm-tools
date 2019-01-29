@@ -123,6 +123,13 @@ parser.add_argument(
     default=0.1,
     help="Full width at half maximum for STS gaussian broadening. (eV)")
 
+parser.add_argument(
+    '--export_n_orbitals',
+    type=int,
+    metavar='N',
+    default=0,
+    help="Number of HOMO and LUMO orbitals to export at '--heights'.")
+
 time0 = time.time()
 
 ### ------------------------------------------------------
@@ -148,9 +155,10 @@ args = comm.bcast(args, root=0)
 ### Evaluate orbitals on the real-space grid
 ### ------------------------------------------------------
 
-cp2k_grid_orb = cgo.Cp2kGridOrbitals(mpi_rank, mpi_size, single_precision=True)
+cp2k_grid_orb = cgo.Cp2kGridOrbitals(mpi_rank, mpi_size, mpi_comm=comm, single_precision=True)
 cp2k_grid_orb.read_cp2k_input(args.cp2k_input_file)
 cp2k_grid_orb.read_xyz(args.xyz_file)
+cp2k_grid_orb.center_atoms_to_cell()
 cp2k_grid_orb.read_basis_functions(args.basis_set_file)
 cp2k_grid_orb.load_restart_wfn_file(args.wfn_file, emin=args.emin-2.0*args.fwhm, emax=args.emax+2.0*args.fwhm)
 
@@ -185,6 +193,14 @@ cp2k_grid_orb.extrapolate_morbs(hart_plane=hart_plane)
 print("R%d/%d: extrapolated wfn, %.2fs"%(mpi_rank, mpi_size, (time.time() - time1)))
 sys.stdout.flush()
 time1 = time.time()
+
+### ------------------------------------------------------
+### Export orbitals
+### ------------------------------------------------------
+
+if args.export_n_orbitals > 0:
+    orbital_list = list(range(-args.export_n_orbitals + 1, args.export_n_orbitals + 1))
+    cp2k_grid_orb.collect_and_save_ch_orbitals(orbital_list, args.heights)
 
 ### ------------------------------------------------------
 ### Run STM-STS analysis
