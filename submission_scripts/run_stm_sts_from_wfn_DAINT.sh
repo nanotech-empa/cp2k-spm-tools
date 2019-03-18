@@ -16,7 +16,7 @@ export PYTHONPATH=$PYTHONPATH:"/users/keimre/soft/ase"
 
 ulimit -s unlimited
 
-FOLDER="/home/kristjan/local_work/stm-test/parent_calc/parent_calc"
+FOLDER=".."
 
 # Oldest .xyz file in the folder will be set as the geometry
 GEOM=$(ls -tr $FOLDER | grep .xyz | head -n 1)
@@ -36,8 +36,9 @@ srun -n $SLURM_NTASKS --mpi=pmi2 python3 ./stm_sts_from_wfn.py \
   --eval_cutoff 14.0 \
   --extrap_extent 5.0 \
 \
-  --sovalues 1e-8 1e-6 \
+  --isovalues 1e-8 1e-6 \
   --heights 3.0 5.0 \
   --de 0.05 \
   --fwhm 0.10 \
-
+\
+  --export_n_orbitals 10 \

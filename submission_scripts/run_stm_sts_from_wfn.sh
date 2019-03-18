@@ -21,4 +21,5 @@ mpirun -n 3 python3 ./stm_sts_from_wfn.py \
   --heights 3.0 5.0 \
   --de 0.05 \
   --fwhm 0.10 \
-
+\
+  --export_n_orbitals 10 \
