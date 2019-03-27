@@ -44,7 +44,7 @@ class Cube:
         if self.comment is None:
             f.write('cube\n')
         else:
-            f.write(self.title+'\n')
+            f.write(self.comment+'\n')
 
         dv_br = self.cell/self.data.shape
 
