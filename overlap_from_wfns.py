@@ -22,7 +22,7 @@ mpi_rank = comm.Get_rank()
 mpi_size = comm.Get_size()
 
 parser = argparse.ArgumentParser(
-    description='Puts the CP2K orbitals on grid and calculates STM.')
+    description='Puts the CP2K orbitals on grid and calculates scalar products.')
 # ----------------------------------
 # First system: molecule on slab
 parser.add_argument(
@@ -201,6 +201,14 @@ time1 = time.time()
 
 ve = np.prod(slab_grid_orb.dv)
 
+# The gas phase orbitals can be expressed in the basis of slab orbitals
+# |phi_i> = \sum_j <psi_j|phi_i> |psi_j>
+# And the modulus is
+# <phi_i|phi_i> = \sum_j |<psi_j|phi_i>|^2 = 1
+# Therefore, the matrix of  
+# |<phi_i|psi_j>|^2
+# is a good description of the amount of gas phase orbitals in slab orbitals
+# (positive; integral between j1 to j2 gives the amount of |phi_i> in that region)
 overlap_matrix =  (np.einsum('iklm, jklm',
     slab_grid_orb.morb_grids[0],
     mol_grid_orb.morb_grids[0])*ve)**2
