@@ -826,12 +826,16 @@ class Cp2kGridOrbitals:
     ### Export data
     ### -----------------------------------------
 
-    def write_cube(self, filename, orbital_nr, spin=0):
+    def write_cube(self, filename, orbital_nr, spin=0, square=False):
         local_ind = self.homo_inds[0][spin] - orbital_nr
         if local_ind >= 0 and local_ind < self.morb_grids[spin].shape[0]:
             print("R%d/%d is writing HOMO%+d cube" %(self.mpi_rank, self.mpi_size, orbital_nr))
-            c = Cube(title="HOMO%+d"%orbital_nr, comment="cube", ase_atoms=self.ase_atoms,
-                origin=self.origin, cell=self.eval_cell*np.eye(3), data=self.morb_grids[spin][local_ind])
+            if not square:
+                c = Cube(title="HOMO%+d"%orbital_nr, comment="cube", ase_atoms=self.ase_atoms,
+                    origin=self.origin, cell=self.eval_cell*np.eye(3), data=self.morb_grids[spin][local_ind])
+            else:
+                c = Cube(title="HOMO%+d square"%orbital_nr, comment="cube", ase_atoms=self.ase_atoms,
+                    origin=self.origin, cell=self.eval_cell*np.eye(3), data=self.morb_grids[spin][local_ind]**2)
             c.write_cube_file(filename)
     
     def _orb_plane_above_atoms(self, grid, height):
