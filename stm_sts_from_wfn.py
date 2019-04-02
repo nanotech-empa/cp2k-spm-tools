@@ -24,6 +24,8 @@ mpi_size = comm.Get_size()
 parser = argparse.ArgumentParser(
     description='Puts the CP2K orbitals on grid and calculates STM.')
 
+### ----------------------------------------------------------------------
+### Input and output files
 parser.add_argument(
     '--cp2k_input_file',
     metavar='FILENAME',
@@ -49,26 +51,33 @@ parser.add_argument(
     metavar='FILENAME',
     required=True,
     help='Cube file containing the hartree potential.')
-
 parser.add_argument(
     '--output_file',
     metavar='FILENAME',
-    required=True,
-    help='File, where to save the output')
-
+    default="./stm.npz",
+    help='File, where to save the STM/STS output')
+parser.add_argument(
+    '--orb_output_file',
+    metavar='FILENAME',
+    default="./orb.npz",
+    help='File, where to save the orbital output')
+### ----------------------------------------------------------------------
+### Select energy/orbital range
 parser.add_argument(
     '--emin',
     type=float,
     metavar='E',
-    required=True,
+    default=-2.0,
     help='Lowest energy value for selecting orbitals (eV).')
 parser.add_argument(
     '--emax',
     type=float,
     metavar='E',
-    required=True,
+    default=2.0,
     help='Highest energy value for selecting orbitals (eV).')
 
+### ----------------------------------------------------------------------
+### Parameters for putting orbitals on grid
 parser.add_argument(
     '--eval_region',
     type=str,
@@ -83,7 +92,6 @@ parser.add_argument(
     metavar='DX',
     required=True,
     help='Spatial step for the grid (angstroms).')
-
 parser.add_argument(
     '--eval_cutoff',
     type=float,
@@ -100,6 +108,29 @@ parser.add_argument(
     required=True,
     help="The extent of the extrapolation region. (angstrom)")
 
+### ----------------------------------------------------------------------
+### Parameters for orbital CH images
+parser.add_argument(
+    '--orb_heights',
+    nargs='*',
+    type=float,
+    metavar='H',
+    help="List of heights for constant height orbital pictures (wrt topmost atom).")
+parser.add_argument(
+    '--n_homo_ch',
+    type=int,
+    metavar='N',
+    default=0,
+    help="Number of HOMO orbitals to export at '--orb_heights'.")
+parser.add_argument(
+    '--n_lumo_ch',
+    type=int,
+    metavar='N',
+    default=0,
+    help="Number of LUMO orbitals to export at '--orb_heights'.")
+
+### ----------------------------------------------------------------------
+### Parameters for STM/STS series
 parser.add_argument(
     '--heights',
     nargs='*',
@@ -123,12 +154,6 @@ parser.add_argument(
     default=0.1,
     help="Full width at half maximum for STS gaussian broadening. (eV)")
 
-parser.add_argument(
-    '--export_n_orbitals',
-    type=int,
-    metavar='N',
-    default=0,
-    help="Number of HOMO and LUMO orbitals to export at '--heights'.")
 
 time0 = time.time()
 
@@ -160,7 +185,10 @@ cp2k_grid_orb.read_cp2k_input(args.cp2k_input_file)
 cp2k_grid_orb.read_xyz(args.xyz_file)
 cp2k_grid_orb.center_atoms_to_cell()
 cp2k_grid_orb.read_basis_functions(args.basis_set_file)
-cp2k_grid_orb.load_restart_wfn_file(args.wfn_file, emin=args.emin-2.0*args.fwhm, emax=args.emax+2.0*args.fwhm)
+cp2k_grid_orb.load_restart_wfn_file(args.wfn_file,
+                                    emin=args.emin-2.0*args.fwhm, emax=args.emax+2.0*args.fwhm,
+                                    n_homo=args.n_homo_ch, n_lumo=args.n_lumo_ch
+)
 
 print("R%d/%d: loaded wfn, %.2fs"%(mpi_rank, mpi_size, (time.time() - time0)))
 sys.stdout.flush()
@@ -198,21 +226,23 @@ time1 = time.time()
 ### Export orbitals
 ### ------------------------------------------------------
 
-if args.export_n_orbitals > 0:
-    orbital_list = list(range(-args.export_n_orbitals + 1, args.export_n_orbitals + 1))
-    cp2k_grid_orb.collect_and_save_ch_orbitals(orbital_list, args.heights)
+if (args.n_homo_ch > 0 or args.n_lumo_ch > 0) and len(args.orb_heights) > 0:
+    orbital_list = list(range(-args.n_homo_ch + 1, args.n_lumo_ch + 1))
+    cp2k_grid_orb.collect_and_save_ch_orbitals(orbital_list, args.orb_heights, path=args.orb_output_file)
 
 ### ------------------------------------------------------
 ### Run STM-STS analysis
 ### ------------------------------------------------------
 
-stm = css.STM(mpi_comm = comm, cp2k_grid_orb = cp2k_grid_orb)
+if len(args.heights) > 0 or len(args.isovalues) > 0:
 
-stm.gather_global_energies()
-stm.divide_by_space()
+    stm = css.STM(mpi_comm = comm, cp2k_grid_orb = cp2k_grid_orb)
 
-stm.calculate_maps(args.isovalues, args.heights, args.emin, args.emax, args.de, args.fwhm)
+    stm.gather_global_energies()
+    stm.divide_by_space()
 
-stm.collect_and_save_maps(path=args.output_file)
+    stm.calculate_maps(args.isovalues, args.heights, args.emin, args.emax, args.de, args.fwhm)
+
+    stm.collect_and_save_maps(path=args.output_file)
 
 print("R%d/%d: finished, total time: %.2fs"%(mpi_rank, mpi_size, (time.time() - time0)))
