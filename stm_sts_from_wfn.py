@@ -234,14 +234,17 @@ if (args.n_homo_ch > 0 or args.n_lumo_ch > 0) and len(args.orb_heights) > 0:
 ### Run STM-STS analysis
 ### ------------------------------------------------------
 
-if args.heights is not None or args.isovalues is not None:
+heights = args.heights if args.heights is not None else []
+isovalues = args.isovalues if args.isovalues is not None else []
+
+if len(heights) != 0 or len(isovalues) != 0:
 
     stm = css.STM(mpi_comm = comm, cp2k_grid_orb = cp2k_grid_orb)
 
     stm.gather_global_energies()
     stm.divide_by_space()
 
-    stm.calculate_maps(args.isovalues, args.heights, args.emin, args.emax, args.de, args.fwhm)
+    stm.calculate_maps(isovalues, heights, args.emin, args.emax, args.de, args.fwhm)
 
     stm.collect_and_save_maps(path=args.output_file)
 
