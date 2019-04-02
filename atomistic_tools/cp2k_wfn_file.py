@@ -304,6 +304,7 @@ class Cp2kWfnFile:
                 if evals[-1] < homo_en + emax:
                     print("WARNING: possibly not enough ADDED_MOS, last eigenvalue is %.2f" % (evals[-1]-homo_en))
             
+
             # num HOMO/LUMO range (if specified)
             if n_homo is not None:
                 ind_start_n = i_homo_ - n_homo + 1
@@ -314,7 +315,7 @@ class Cp2kWfnFile:
                     ind_start = 0
             if n_lumo is not None:
                 ind_end_n = i_homo_ + n_lumo + 1
-                if ind_end is None or ind_end_n < ind_end:
+                if ind_end is None or ind_end_n > ind_end:
                     ind_end = ind_end_n
                 if ind_end > len(evals):
                     print("WARNING: n_lumo out of bounds, increase ADDED_MOS.")

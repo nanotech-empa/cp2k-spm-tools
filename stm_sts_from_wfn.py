@@ -234,7 +234,7 @@ if (args.n_homo_ch > 0 or args.n_lumo_ch > 0) and len(args.orb_heights) > 0:
 ### Run STM-STS analysis
 ### ------------------------------------------------------
 
-if len(args.heights) > 0 or len(args.isovalues) > 0:
+if args.heights is not None or args.isovalues is not None:
 
     stm = css.STM(mpi_comm = comm, cp2k_grid_orb = cp2k_grid_orb)
 
