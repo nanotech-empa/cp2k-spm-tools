@@ -16,6 +16,7 @@ import ase
 import ase.io
 
 from .cube import Cube
+from .cp2k_wfn_file import Cp2kWfnFile
 
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
@@ -49,14 +50,16 @@ class Cp2kGridOrbitals:
         self.emin = None
         self.emax = None
 
-        # Orbital representation in the basis set
+        # Object to deal with loading molecular orbitals from .wfn file
+        self.cwf = Cp2kWfnFile(self.mpi_rank, self.mpi_size, self.mpi_comm)
+
+        # Set by cwf:
         self.morb_composition = None
         self.morb_energies = None
-        self.morb_occs = None
-        self.homo_inds = None # [loc_homo_inds, glob_homo_inds, cp2k_homo_inds]
+        self.i_homo_loc = None
         self.nspin = None
-
-        self.ref_energy = None # all energies wrt to homo (average of homos for spin-pol)
+        self.ref_energy = None
+        self.global_morb_energies = None
 
         # Orbitals on discrete grid
         self.morb_grids = None
@@ -66,9 +69,7 @@ class Cp2kGridOrbitals:
         self.eval_cell_n = None
 
         self.last_calc_iz = None # last directly calculated z plane (others extrapolated)
-
-        # gather data:
-        self.global_morb_energies = None
+        
 
 
     ### -----------------------------------------
@@ -224,230 +225,22 @@ class Cp2kGridOrbitals:
     ### -----------------------------------------
 
     def load_restart_wfn_file(self, restart_file, emin=None, emax=None, n_homo=None, n_lumo=None):
-        """ Reads the molecular orbitals from cp2k restart wavefunction file in specified energy range
+        """
+        Reads the specified molecular orbitals from cp2k restart wavefunction file
+        If both, energy limits and counts are given, then the extreme is used
         Note that the energy range is in eV and with respect to HOMO energy.
-        
-        Return:
-        morb_composition[ispin][iatom][iset][ishell][iorb] = coefs[i_mo]
-        morb_energies[ispin] = energies[i_mo] in eV with respect to HOMO
-        morb_occs[ispin] = occupancies[i_mo]
-        homo_inds[ispin] = homo_index_for_ispin
         """
 
-        inpf = scipy.io.FortranFile(restart_file, 'r')
+        self.cwf.load_restart_wfn_file(restart_file, emin=emin, emax=emax, n_homo=n_homo, n_lumo=n_lumo)
+        self.cwf.convert_readable()
 
-        natom, nspin, nao, nset_max, nshell_max = inpf.read_ints()
-        #print(natom, nspin, nao, nset_max, nshell_max)
-        # natom - number of atomsl
-        # nspin - number of spins
-        # nao - number of atomic orbitals
-        # nset_max - maximum number of sets in the basis set
-        #           (e.g. if one atom's basis set contains 3 sets and every other
-        #           atom's contains 1, then this value will still be 3)
-        # nshell_max - maximum number of shells in each set
+        self.morb_composition = self.cwf.morb_composition
+        self.morb_energies = self.cwf.morb_energies
+        self.i_homo_loc = self.cwf.i_homo_loc
+        self.nspin = self.cwf.nspin
+        self.ref_energy = self.cwf.ref_energy
+        self.global_morb_energies = self.cwf.glob_morb_energies
 
-        self.nspin = nspin
-
-        # number of sets in the basis set for each atom
-        nset_info = inpf.read_ints()
-        #print("nset_info", nset_info)
-
-        # number of shells in each of the sets
-        nshell_info = inpf.read_ints()
-        #print("nshell_info", nshell_info)
-
-        # number of orbitals in each shell
-        nso_info = inpf.read_ints()
-        #print("nso_info", nso_info)
-
-        self.morb_composition = []
-        self.morb_energies = []
-        self.morb_occs = []
-
-        homo_ens = []
-
-        # different HOMO indexes (for debugging and matching direct cube output)
-        loc_homo_inds = []  # indexes wrt to selected morbitals
-        glob_homo_inds = [] # global indexes, corresponds to WFN nr (counting start from 1)
-        cp2k_homo_inds = [] # cp2k homo indexes, takes also smearing into account (counting start from 1)
-
-        for ispin in range(nspin):
-            nmo, homo, lfomo, nelectron = inpf.read_ints()
-            #print("nmo, homo, lfomo, nelectron", nmo, homo, lfomo, nelectron)
-            # nmo - number of molecular orbitals
-            # homo - index of the HOMO
-            # lfomo - ???
-            # nelectron - number of electrons
-            
-            # Note that "homo" is affected by smearing. to have the correct, T=0K homo:
-            if nspin == 1:
-                i_homo = int(nelectron/2) - 1
-            else:
-                i_homo = nelectron - 1
-
-            # list containing all eigenvalues and occupancies of the molecular orbitals
-            evals_occs = inpf.read_reals()
-
-            evals = evals_occs[:int(len(evals_occs)/2)]
-            occs = evals_occs[int(len(evals_occs)/2):]
-            
-            evals *= hart_2_ev
-            homo_en = evals[i_homo]
-            homo_ens.append(homo_en)
-            
-            ### ---------------------------------------------------------------------
-            ### Divide the orbitals between mpi processes
-
-            # NB: ind_start and ind_end are inclusive
-
-            if emin is not None and emax is not None:
-                try:
-                    ind_start = np.where(evals >= homo_en + emin)[0][0]
-                except:
-                    ind_start = 0
-                try:
-                    ind_end = np.where(evals > homo_en + emax)[0][0] - 1
-                except:
-                    ind_end = len(evals)-1
-
-                if evals[-1] < homo_en + emax:
-                    print("WARNING: possibly not enough ADDED_MOS, last eigenvalue is %.2f" % (evals[-1]-homo_en))
-            
-            else:
-                ind_start = i_homo - n_homo + 1
-                ind_end = i_homo + n_lumo
-
-            num_selected_orbs = ind_end - ind_start + 1
-            
-            # Select orbitals for the current mpi rank
-            base_orb_per_rank = int(np.floor(num_selected_orbs/self.mpi_size))
-            extra_orbs =  num_selected_orbs - base_orb_per_rank*self.mpi_size
-            if self.mpi_rank < extra_orbs:
-                loc_ind_start = self.mpi_rank*(base_orb_per_rank + 1) + ind_start
-                loc_ind_end = (self.mpi_rank+1)*(base_orb_per_rank + 1) + ind_start - 1
-            else:
-                loc_ind_start = self.mpi_rank*(base_orb_per_rank) + extra_orbs + ind_start
-                loc_ind_end = (self.mpi_rank+1)*(base_orb_per_rank) + extra_orbs + ind_start - 1
-
-            print("R%d/%d, loading indexes %d:%d / %d:%d"%(self.mpi_rank, self.mpi_size,
-                loc_ind_start, loc_ind_end, ind_start, ind_end))
-                    
-            ### ---------------------------------------------------------------------
-            ### Build up the structure of python lists to hold the morb_composition
-            
-            self.morb_composition.append([]) # 1: spin index
-            shell_offset = 0
-            norb_offset = 0
-            orb_offset = 0
-            for iatom in range(natom):
-                nset = nset_info[iatom]
-                self.morb_composition[-1].append([]) # 2: atom index
-                for iset in range(nset_max):
-                    nshell = nshell_info[shell_offset]
-                    shell_offset += 1
-                    if nshell != 0:
-                        self.morb_composition[-1][-1].append([]) # 3: set index
-                    shell_norbs = []
-                    for ishell in range(nshell_max):
-                        norb = nso_info[norb_offset]
-                        shell_norbs.append(norb)
-                        norb_offset += 1
-                        if norb == 0:
-                            continue
-                        self.morb_composition[-1][-1][-1].append([]) # 4: shell index (l)
-                        for iorb in range(norb):
-                            self.morb_composition[-1][-1][-1][-1].append([]) # 5: orb index (m)
-                            # And this will contain the array of coeffs corresponding to each MO
-
-                    #print("s%d, at %d, set %d, nshells %d: " % (ispin, iatom, iset, nshell), shell_norbs)
-            ### ---------------------------------------------------------------------
-
-
-            ### ---------------------------------------------------------------------
-            ### Read the coefficients from file and put to the morb_composition list
-            
-            self.morb_energies.append([])
-            self.morb_occs.append([])
-
-            first_imo = -1
-
-            for imo in range(nmo):
-                coefs = inpf.read_reals()
-                if imo < loc_ind_start:
-                    continue
-                if imo > loc_ind_end:
-                    if ispin == nspin - 1:
-                        break
-                    else:
-                        continue
-                
-                if first_imo == -1:
-                    first_imo = imo
-
-                orb_offset = 0
-
-                self.morb_energies[ispin].append(evals[imo])
-                self.morb_occs[ispin].append(occs[imo])
-                
-                for iatom in range(len(self.morb_composition[ispin])):
-                    for iset in range(len(self.morb_composition[ispin][iatom])):
-                        for ishell in range(len(self.morb_composition[ispin][iatom][iset])):
-                            for iorb in range(len(self.morb_composition[ispin][iatom][iset][ishell])):
-                                self.morb_composition[ispin][iatom][iset][ishell][iorb].append(coefs[orb_offset])
-                                orb_offset += 1
-            ### ---------------------------------------------------------------------
-            
-            ### ---------------------------------------------------------------------
-            # Convert i_mo layer to numpy array
-            for iatom in range(len(self.morb_composition[ispin])):
-                for iset in range(len(self.morb_composition[ispin][iatom])):
-                    for ishell in range(len(self.morb_composition[ispin][iatom][iset])):
-                        for iorb in range(len(self.morb_composition[ispin][iatom][iset][ishell])):
-                            self.morb_composition[ispin][iatom][iset][ishell][iorb] = np.array(
-                                self.morb_composition[ispin][iatom][iset][ishell][iorb]
-                            )
-            ### ---------------------------------------------------------------------
-
-            loc_homo_inds.append(i_homo - first_imo)
-            glob_homo_inds.append(i_homo + 1)
-            cp2k_homo_inds.append(homo)
-
-        ### ---------------------------------------------------------------------
-        # reference energy for RKS is just HOMO, but for UKS will be average of both HOMOs
-
-        if nspin == 1:
-            self.ref_energy = homo_ens[0]
-        else:
-            self.ref_energy = (homo_ens[0] + homo_ens[1]) / 2
-
-        for ispin in range(nspin):
-            self.morb_energies[ispin] -= self.ref_energy
-        
-        ### ---------------------------------------------------------------------
-        ### Select orbitals and energy and occupation values in specified range
-        
-        if emin is not None and emax is not None:
-            for ispin in range(nspin):
-                first_imo = np.searchsorted(self.morb_energies[ispin], emin)
-                last_imo = np.searchsorted(self.morb_energies[ispin], emax) - 1
-                if last_imo < first_imo:
-                    print("Warning: No orbitals found in specified energy range!")
-                    continue
-                self.morb_energies[ispin] = self.morb_energies[ispin][first_imo:last_imo+1]
-                self.morb_occs[ispin] = self.morb_occs[ispin][first_imo:last_imo+1]
-
-                for iatom in range(len(self.morb_composition[ispin])):
-                    for iset in range(len(self.morb_composition[ispin][iatom])):
-                        for ishell in range(len(self.morb_composition[ispin][iatom][iset])):
-                            for iorb in range(len(self.morb_composition[ispin][iatom][iset][ishell])):
-                                self.morb_composition[ispin][iatom][iset][ishell][iorb] = \
-                                    self.morb_composition[ispin][iatom][iset][ishell][iorb][first_imo:last_imo+1]
-
-                loc_homo_inds[ispin] -= first_imo
-        ### ---------------------------------------------------------------------
-            
-        inpf.close()
-        self.homo_inds = [loc_homo_inds, glob_homo_inds, cp2k_homo_inds]
 
     ### ---------------------------------------------------------------------------
     ### Methods directly related to putting stuff on grids
@@ -827,7 +620,7 @@ class Cp2kGridOrbitals:
     ### -----------------------------------------
 
     def write_cube(self, filename, orbital_nr, spin=0, square=False):
-        local_ind = self.homo_inds[0][spin] - orbital_nr
+        local_ind = self.i_homo_loc[spin] - orbital_nr
         if local_ind >= 0 and local_ind < self.morb_grids[spin].shape[0]:
             print("R%d/%d is writing HOMO%+d cube" %(self.mpi_rank, self.mpi_size, orbital_nr))
             if not square:
@@ -863,7 +656,7 @@ class Cp2kGridOrbitals:
                 slice_list[i_spin].append([])
 
             for i_mo in range(len(self.morb_energies[i_spin])):
-                i_mo_wrt_homo = i_mo - self.homo_inds[0][i_spin]
+                i_mo_wrt_homo = i_mo - self.i_homo_loc[i_spin]
 
                 if i_mo_wrt_homo in orbital_list:
                     for i_h, h in enumerate(height_list):
@@ -885,14 +678,14 @@ class Cp2kGridOrbitals:
                     final_list[i_spin].append(flat_array)        
 
         # select energy ranges
-        self.gather_global_energies()
+        #self.gather_global_energies()
 
         if self.mpi_rank == 0:
             # energy array
             # for rank 0, the homo index is given by loc_homo_ind
             save_energy_arr = []
             for i_spin in range(self.nspin):
-                global_orb_list = [ind + self.homo_inds[0][i_spin] for ind in orbital_list]
+                global_orb_list = [ind + self.i_homo_loc[i_spin] for ind in orbital_list]
                 save_energy_arr.append(self.global_morb_energies[i_spin][global_orb_list])
             
             # turn the spin and height dimensions to numpy as well
@@ -911,8 +704,8 @@ class Cp2kGridOrbitals:
     ### mpi communication
     ### -----------------------------------------
 
-    def gather_global_energies(self):
-        self.global_morb_energies = []
-        for ispin in range(self.nspin):
-            morb_en_gather = self.mpi_comm.allgather(self.morb_energies[ispin])
-            self.global_morb_energies.append(np.hstack(morb_en_gather))
+    #def gather_global_energies(self):
+    #    self.global_morb_energies = []
+    #    for ispin in range(self.nspin):
+    #        morb_en_gather = self.mpi_comm.allgather(self.morb_energies[ispin])
+    #        self.global_morb_energies.append(np.hstack(morb_en_gather))
