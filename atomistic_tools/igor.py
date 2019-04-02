@@ -2,17 +2,77 @@
 
 Code is based on asetk module by Leopold Talirz
 (https://github.com/ltalirz/asetk/blob/master/asetk/format/igor.py)
+
+-Kristjan Eimre
 """
 
 import re
 import numpy as np
 
+def igor_wave_factory(fname):
+    """
+    Returns either wave1d or wave2d, corresponding to the input file
+    """
+    f=open(fname, 'r')
+    lines=f.readlines()
+    f.close()
+
+    #lines = content.split("\r")
+
+    line = lines.pop(0).strip()
+    if not line == "IGOR":
+        raise IOError("Files does not begin with 'IGOR'")
+
+    line = lines.pop(0)
+    while not re.match("WAVES",line):
+        line = lines.pop(0)
+    # 1d or 2d?
+    waves_str, name = line.split()
+    d2 = False
+    if "N=" in waves_str:
+        d2 = True
+        match = re.search("WAVES/N=\(([\d,]+)\)",waves_str)
+        grid = match.group(1).split(',')
+        grid = np.array(grid, dtype=int)
+
+    line = lines.pop(0).strip()
+    if not line == "BEGIN":
+        raise IOError("Missing 'BEGIN' statement of data block")
+
+    # read data
+    datastring = ""
+    line = lines.pop(0)
+    while not re.match("END",line):
+        datastring += line
+        line = lines.pop(0)
+    data = np.array(datastring.split(), dtype=float)
+    if d2:
+        data = data.reshape(grid)
+
+    # read axes
+    line = lines.pop(0)
+    matches = re.findall("SetScale.+?(?:;|$)", line)
+    axes = []
+    for match in matches:
+        ax = Axis(None,None,None,None)
+        ax.read(match)
+        axes.append(ax)
+    
+    # the rest is discarded...
+
+    if d2:
+        return Wave2d(data, axes, name)
+    else:
+        return Wave1d(data, axes, name)
+
+
+
 class Axis(object):
     """Represents an axis of an IGOR wave"""
 
-    def __init__(self, symbol, min, delta, unit, wavename=None):
+    def __init__(self, symbol, min_, delta, unit, wavename=None):
         self.symbol = symbol
-        self.min = min
+        self.min = min_
         self.delta = delta
         self.unit = unit
         self.wavename = wavename
@@ -69,31 +129,33 @@ class Wave(object):
             s += str(ax)
         return s
 
-    def read(self, fname):
+    @classmethod
+    def read(cls, fname):
         """Read IGOR wave
-        
-        Should work for any dimension.
-        Tested so far only for 2d wave.
         """
         f=open(fname, 'r')
-        content=f.read()
+        lines=f.readlines()
         f.close()
 
-        lines = content.split("\r")
+        #lines = content.split("\r")
 
-        line = lines.pop(0)
+        line = lines.pop(0).strip()
         if not line == "IGOR":
             raise IOError("Files does not begin with 'IGOR'")
 
         line = lines.pop(0)
         while not re.match("WAVES",line):
             line = lines.pop(0)
-        match = re.search("WAVES/N=\(([\d,]+)\)\s+(.+)",line)
-        grid = match.group(1).split(',')
-        grid = np.array(grid, dtype=int)
-        self.name = match.group(2)
+        # 1d or 2d?
+        waves_str, name = line.split()
+        d2 = False
+        if "N=" in waves_str:
+            d2 = True
+            match = re.search("WAVES/N=\(([\d,]+)\)",waves_str)
+            grid = match.group(1).split(',')
+            grid = np.array(grid, dtype=int)
 
-        line = lines.pop(0)
+        line = lines.pop(0).strip()
         if not line == "BEGIN":
             raise IOError("Missing 'BEGIN' statement of data block")
 
@@ -104,20 +166,21 @@ class Wave(object):
             datastring += line
             line = lines.pop(0)
         data = np.array(datastring.split(), dtype=float)
-        self.data = data.reshape(grid)
+        if d2:
+            data = data.reshape(grid)
 
         # read axes
         line = lines.pop(0)
         matches = re.findall("SetScale.+?(?:;|$)", line)
-        self.axes = []
+        axes = []
         for match in matches:
             ax = Axis(None,None,None,None)
             ax.read(match)
-            self.axes.append(ax)
-
+            axes.append(ax)
+        
         # the rest is discarded...
-        #line = lines.pop(0)
-        #print(line)
+
+        return cls(data, axes, name)
 
     @property
     def extent(self):
@@ -141,6 +204,21 @@ class Wave(object):
         f=open(fname, 'w')
         f.write(str(self))
         f.close()
+    
+    def csv_header(self):
+        header = ""
+        shape = self.data.shape
+        for i_ax in range(len(shape)):
+            ax = self.axes[i_ax]
+            if header is not "":
+                header += "\n"
+            header += "axis %d: %s [unit: %s] [%.6e, %.6e], delta=%.6e, n=%d" % (
+                i_ax, ax.symbol, ax.unit, ax.min, ax.min+ax.delta*(shape[i_ax]-1), ax.delta, shape[i_ax]
+            )
+        return header
+    
+    def write_csv(self, fname, fmt="%.6e"):
+        np.savetxt(fname, self.data, delimiter=",", header=self.csv_header(), fmt=fmt)
 
 
 class Wave1d(Wave):
@@ -155,7 +233,7 @@ class Wave1d(Wave):
 
     def __init__(self, data=None, axes=None, name="1d", **kwargs):
         """Initialize 1d IGOR wave"""
-        super(Wave1d, self).__init__(data, axes, name) 
+        super(Wave1d, self).__init__(data, axes, name)
 
         self.parameters = self.default_parameters
         for key, value in kwargs.items():
@@ -166,7 +244,7 @@ class Wave1d(Wave):
 
         if axes is None:
             p=self.parameters
-            x = Axis(symbol='x', min=p['xmin'], delta=p['xdelta'], unit=p['xlabel'],
+            x = Axis(symbol='x', min_=p['xmin'], delta=p['xdelta'], unit=p['xlabel'],
                     wavename=self.name)
             self.axes = [x]
 
@@ -226,9 +304,9 @@ class Wave2d(Wave):
             elif p['ydelta'] is None:
                 p['ydelta'] = p['ymax'] / ny
 
-            x = Axis(symbol='x', min=p['xmin'], delta=p['xdelta'], 
+            x = Axis(symbol='x', min_=p['xmin'], delta=p['xdelta'], 
                      unit=p['xlabel'], wavename=self.name)
-            y = Axis(symbol='y', min=p['ymin'], delta=p['ydelta'], 
+            y = Axis(symbol='y', min_=p['ymin'], delta=p['ydelta'], 
                      unit=p['ylabel'], wavename=self.name)
             self.axes = [x,y]
 
@@ -242,3 +320,4 @@ class Wave2d(Wave):
             s += "\n"
 
         return s
+
