@@ -420,7 +420,10 @@ class Cp2kWfnFile:
                         self.morb_composition[ispin][iatom][iset].append([]) # 4: shell index (l)
                         for iorb in range(norb):
                             self.morb_composition[ispin][iatom][iset][ishell].append([]) # 5: orb index (m)
-                            self.morb_composition[ispin][iatom][iset][ishell][iorb] = self.coef_array[ispin][:, i_ao] # 6: mo index
+                            if self.coef_array[ispin].shape[0] != 0:
+                                self.morb_composition[ispin][iatom][iset][ishell][iorb] = self.coef_array[ispin][:, i_ao] # 6: mo index
+                            else:
+                                self.morb_composition[ispin][iatom][iset][ishell][iorb] = np.array([])
                             # [iatom][iset][ishell][iorb] -> determine [i_ao]
                             i_ao += 1
 
