@@ -78,6 +78,11 @@ parser.add_argument(
     help=("Size of the region around the atom where each"
           " orbital is evaluated (only used for 'G' region).")
 )
+parser.add_argument(
+    '--gen_rho',
+    action='store_true',
+    help=("Additionally generate the square (RHO) for each MO.")
+)
 
 time0 = time.time()
 
@@ -122,15 +127,16 @@ for imo in np.arange(n_homo+n_lumo):
         name = "HOMO%+d_S%d_E%.3f" % (i_rel_homo, ispin, energy)
 
         norm_sq = np.sum(mol_grid_orb.morb_grids[ispin][imo]**2)*vol_elem
-        comment = "E=%.8e eV (wrt HOMO), |norm|^2-1=%.4e" % (energy, norm_sq-1.0)
+        comment = "E=%.8e eV (wrt HOMO), norm-1=%.4e" % (energy, norm_sq-1.0)
 
         c = cube.Cube(title=name, comment=comment, ase_atoms=ase_atoms, origin=origin, cell=cell, data=mol_grid_orb.morb_grids[ispin][imo])
         c.write_cube_file(output_dir + name + ".cube")
 
-        c = cube.Cube(title="Squared " + name, comment=comment, ase_atoms=ase_atoms, origin=origin, cell=cell, data=mol_grid_orb.morb_grids[ispin][imo]**2)
-        c.write_cube_file(output_dir + name + "_sq.cube")
+        if args.gen_rho:
+            c = cube.Cube(title="Squared " + name, comment=comment, ase_atoms=ase_atoms, origin=origin, cell=cell, data=mol_grid_orb.morb_grids[ispin][imo]**2)
+            c.write_cube_file(output_dir + name + "_sq.cube")
 
-        print("Wrote %s.cube, |norm|^2-1=%.4e, time %.2fs" % (name, norm_sq-1.0, (time.time()-time1)))
+        print("Wrote %s.cube, norm-1=%.4e, time %.2fs" % (name, norm_sq-1.0, (time.time()-time1)))
 
     if i_rel_homo <= 0 and mol_grid_orb.nspin == 2 and args.spin_dens_n != 0:
         spin_dens_contrib = np.zeros(mol_grid_orb.morb_grids[0][0].shape)
