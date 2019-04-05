@@ -227,12 +227,10 @@ else:
 
 comm.Gatherv(sendbuf=overlap_matrix_rav, recvbuf=[recvbuf, sendcounts], root=0)
 
-slab_grid_orb.gather_global_energies()
-
 if mpi_rank == 0:
     energies_g1 = slab_grid_orb.global_morb_energies[0]
     energies_g2 = mol_grid_orb.morb_energies[0]
-    homo_g2 = mol_grid_orb.homo_inds[0][0]
+    homo_g2 = mol_grid_orb.i_homo_loc[0]
 
     overlap_matrix_collected = recvbuf.reshape(
         len(energies_g1),
