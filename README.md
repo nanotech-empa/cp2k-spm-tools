@@ -1,4 +1,6 @@
-# Supplementary tools for atomistic simulations
+[![DOI](https://zenodo.org/badge/133041124.svg)](https://zenodo.org/badge/latestdoi/133041124)
+
+## Supplementary tools for atomistic simulations
 
 Features include:
 * Processing the various output files of [CP2K](https://www.cp2k.org/), including the `.wfn` file 
