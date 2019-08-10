@@ -13,7 +13,7 @@ hart_2_ev = 27.21138602
 import atomistic_tools.cp2k_wfn_file as cwf
 
 parser = argparse.ArgumentParser(
-    description='Puts the CP2K orbitals on grid and calculates STM.')
+    description='Crops CP2K RESTART.wfn file.')
 
 parser.add_argument(
     '--wfn_file',
