@@ -82,14 +82,14 @@ parser.add_argument(
     help='Restart file containing the final wavefunction.')
 parser.add_argument(
     '--nhomo2',
-    type=float,
-    metavar='E',
+    type=int,
+    metavar='N',
     required=True,
     help='Number of homo orbitals.')
 parser.add_argument(
     '--nlumo2',
-    type=float,
-    metavar='E',
+    type=int,
+    metavar='N',
     required=True,
     help='Number of lumo orbitals.')
 # ----------------------------------
@@ -151,7 +151,7 @@ mol_grid_orb = cgo.Cp2kGridOrbitals(0, 1, single_precision=False)
 mol_grid_orb.read_cp2k_input(args.cp2k_input_file2)
 mol_grid_orb.read_xyz(args.xyz_file2)
 mol_grid_orb.read_basis_functions(args.basis_set_file2)
-mol_grid_orb.load_restart_wfn_file(args.wfn_file2, n_homo=args.nhomo2, n_lumo=args.nlumo2)
+mol_grid_orb.load_restart_wfn_file(args.wfn_file2, n_occ=args.nhomo2, n_virt=args.nlumo2)
 
 print("R%d/%d: loaded G2, %.2fs"%(mpi_rank, mpi_size, (time.time() - time0)))
 sys.stdout.flush()
