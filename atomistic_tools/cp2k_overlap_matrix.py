@@ -1,6 +1,3 @@
-"""
-Tools to put CP2K orbitals on a real space grid
-""" 
 
 import os
 import numpy as np

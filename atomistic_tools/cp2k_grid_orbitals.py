@@ -15,8 +15,12 @@ import io
 import ase
 import ase.io
 
+import scipy.ndimage
+
 from .cube import Cube
 from .cp2k_wfn_file import Cp2kWfnFile
+
+from mpi4py import MPI
 
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
@@ -57,6 +61,7 @@ class Cp2kGridOrbitals:
         self.morb_composition = None
         self.morb_energies = None
         self.i_homo_loc = None
+        self.i_homo_glob = None
         self.nspin = None
         self.ref_energy = None
         self.global_morb_energies = None
@@ -70,7 +75,6 @@ class Cp2kGridOrbitals:
 
         self.last_calc_iz = None # last directly calculated z plane (others extrapolated)
         
-
 
     ### -----------------------------------------
     ### General cp2k routines
@@ -224,19 +228,20 @@ class Cp2kGridOrbitals:
     ### WFN file routines
     ### -----------------------------------------
 
-    def load_restart_wfn_file(self, restart_file, emin=None, emax=None, n_homo=None, n_lumo=None):
+    def load_restart_wfn_file(self, restart_file, emin=None, emax=None, n_occ=None, n_virt=None):
         """
         Reads the specified molecular orbitals from cp2k restart wavefunction file
         If both, energy limits and counts are given, then the extreme is used
         Note that the energy range is in eV and with respect to HOMO energy.
         """
 
-        self.cwf.load_restart_wfn_file(restart_file, emin=emin, emax=emax, n_homo=n_homo, n_lumo=n_lumo)
+        self.cwf.load_restart_wfn_file(restart_file, emin=emin, emax=emax, n_occ=n_occ, n_virt=n_virt)
         self.cwf.convert_readable()
 
         self.morb_composition = self.cwf.morb_composition
         self.morb_energies = self.cwf.morb_energies
         self.i_homo_loc = self.cwf.i_homo_loc
+        self.i_homo_glob = self.cwf.i_homo_glob
         self.nspin = self.cwf.nspin
         self.ref_energy = self.cwf.ref_energy
         self.global_morb_energies = self.cwf.glob_morb_energies
@@ -535,7 +540,6 @@ class Cp2kGridOrbitals:
             print("---- loc_morb -> glob time : %4f" % time_loc_glob_add)
             print("---- Total time: %.4f"%(time.time() - time1))
 
-
     ### -----------------------------------------
     ### Extrapolate wavefunctions
     ### -----------------------------------------
@@ -620,84 +624,201 @@ class Cp2kGridOrbitals:
     ### -----------------------------------------
 
     def write_cube(self, filename, orbital_nr, spin=0, square=False):
-        local_ind = self.i_homo_loc[spin] - orbital_nr
+        local_ind = self.i_homo_loc[spin] + orbital_nr
+
         if local_ind >= 0 and local_ind < self.morb_grids[spin].shape[0]:
             print("R%d/%d is writing HOMO%+d cube" %(self.mpi_rank, self.mpi_size, orbital_nr))
+
+            energy = self.morb_energies[spin][local_ind]
+            comment = "E=%.8f eV (wrt HOMO)" % energy
+
             if not square:
-                c = Cube(title="HOMO%+d"%orbital_nr, comment="cube", ase_atoms=self.ase_atoms,
+                c = Cube(title="HOMO%+d"%orbital_nr, comment=comment, ase_atoms=self.ase_atoms,
                     origin=self.origin, cell=self.eval_cell*np.eye(3), data=self.morb_grids[spin][local_ind])
             else:
-                c = Cube(title="HOMO%+d square"%orbital_nr, comment="cube", ase_atoms=self.ase_atoms,
+                c = Cube(title="HOMO%+d square"%orbital_nr, comment=comment, ase_atoms=self.ase_atoms,
                     origin=self.origin, cell=self.eval_cell*np.eye(3), data=self.morb_grids[spin][local_ind]**2)
             c.write_cube_file(filename)
-    
-    def _orb_plane_above_atoms(self, grid, height):
-        """
-        Returns the 2d plane above topmost atom in z direction
-        height in [angstrom]
-        """
-        topmost_atom_z = np.max(self.ase_atoms.positions[:, 2]) # Angstrom
-        plane_z = (height + topmost_atom_z) * ang_2_bohr
-        plane_z_wrt_orig = plane_z - self.origin[2]
 
-        plane_index = int(np.round(plane_z_wrt_orig/self.eval_cell[2]*self.eval_cell_n[2]))
-        return grid[:, :, plane_index]
 
-    def collect_and_save_ch_orbitals(self, orbital_list, height_list, path = "./orb.npz"):
-        """
-        Save constant-height planes of selected orbitals at selected heights
-        orbital list wrt to HOMO
-        """
-        slice_list = []
+    def calculate_and_save_charge_density(self, filename="./charge_density.cube"):
 
+        charge_dens = np.zeros(self.eval_cell_n)
         for i_spin in range(self.nspin):
-            slice_list.append([])
-            for h in height_list:
-                slice_list[i_spin].append([])
-
-            for i_mo in range(len(self.morb_energies[i_spin])):
-                i_mo_wrt_homo = i_mo - self.i_homo_loc[i_spin]
-
-                if i_mo_wrt_homo in orbital_list:
-                    for i_h, h in enumerate(height_list):
-                        orb_plane = self._orb_plane_above_atoms(self.morb_grids[i_spin][i_mo], h)
-                        slice_list[i_spin][i_h].append(orb_plane)
-         
-        # indexes of the slice_list: [i_spin], [i_h], [i_mo], [nx x ny]
-        # gather to rank_0
-        final_list = []
-
-        for i_spin in range(self.nspin):
-            final_list.append([]) # i_spin
-            for i_h in range(len(height_list)):
-                plane_gather = self.mpi_comm.gather(slice_list[i_spin][i_h], root = 0)
-
-                if self.mpi_rank == 0:
-                    # flatten the list of lists to numpy
-                    flat_array = np.array([item for sublist in plane_gather for item in sublist])
-                    final_list[i_spin].append(flat_array)        
-
-        # select energy ranges
-        #self.gather_global_energies()
+            for i_mo, grid in enumerate(self.morb_grids[i_spin]):
+                if i_mo > self.i_homo_loc[i_spin]:
+                    break
+                charge_dens += grid**2
+        if self.nspin == 1:
+            charge_dens *= 2
+        
+        total_charge_dens = np.zeros(self.eval_cell_n)
+        self.mpi_comm.Reduce(charge_dens, total_charge_dens, op=MPI.SUM)
 
         if self.mpi_rank == 0:
-            # energy array
-            # for rank 0, the homo index is given by loc_homo_ind
-            save_energy_arr = []
-            for i_spin in range(self.nspin):
-                global_orb_list = [ind + self.i_homo_loc[i_spin] for ind in orbital_list]
-                save_energy_arr.append(self.global_morb_energies[i_spin][global_orb_list])
+            vol_elem = np.prod(self.dv)
+            integrated_charge = np.sum(total_charge_dens)*vol_elem
+            comment = "Integrated charge: %.6f" % integrated_charge
+            c = Cube(title="charge density", comment=comment, ase_atoms=self.ase_atoms,
+                    origin=self.origin, cell=self.eval_cell*np.eye(3), data=total_charge_dens)
+            c.write_cube_file(filename)
+
+    def calculate_and_save_spin_density(self, filename="./spin_density.cube"):
+        if self.nspin == 1:
+            return
+
+        spin_dens = np.zeros(self.eval_cell_n)
+        for i_spin in range(self.nspin):
+            for i_mo, grid in enumerate(self.morb_grids[i_spin]):
+                if i_mo > self.i_homo_loc[i_spin]:
+                    break
+                if i_spin == 0:
+                    spin_dens += grid**2
+                else:
+                    spin_dens -= grid**2
+        
+        total_spin_dens = np.zeros(self.eval_cell_n)
+        self.mpi_comm.Reduce(spin_dens, total_spin_dens, op=MPI.SUM)
+
+        if self.mpi_rank == 0:
+            vol_elem = np.prod(self.dv)
+            integrated = np.sum(np.abs(total_spin_dens))*vol_elem
+            comment = "Integrated abs spin: %.6f" % integrated
+            c = Cube(title="spin density", comment=comment, ase_atoms=self.ase_atoms,
+                    origin=self.origin, cell=self.eval_cell*np.eye(3), data=total_spin_dens)
+            c.write_cube_file(filename)
+
+
+    def calculate_and_save_charge_density_artif_core(self, filename="./charge_density_artif.cube"):
+
+        charge_dens = np.zeros(self.eval_cell_n)
+        for i_spin in range(self.nspin):
+            for i_mo, grid in enumerate(self.morb_grids[i_spin]):
+                if i_mo > self.i_homo_loc[i_spin]:
+                    break
+                charge_dens += grid**2
+        if self.nspin == 1:
+            charge_dens *= 2
+        
+        total_charge_dens = np.zeros(self.eval_cell_n)
+        self.mpi_comm.Reduce(charge_dens, total_charge_dens, op=MPI.SUM)
+
+        # free memory
+        charge_dens = None
+
+        if self.mpi_rank == 0:
+
+            def gaussian3d(r_arr, sigma):
+                sigma = fwhm/2.355
+                return 1/(sigma**3*(2*np.pi)**(3/2))*np.exp(-(r_arr**2/(2*sigma**2)))
             
-            # turn the spin and height dimensions to numpy as well
-            final_numpy = np.array([np.array(list_h) for list_h in final_list])
-            save_data = {}
-            save_data['orbitals'] = final_numpy
-            save_data['heights'] = np.array(height_list)
-            save_data['orb_list'] = np.array(orbital_list)
-            save_data['x_arr'] = np.arange(0.0, self.eval_cell_n[0]*self.dv[0] + self.dv[0]/2, self.dv[0]) + self.origin[0]
-            save_data['y_arr'] = np.arange(0.0, self.eval_cell_n[1]*self.dv[1] + self.dv[1]/2, self.dv[1]) + self.origin[1]
-            save_data['energies'] = np.array(save_energy_arr)
-            np.savez_compressed(path, **save_data)
+            x = np.arange(0.0, self.eval_cell[0], self.dv[0]) + self.origin[0]
+            y = np.arange(0.0, self.eval_cell[1], self.dv[1]) + self.origin[1]
+            z = np.arange(0.0, self.eval_cell[2], self.dv[2]) + self.origin[2]
+
+            for at in self.ase_atoms:
+                if at.number == 1:
+                    # No core density for H
+                    continue
+                p = at.position*ang_2_bohr
+
+                if (p[0] < np.min(x) - 0.5 or p[0] > np.max(x) > 0.5 or
+                        p[1] < np.min(y) - 0.5 or p[1] > np.max(y) > 0.5 or
+                        p[2] < np.min(z) - 0.5 or p[2] > np.max(z) > 0.5):
+                    continue
+
+                x_grid, y_grid, z_grid = np.meshgrid(x - p[0], y - p[1], z - p[2], indexing='ij')
+                r_grid = np.sqrt(x_grid**2 + y_grid**2 + z_grid**2)
+                x_grid = None
+                y_grid = None
+                z_grid = None
+
+                core_charge = at.number - 4 # Basically, it holds for C
+
+                #r_cut = 0.5
+                #hat_func = (1.0-r_grid/r_cut)
+                #hat_func[r_grid > r_cut] = 0.0
+                #total_charge_dens = hat_func*core_charge*gaussian3d(r_grid, 1.0*r_cut) + (1.0-hat_func)*total_charge_dens
+
+                # EMPIRICAL PARAMETER 1
+                fwhm = 0.5 # ang
+                total_charge_dens = core_charge*gaussian3d(r_grid, fwhm) + total_charge_dens
+
+            # EMPIRICAL PARAMETER 2
+            total_charge_dens = scipy.ndimage.gaussian_filter(total_charge_dens, sigma = 0.4, mode='nearest')
+
+            c = Cube(title="charge density", comment="modif. cube", ase_atoms=self.ase_atoms,
+                    origin=self.origin, cell=self.eval_cell*np.eye(3), data=total_charge_dens)
+            c.write_cube_file(filename)
+
+
+#    def _orb_plane_above_atoms(self, grid, height):
+#        """
+#        Returns the 2d plane above topmost atom in z direction
+#        height in [angstrom]
+#        """
+#        topmost_atom_z = np.max(self.ase_atoms.positions[:, 2]) # Angstrom
+#        plane_z = (height + topmost_atom_z) * ang_2_bohr
+#        plane_z_wrt_orig = plane_z - self.origin[2]
+#
+#        plane_index = int(np.round(plane_z_wrt_orig/self.eval_cell[2]*self.eval_cell_n[2]))
+#        return grid[:, :, plane_index]
+#
+#    def collect_and_save_ch_orbitals(self, orbital_list, height_list, path = "./orb.npz"):
+#        """
+#        Save constant-height planes of selected orbitals at selected heights
+#        orbital list wrt to HOMO
+#        """
+#        slice_list = []
+#
+#        for i_spin in range(self.nspin):
+#            slice_list.append([])
+#            for h in height_list:
+#                slice_list[i_spin].append([])
+#
+#            for i_mo in range(len(self.morb_energies[i_spin])):
+#                i_mo_wrt_homo = i_mo - self.i_homo_loc[i_spin]
+#
+#                if i_mo_wrt_homo in orbital_list:
+#                    for i_h, h in enumerate(height_list):
+#                        orb_plane = self._orb_plane_above_atoms(self.morb_grids[i_spin][i_mo], h)
+#                        slice_list[i_spin][i_h].append(orb_plane)
+#         
+#        # indexes of the slice_list: [i_spin], [i_h], [i_mo], [nx x ny]
+#        # gather to rank_0
+#        final_list = []
+#
+#        for i_spin in range(self.nspin):
+#            final_list.append([]) # i_spin
+#            for i_h in range(len(height_list)):
+#                plane_gather = self.mpi_comm.gather(slice_list[i_spin][i_h], root = 0)
+#
+#                if self.mpi_rank == 0:
+#                    # flatten the list of lists to numpy
+#                    flat_array = np.array([item for sublist in plane_gather for item in sublist])
+#                    final_list[i_spin].append(flat_array)        
+#
+#        # select energy ranges
+#        #self.gather_global_energies()
+#
+#        if self.mpi_rank == 0:
+#            # energy array
+#            # for rank 0, the homo index is given by loc_homo_ind
+#            save_energy_arr = []
+#            for i_spin in range(self.nspin):
+#                global_orb_list = [ind + self.i_homo_loc[i_spin] for ind in orbital_list]
+#                save_energy_arr.append(self.global_morb_energies[i_spin][global_orb_list])
+#            
+#            # turn the spin and height dimensions to numpy as well
+#            final_numpy = np.array([np.array(list_h) for list_h in final_list])
+#            save_data = {}
+#            save_data['orbitals'] = final_numpy
+#            save_data['heights'] = np.array(height_list)
+#            save_data['orb_list'] = np.array(orbital_list)
+#            save_data['x_arr'] = np.arange(0.0, self.eval_cell_n[0]*self.dv[0] + self.dv[0]/2, self.dv[0]) + self.origin[0]
+#            save_data['y_arr'] = np.arange(0.0, self.eval_cell_n[1]*self.dv[1] + self.dv[1]/2, self.dv[1]) + self.origin[1]
+#            save_data['energies'] = np.array(save_energy_arr)
+#            np.savez_compressed(path, **save_data)
 
 
     ### -----------------------------------------

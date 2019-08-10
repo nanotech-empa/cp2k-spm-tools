@@ -4,6 +4,7 @@ Useful tools for various situations
 
 import numpy as np
 import scipy
+import sys
 
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
@@ -43,7 +44,7 @@ def parse_eval_region_input(eval_reg_inp, ase_atoms, cell):
                 sel_positions = ase_atoms.positions[np.array(ase_atoms.get_chemical_symbols()) == elem]
                 if len(sel_positions) == 0:
                     print("Error: No element %s found. Exiting."%elem)
-                    exit(1)
+                    sys.exit(1)
                 has_chem_el = True
             else:
                 sel_positions = ase_atoms.positions
@@ -54,8 +55,9 @@ def parse_eval_region_input(eval_reg_inp, ase_atoms, cell):
             elif is_number(reg_str):
                 if has_chem_el:
                     print("Unrecognized option ", eval_regions_inp[i][j])
-                    exit(1)
+                    sys.exit(1)
                 eval_regions[i][j] = float(reg_str)
+                eval_regions[i][j] *= ang_2_bohr
                 
             else:
                 ref_at_pos = reg_str[0]
@@ -63,10 +65,10 @@ def parse_eval_region_input(eval_reg_inp, ase_atoms, cell):
 
                 if ref_at_pos != 'p' and ref_at_pos != 'n':
                     print("Error:", reg_str, "needs to start with a 'p' or 'n'")
-                    exit(1)
+                    sys.exit(1)
                 if not is_number(ref_shift_str):
                     print("Error:", ref_shift_str, "needs to be a number")
-                    exit(1)
+                    sys.exit(1)
                 ref_shift_val = float(ref_shift_str)
 
                 eval_regions[i][j] = (np.min(sel_positions[:, i]) + ref_shift_val

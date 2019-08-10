@@ -61,6 +61,9 @@ class Cp2kWfnFile:
         self.coef_array = None # coef_array[ispin][i_mo, i_ao]
         self.i_homo_loc = None # indexes wrt to the first orbital of the MPI process
 
+        self.i_homo_glob = None # indexes wrt to the first selected orbital
+        self.ref_index_glob = None # reference index for selecting orbitals
+
         # ------------------------------------------------------------------
         # Transformed into easily accessible format
         self.morb_composition = None # only for this mpi process
@@ -207,16 +210,18 @@ class Cp2kWfnFile:
                 outf.write_record(self.coef_array[ispin][imo])
 
 
-    def load_restart_wfn_file(self, restart_file, emin=None, emax=None, n_homo=None, n_lumo=None):
+    def load_restart_wfn_file(self, restart_file, emin=None, emax=None, n_occ=None, n_virt=None):
         """ Reads the molecular orbitals from cp2k restart wavefunction file in specified energy range
-        Note that the energy range is in eV and with respect to HOMO energy.
+        Note that the energy range is in eV and with respect to middle of HOMO-LUMO gap.
+        In case of UKS, inbetween highest SOMO and lowest SUMO.
         
         sets member variables:
         * coef_array
         * ...
         """
 
-        inpf = scipy.io.FortranFile(restart_file, 'r')
+        f = open(restart_file, 'r')
+        inpf = scipy.io.FortranFile(f, 'r')
 
         self.natom, self.nspin, self.nao, self.nset_max, self.nshell_max = inpf.read_ints()
         # natom - number of atoms
@@ -245,16 +250,23 @@ class Cp2kWfnFile:
         # different HOMO indexes (for debugging and matching direct cube output)
         self.i_homo_cp2k = [] # cp2k homo indexes, takes also smearing into account (counting start from 1)
         self.i_homo = []      # global indexes, corresponds to WFN nr (counting start from 1)
+        self.i_homo_glob = [] # global indexes, wrt to the first selected orbital
         self.i_homo_loc = []  # indexes wrt to the first orbital of the MPI process
 
         self.homo_ens = []
+        self.lumo_ens = []
         self.coef_array = []
 
         self.evals_sel = []
         self.occs_sel = []
         self.evals_loc = []
 
-        for ispin in range(self.nspin):
+        if n_occ is not None:
+            n_occ = int(n_occ)
+        if n_virt is not None:
+            n_virt = int(n_virt)
+
+        def read_info_and_evals():
             nmo_, i_homo_cp2k_, lfomo_, nelectron_ = inpf.read_ints()
             # nmo - number of molecular orbitals
             # homo - index of the HOMO
@@ -266,22 +278,39 @@ class Cp2kWfnFile:
                 i_homo_ = int(nelectron_/2) - 1
             else:
                 i_homo_ = nelectron_ - 1
-
             self.nmo.append(nmo_)
             self.lfomo.append(lfomo_)
             self.nelectron.append(nelectron_)
-
             self.i_homo_cp2k.append(i_homo_cp2k_)
             self.i_homo.append(i_homo_)
-
             # list containing all eigenvalues and occupancies of the molecular orbitals
             evals_occs = inpf.read_reals()
-            self.evals.append(evals_occs[:nmo_])
+            self.evals.append(evals_occs[:nmo_] * hart_2_ev)
             self.occs.append(evals_occs[nmo_:])
-            
-            evals = self.evals[ispin] * hart_2_ev
-            homo_en = evals[i_homo_]
+            homo_en = self.evals[-1][i_homo_]
+            lumo_en = self.evals[-1][i_homo_ + 1]
             self.homo_ens.append(homo_en)
+            self.lumo_ens.append(lumo_en)
+
+        # -------------------------------------------------------------------
+        # In case of spin-polarized calculations, find the ref energy and index
+        read_info_and_evals()
+        loc = f.tell()
+        if self.nspin == 2:
+            f.seek(loc + self.nmo[0] * (8 * self.nao + 8))
+            read_info_and_evals()
+            f.seek(loc)
+            self.ref_energy = 0.5 * (np.max(self.homo_ens) + np.min(self.lumo_ens))
+        else:
+            self.ref_energy = 0.5 * (self.homo_ens[0] + self.lumo_ens[0])
+        # -------------------------------------------------------------------
+
+        for ispin in range(self.nspin):
+
+            # Skip the 2nd spin header, as we already processed that
+            if ispin == 1:
+                inpf.read_ints()
+                inpf.read_reals()
             
             ### ---------------------------------------------------------------------
             ### Select orbitals in the specified range
@@ -293,41 +322,43 @@ class Cp2kWfnFile:
             # Energy range (if specified)
             if emin is not None and emax is not None:
                 try:
-                    ind_start = np.where(evals >= homo_en + emin)[0][0]
+                    ind_start = np.where(self.evals[ispin] >= self.ref_energy + emin)[0][0]
                 except:
                     ind_start = 0
                 try:
-                    ind_end = np.where(evals > homo_en + emax)[0][0]
+                    ind_end = np.where(self.evals[ispin] > self.ref_energy + emax)[0][0]
                 except:
-                    ind_end = len(evals)
+                    ind_end = len(self.evals[ispin])
 
-                if evals[-1] < homo_en + emax:
-                    print("WARNING: possibly not enough ADDED_MOS, last eigenvalue is %.2f" % (evals[-1]-homo_en))
-            
+                if self.evals[ispin][-1] < self.ref_energy + emax:
+                    print("WARNING: possibly not enough ADDED_MOS, last eigenvalue is %.2f" % (self.evals[ispin][-1]-self.ref_energy))
 
             # num HOMO/LUMO range (if specified)
-            if n_homo is not None:
-                ind_start_n = i_homo_ - n_homo + 1
+            ref_ind_global = np.max(self.i_homo) 
+            if n_occ is not None:
+                ind_start_n = ref_ind_global - n_occ + 1
                 if ind_start is None or ind_start_n < ind_start:
                     ind_start = ind_start_n
                 if ind_start < 0:
-                    print("WARNING: n_homo out of bounds.")
+                    print("WARNING: n_occ out of bounds.")
                     ind_start = 0
-            if n_lumo is not None:
-                ind_end_n = i_homo_ + n_lumo + 1
+            if n_virt is not None:
+                ind_end_n = ref_ind_global + n_virt + 1
                 if ind_end is None or ind_end_n > ind_end:
                     ind_end = ind_end_n
-                if ind_end > len(evals):
-                    print("WARNING: n_lumo out of bounds, increase ADDED_MOS.")
-                    ind_end = len(evals)
+                if ind_end > len(self.evals[ispin]):
+                    print("WARNING: n_virt out of bounds, increase ADDED_MOS.")
+                    ind_end = len(self.evals[ispin])
             
             # If no limits are specified, take all orbitals
             if ind_start is None:
                 ind_start = 0
             if ind_end is None:
-                ind_end = len(evals)
+                ind_end = len(self.evals[ispin])
 
             num_selected_orbs = ind_end - ind_start
+
+            self.i_homo_glob.append(self.i_homo[ispin] - ind_start)
 
             ### ---------------------------------------------------------------------
             ### Divide the orbitals between mpi processes
@@ -342,9 +373,11 @@ class Cp2kWfnFile:
                 loc_ind_start = self.mpi_rank*(base_orb_per_rank) + extra_orbs + ind_start
                 loc_ind_end = (self.mpi_rank+1)*(base_orb_per_rank) + extra_orbs + ind_start
 
-            print("R%d/%d, loading indexes %d:%d / %d:%d"%(self.mpi_rank, self.mpi_size,
-                loc_ind_start, loc_ind_end-1, ind_start, ind_end-1))
+            print("R%d/%d, loading indexes (s%d/%d) %d:%d / %d:%d"%(self.mpi_rank, self.mpi_size,
+                ispin, self.nspin, loc_ind_start, loc_ind_end-1, ind_start, ind_end-1))
             
+            print(ind_start, ind_end)
+
             self.evals_sel.append(self.evals[ispin][ind_start:ind_end])
             self.occs_sel.append(self.occs[ispin][ind_start:ind_end])
             self.evals_loc.append(self.evals[ispin][loc_ind_start:loc_ind_end])
@@ -356,7 +389,7 @@ class Cp2kWfnFile:
 
             first_imo = -1
 
-            for imo in range(nmo_):
+            for imo in range(self.nmo[0]):
                 coefs = inpf.read_reals()
                 if imo < loc_ind_start:
                     continue
@@ -373,10 +406,12 @@ class Cp2kWfnFile:
             
             self.coef_array[ispin] = np.array(self.coef_array[ispin])
 
-            self.i_homo_loc.append(i_homo_ - first_imo) # Global homo index wrt to the initial MO
+            self.i_homo_loc.append(self.i_homo[ispin] - first_imo) # Global homo index wrt to the initial MO
             ### ---------------------------------------------------------------------
             
         inpf.close()
+
+        self.ref_index_glob = np.max(self.i_homo_glob)
 
 
     def convert_readable(self):
@@ -384,7 +419,7 @@ class Cp2kWfnFile:
         Intuitive indexing for the molecular orbital coefficients:
         * coef_array[ispin][i_mo, i_ao] -> morb_composition[ispin][iatom][iset][ishell][iorb][i_mo]
 
-        Energies in eV wrt HOMO / avg of HOMOs
+        Energies in eV wrt to the reference energy
         * glob_morb_energies
         * morb_energies
         """
@@ -428,14 +463,9 @@ class Cp2kWfnFile:
                             i_ao += 1
 
         ### ---------------------------------------------------------------------
-        ### Energies in eV wrt HOMO / avg of HOMOs
-
-        if self.nspin == 1:
-            self.ref_energy = self.homo_ens[0]
-        else:
-            self.ref_energy = 0.5*(self.homo_ens[0]+self.homo_ens[1])
+        ### Energies in eV 
 
         for ispin in range(self.nspin):
-            self.glob_morb_energies.append(self.evals_sel[ispin]*hart_2_ev-self.ref_energy)
-            self.morb_energies.append(self.evals_loc[ispin]*hart_2_ev-self.ref_energy)
+            self.glob_morb_energies.append(self.evals_sel[ispin]-self.ref_energy)
+            self.morb_energies.append(self.evals_loc[ispin]-self.ref_energy)
         

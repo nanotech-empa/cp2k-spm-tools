@@ -1,6 +1,10 @@
 
 import numpy as np
 
+from .cube import Cube
+
+import os
+
 import xml.etree.ElementTree as et
 
 def read_scf_fermi(scf_out_file):
@@ -181,9 +185,31 @@ def read_atomic_proj(atomic_proj_xml):
     
     return kpts, eigvals, wfc_projs, fermi_en
 
+def convert_cube_to_wfn(cube_path_in, cube_path_out = None):
+    """
+    When using pp.x with plot_num = 7, the outputted cube is |psi|^2*sign(psi)
+    The current method converts it to psi
+    """
+    
+    c = Cube()
+    c.read_cube_file(cube_path_in)
+
+    c.data = np.sign(c.data) * np.sqrt(np.abs(c.data))
+
+    if cube_path_out == None:
+        p, e = os.path.splitext(cube_path_in)
+        cube_path_out = p + "_corr" + e
+
+    c.write_cube_file(cube_path_out)
+    
+
+
+
 def correct_band_crossings(kpts, eigvals_in, wfc_projs_in):
     """
-    Using parabolic fitting, orders the band segments correctly 
+    Using parabolic fitting, orders the band segments correctly
+
+    NB: this operation is physically incorrect, as "avoided crossings" are the norm
     """
 
     eigvals = np.copy(eigvals_in)

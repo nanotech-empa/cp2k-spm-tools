@@ -7,13 +7,18 @@ import sys
 
 import argparse
 
-import matplotlib.pyplot as plt
 import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+from atomistic_tools import igor
 
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
 
 fig_y = 4.0
+
+title_font_size = 20
 
 parser = argparse.ArgumentParser(
     description='Makes images from the STM .npz files.')
@@ -77,16 +82,11 @@ def make_plot(fig, ax, data, extent, title=None, title_size=None, center0=False,
 ### STM.NPZ
 ### ----------------------------------------------------------------------
 
-if args.stm_npz is not None:
+def plot_stm_series(loaded_data, stm_dir, stm_itx_dir):
 
-    stm_dir = args.output_dir + "./stm"
-    if not os.path.exists(stm_dir):
-        os.makedirs(stm_dir)
-
-    loaded_data = np.load(args.stm_npz)
- 
     isovalues = loaded_data['isovalues']
     heights = loaded_data['heights']
+    fwhms = loaded_data['fwhms']
     e_arr = loaded_data['e_arr']
     x_arr = loaded_data['x_arr'] * 0.529177
     y_arr = loaded_data['y_arr'] * 0.529177
@@ -99,12 +99,13 @@ if args.stm_npz is not None:
     ### ----------------------------------------------------
     ### Create series
     stm_series = {}
-    for i_iv, iv in enumerate(isovalues):
-        stm_series["cc-stm, isov=%.0e" % iv] = stm_cc[i_iv, :, :, :]
-        stm_series["cc-sts, isov=%.0e" % iv] = sts_cc[i_iv, :, :, :]
-    for i_h, h in enumerate(heights):
-        stm_series["ch-stm, h=%.1f" % h] = stm_ch[i_h, :, :, :]
-        stm_series["ch-sts, h=%.1f" % h] = sts_ch[i_h, :, :, :]
+    for i_fwhm, fwhm in enumerate(fwhms):
+        for i_iv, iv in enumerate(isovalues):
+            stm_series["cc-stm fwhm=%.2f isov=%.0e" % (fwhm, iv)] = stm_cc[i_fwhm, i_iv, :, :, :]
+            stm_series["cc-sts fwhm=%.2f isov=%.0e" % (fwhm, iv)] = sts_cc[i_fwhm, i_iv, :, :, :]
+        for i_h, h in enumerate(heights):
+            stm_series["ch-stm fwhm=%.2f h=%.1f" % (fwhm, h)] = stm_ch[i_fwhm, i_h, :, :, :]
+            stm_series["ch-sts fwhm=%.2f h=%.1f" % (fwhm, h)] = sts_ch[i_fwhm, i_h, :, :, :]
     ### ----------------------------------------------------
 
     extent = [np.min(x_arr), np.max(x_arr), np.min(y_arr), np.max(y_arr)]
@@ -120,15 +121,45 @@ if args.stm_npz is not None:
             if 'ch-sts' in series_label:
                 cmap = 'seismic'
 
-            title = '%s, E=%.2f eV'%(series_label, energy)
+            title = '%s\nE=%.2f eV'%(series_label, energy)
             data = stm_series[series_label]
             ax = plt.gca()
-            make_plot(fig, ax, data[:, :, i_e], extent, title=title, cmap=cmap, noadd=False)
+            make_plot(fig, ax, data[:, :, i_e], extent, title=title, title_size=title_font_size, cmap=cmap, noadd=False)
             
             series_name = series_label.lower().replace(" ", '_').replace("=", '').replace(",", '')
-            plot_name = "/%s_%03de%.2f.png" % (series_name, i_e, energy)
-            plt.savefig(stm_dir + plot_name, dpi=200, bbox_inches='tight')
+            plot_name = "/%s_%03de%.2f" % (series_name, i_e, energy)
+            plt.savefig(stm_dir + plot_name + ".png", dpi=200, bbox_inches='tight')
             plt.close()
+
+            # ---------------------------------------------------
+            # export IGOR format
+            igorwave = igor.Wave2d(
+                    data=data[:, :, i_e],
+                    xmin=extent[0],
+                    xmax=extent[1],
+                    xlabel='x [Angstroms]',
+                    ymin=extent[2],
+                    ymax=extent[3],
+                    ylabel='y [Angstroms]',
+            )
+            igorwave.write(stm_itx_dir + plot_name + ".itx")
+            # ---------------------------------------------------
+
+
+
+if args.stm_npz is not None:
+
+    stm_dir = args.output_dir + "./stm"
+    if not os.path.exists(stm_dir):
+        os.makedirs(stm_dir)
+    
+    stm_itx_dir = args.output_dir + "./stm_itx"
+    if not os.path.exists(stm_itx_dir):
+        os.makedirs(stm_itx_dir)
+
+    loaded_data = np.load(args.stm_npz)
+ 
+    plot_stm_series(loaded_data, stm_dir, stm_itx_dir)
 
 
 ### ----------------------------------------------------------------------
@@ -141,40 +172,53 @@ if args.orb_npz is not None:
     if not os.path.exists(orb_dir):
         os.makedirs(orb_dir)
 
+    orb_itx_dir = args.output_dir + "./orb_itx"
+    if not os.path.exists(orb_itx_dir):
+        os.makedirs(orb_itx_dir)
+
     loaded_data = np.load(args.orb_npz)
+
+    plot_stm_series(loaded_data, orb_dir, orb_itx_dir)
  
-    orbital_data = loaded_data['orbitals']
+    ch_orbs = loaded_data['ch_orbs']
+    cc_orbs = loaded_data['cc_orbs'].astype(np.float32)
+
     heights = loaded_data['heights']
-    orb_indexes = loaded_data['orb_list']
+    isovalues = loaded_data['isovalues']
+    orb_indexes = loaded_data['orbital_list']
     energies = loaded_data['energies']
+    e_arr = loaded_data['e_arr']
     x_arr = loaded_data['x_arr'] * 0.529177
     y_arr = loaded_data['y_arr'] * 0.529177
     
-    nspin = len(orbital_data)
+    nspin = len(ch_orbs)
 
     ### ----------------------------------------------------
     ### Create series
     orbital_series = {}
     
     ### Labels for each image in the series
-    labels = {}
+    orb_labels = []
     
     for i_spin in range(nspin):
+        orb_labels.append([])
+        for i_loc, i_orb in enumerate(orb_indexes[i_spin]):
+            if i_orb <= 0:
+                label = "HOMO%+d E=%.4f eV" % (i_orb, energies[i_spin][i_loc])
+            else:
+                label = "LUMO%+d E=%.4f eV" % (i_orb-1, energies[i_spin][i_loc])
+            orb_labels[-1].append(label)
+
         for i_h, h in enumerate(heights):
             series_1 = "orb h=%.1f, s%d" % (h, i_spin)
             series_2 = "orb^2 h=%.1f, s%d" % (h, i_spin)
-            orbital_series[series_1] = orbital_data[i_spin, i_h, :, :, :]
-            orbital_series[series_2] = orbital_data[i_spin, i_h, :, :, :]**2
-            
-            labels[series_1] = []
-            labels[series_2] = []
-            for i_loc, i_orb in enumerate(orb_indexes):
-                if i_orb <= 0:
-                    label = "HOMO%+d E=%.4f eV" % (i_orb, energies[i_spin][i_loc])
-                else:
-                    label = "LUMO%+d E=%.4f eV" % (i_orb-1, energies[i_spin][i_loc])
-                labels[series_1].append(label)
-                labels[series_2].append(label)
+            orbital_series[series_1] = ch_orbs[i_spin, i_h, :, :, :]
+            orbital_series[series_2] = ch_orbs[i_spin, i_h, :, :, :]**2
+
+        for i_isov, isov in enumerate(isovalues):
+            series_3 = "orb isov=%.0e, s%d" % (isov, i_spin)
+            orbital_series[series_3] = cc_orbs[i_spin, i_isov, :, :, :]
+        
     
     ### ----------------------------------------------------
     extent = [np.min(x_arr), np.max(x_arr), np.min(y_arr), np.max(y_arr)]
@@ -182,12 +226,17 @@ if args.orb_npz is not None:
     figure_xy_ratio = (np.max(x_arr)-np.min(x_arr)) / (np.max(y_arr)-np.min(y_arr))
 
     for series_label, series in orbital_series.items():
-        for i_orb_loc, i_orb in enumerate(orb_indexes):
+        if "s0" in series_label:
+            i_spin = 0
+        else:
+            i_spin = 1
+
+        for i_orb_loc, i_orb in enumerate(orb_indexes[i_spin]):
             fig = plt.figure(figsize=(fig_y*figure_xy_ratio, fig_y))
 
-            cmap = 'gist_heat'
+            plot_label = orb_labels[i_spin][i_orb_loc]
 
-            title = '%s\n%s'%(series_label, labels[series_label][i_orb_loc])
+            title = '%s\n%s'%(series_label, plot_label)
             data = orbital_series[series_label]
             ax = plt.gca()
 
@@ -195,12 +244,26 @@ if args.orb_npz is not None:
                 cmap = 'seismic'
                 center0 = True
             else:
-                cmap = 'gist_heat'
+                cmap = 'seismic'
                 center0 = False
 
-            make_plot(fig, ax, data[i_orb_loc, :, :], extent, title=title, center0=center0, cmap=cmap, noadd=False)
+            make_plot(fig, ax, data[i_orb_loc, :, :], extent, title=title, title_size=title_font_size, center0=center0, cmap=cmap, noadd=False)
 
-            series_name = series_label + "_%02d" % i_orb_loc + labels[series_label][i_orb_loc]
-            plot_name = "/" + series_name.lower().replace(" ", '_').replace("=", '').replace('^', '').replace(',', '') + ".png"
-            plt.savefig(orb_dir + plot_name, dpi=200, bbox_inches='tight')
+            series_name = series_label + "_%02d" % i_orb_loc + plot_label
+            plot_name = "/" + series_name.lower().replace(" ", '_').replace("=", '').replace('^', '').replace(',', '') 
+            plt.savefig(orb_dir + plot_name + ".png", dpi=200, bbox_inches='tight')
             plt.close()
+
+            # ---------------------------------------------------
+            # export IGOR format
+            igorwave = igor.Wave2d(
+                    data=data[i_orb_loc, :, :],
+                    xmin=extent[0],
+                    xmax=extent[1],
+                    xlabel='x [Angstroms]',
+                    ymin=extent[2],
+                    ymax=extent[3],
+                    ylabel='y [Angstroms]',
+            )
+            igorwave.write(orb_itx_dir + plot_name + ".itx")
+            # ---------------------------------------------------

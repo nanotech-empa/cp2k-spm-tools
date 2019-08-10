@@ -62,21 +62,6 @@ parser.add_argument(
     default="./orb.npz",
     help='File, where to save the orbital output')
 ### ----------------------------------------------------------------------
-### Select energy/orbital range
-parser.add_argument(
-    '--emin',
-    type=float,
-    metavar='E',
-    default=-2.0,
-    help='Lowest energy value for selecting orbitals (eV).')
-parser.add_argument(
-    '--emax',
-    type=float,
-    metavar='E',
-    default=2.0,
-    help='Highest energy value for selecting orbitals (eV).')
-
-### ----------------------------------------------------------------------
 ### Parameters for putting orbitals on grid
 parser.add_argument(
     '--eval_region',
@@ -96,7 +81,7 @@ parser.add_argument(
     '--eval_cutoff',
     type=float,
     metavar='D',
-    default=14.0,
+    default=16.0,
     help=("Size of the region around the atom where each"
           " orbital is evaluated (only used for 'G' region).")
 )
@@ -104,12 +89,23 @@ parser.add_argument(
     '--extrap_extent',
     type=float,
     metavar='H',
-    default=5.0,
+    default=4.0,
     required=True,
     help="The extent of the extrapolation region. (angstrom)")
-
 ### ----------------------------------------------------------------------
-### Parameters for orbital CH images
+### Gas phase analysis parameters
+parser.add_argument(
+    '--n_homo',
+    type=int,
+    metavar='N',
+    default=0,
+    help="Number of HOMO orbitals to analyse.")
+parser.add_argument(
+    '--n_lumo',
+    type=int,
+    metavar='N',
+    default=0,
+    help="Number of LUMO orbitals to analyse.")
 parser.add_argument(
     '--orb_heights',
     nargs='*',
@@ -117,18 +113,35 @@ parser.add_argument(
     metavar='H',
     help="List of heights for constant height orbital pictures (wrt topmost atom).")
 parser.add_argument(
-    '--n_homo_ch',
-    type=int,
-    metavar='N',
-    default=0,
-    help="Number of HOMO orbitals to export at '--orb_heights'.")
+    '--orb_isovalues',
+    nargs='*',
+    type=float,
+    metavar='C',
+    help="List of charge density isovalues for constant current orbital pictures")
 parser.add_argument(
-    '--n_lumo_ch',
-    type=int,
-    metavar='N',
-    default=0,
-    help="Number of LUMO orbitals to export at '--orb_heights'.")
-
+    '--orb_fwhms',
+    nargs='*',
+    type=float,
+    default=[0.02],
+    help="Full width at half maximum for orbital STS gaussian broadening. (eV)")
+### ----------------------------------------------------------------------
+### Slab system analysis parameters
+###
+### Option 1: continuous selection
+parser.add_argument(
+    '--energy_range',
+    nargs=3,
+    type=float,
+    metavar='E',
+    help='Selection of STM/STS energy values based on a range: min, max and differential.')
+###
+### Option 2: discrete selection
+parser.add_argument(
+    '--energies',
+    nargs='*',
+    type=float,
+    metavar='E',
+    help='Discrete energies where to run the STM/STS.')
 ### ----------------------------------------------------------------------
 ### Parameters for STM/STS series
 parser.add_argument(
@@ -144,14 +157,10 @@ parser.add_argument(
     metavar='C',
     help="List of charge density isovalues for constant current STM pictures.")
 parser.add_argument(
-    '--de',
+    '--fwhms',
+    nargs='*',
     type=float,
-    default=0.05,
-    help="Energy discretization for STS. (eV)")
-parser.add_argument(
-    '--fwhm',
-    type=float,
-    default=0.1,
+    default=[0.1],
     help="Full width at half maximum for STS gaussian broadening. (eV)")
 
 
@@ -177,6 +186,26 @@ if not args_success:
 args = comm.bcast(args, root=0)
 
 ### ------------------------------------------------------
+### Energy values for STM/STS
+### ------------------------------------------------------
+
+if args.energies is not None:
+    e_arr = np.array(args.energies)
+elif args.energy_range is not None:
+    emin, emax, de = args.energy_range
+    e_arr = np.arange(emin, emax+de/2, de)
+else:
+    e_arr = None
+
+max_fwhm = np.max(args.fwhms)
+if e_arr is not None:
+    sel_emin = np.min(e_arr) - 2.0*max_fwhm
+    sel_emax = np.max(e_arr) + 2.0*max_fwhm
+else:
+    sel_emin = None
+    sel_emax = None
+
+### ------------------------------------------------------
 ### Evaluate orbitals on the real-space grid
 ### ------------------------------------------------------
 
@@ -186,9 +215,11 @@ cp2k_grid_orb.read_xyz(args.xyz_file)
 cp2k_grid_orb.center_atoms_to_cell()
 cp2k_grid_orb.read_basis_functions(args.basis_set_file)
 cp2k_grid_orb.load_restart_wfn_file(args.wfn_file,
-                                    emin=args.emin-2.0*args.fwhm, emax=args.emax+2.0*args.fwhm,
-                                    n_homo=args.n_homo_ch, n_lumo=args.n_lumo_ch
+                                    emin=sel_emin, emax=sel_emax,
+                                    n_occ=args.n_homo, n_virt=args.n_lumo
 )
+
+
 
 print("R%d/%d: loaded wfn, %.2fs"%(mpi_rank, mpi_size, (time.time() - time0)))
 sys.stdout.flush()
@@ -223,29 +254,46 @@ sys.stdout.flush()
 time1 = time.time()
 
 ### ------------------------------------------------------
-### Export orbitals
+### Set up STM object
 ### ------------------------------------------------------
 
-if (args.n_homo_ch > 0 or args.n_lumo_ch > 0) and len(args.orb_heights) > 0:
-    orbital_list = list(range(-args.n_homo_ch + 1, args.n_lumo_ch + 1))
-    cp2k_grid_orb.collect_and_save_ch_orbitals(orbital_list, args.orb_heights, path=args.orb_output_file)
+stm = css.STM(mpi_comm = comm, cp2k_grid_orb = cp2k_grid_orb)
+stm.gather_global_energies()
+stm.divide_by_space()
 
 ### ------------------------------------------------------
-### Run STM-STS analysis
+### Run STM-STS analysis for orbitals
+### ------------------------------------------------------
+
+orb_heights = args.orb_heights if args.orb_heights is not None else []
+orb_isovalues = args.orb_isovalues if args.orb_isovalues is not None else []
+orb_fwhms = args.orb_fwhms if args.orb_fwhms is not None else []
+
+if len(orb_fwhms) != 0 and (len(orb_heights) != 0 or len(orb_isovalues) != 0):
+
+    orbital_list = list(range(-args.n_homo + 1, args.n_lumo + 1))
+
+    stm.create_orbital_images(orbital_list, orb_heights, orb_isovalues)
+
+    orbital_list_wrt_0 = list(np.array(orbital_list) + stm.cgo.i_homo_glob[0])
+    orbital_energies = stm.global_morb_energies[0][orbital_list_wrt_0]
+
+    stm.calculate_stm_maps(orb_fwhms, orb_isovalues, orb_heights, orbital_energies)
+
+    stm.collect_and_save_orb_maps(path=args.orb_output_file)
+
+### ------------------------------------------------------
+### Run STM-STS analysis for general energies
 ### ------------------------------------------------------
 
 heights = args.heights if args.heights is not None else []
 isovalues = args.isovalues if args.isovalues is not None else []
+fwhms = args.fwhms if args.fwhms is not None else []
 
-if len(heights) != 0 or len(isovalues) != 0:
+if e_arr is not None and len(fwhms) != 0 and (len(heights) != 0 or len(isovalues) != 0):
 
-    stm = css.STM(mpi_comm = comm, cp2k_grid_orb = cp2k_grid_orb)
+    stm.calculate_stm_maps(fwhms, isovalues, heights, e_arr)
 
-    stm.gather_global_energies()
-    stm.divide_by_space()
-
-    stm.calculate_maps(isovalues, heights, args.emin, args.emax, args.de, args.fwhm)
-
-    stm.collect_and_save_maps(path=args.output_file)
+    stm.collect_and_save_stm_maps(path=args.output_file)
 
 print("R%d/%d: finished, total time: %.2fs"%(mpi_rank, mpi_size, (time.time() - time0)))

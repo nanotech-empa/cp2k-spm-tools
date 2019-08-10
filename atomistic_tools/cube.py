@@ -64,8 +64,8 @@ class Cube:
     def read_cube_file(self, filename):
 
         f = open(filename, 'r')
-        self.title = f.readline()
-        self.comment = f.readline()
+        self.title = f.readline().rstrip()
+        self.comment = f.readline().rstrip()
 
         line = f.readline().split()
         natoms = int(line[0])
@@ -115,4 +115,8 @@ class Cube:
         plane_index = int(np.round(plane_z/self.cell[2, 2]*np.shape(self.data)[2]))
         return self.data[:, :, plane_index]
 
+    @property
+    def dv(self):
+        """ in [ang] """
+        return self.cell/self.data.shape/ang_2_bohr
 
