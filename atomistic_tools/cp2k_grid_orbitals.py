@@ -601,8 +601,8 @@ class Cp2kGridOrbitals:
 
             energy = morb_energies[morb_index]/hart_2_ev
             if energy > hartree_avg:
-                print("Warning: unbound state, can't extrapolate! index: %d. Exiting." % morb_index)
-                break
+                print("Warning: unbound state, can't extrapolate! index: %d. Constant extrapolation." % morb_index)
+                energy = hartree_avg
 
             fourier = np.fft.rfft2(morb_plane)
             # NB: rfft2 takes REAL fourier transform over last (y) axis and COMPLEX over other (x) axes

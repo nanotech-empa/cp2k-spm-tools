@@ -376,7 +376,6 @@ class Cp2kWfnFile:
             print("R%d/%d, loading indexes (s%d/%d) %d:%d / %d:%d"%(self.mpi_rank, self.mpi_size,
                 ispin, self.nspin, loc_ind_start, loc_ind_end-1, ind_start, ind_end-1))
             
-            print(ind_start, ind_end)
 
             self.evals_sel.append(self.evals[ispin][ind_start:ind_end])
             self.occs_sel.append(self.occs[ispin][ind_start:ind_end])
