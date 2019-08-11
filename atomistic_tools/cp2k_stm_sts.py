@@ -251,19 +251,26 @@ class STM:
             ch_sts = np.concatenate((ch_sts_n, ch_sts_p), axis=4)
             ch_stm = np.concatenate((ch_stm_n, ch_stm_p), axis=4)
 
+        # Move energy axis to position 2
+        cc_sts = np.moveaxis(cc_sts, 4, 2)
+        cc_stm = np.moveaxis(cc_stm, 4, 2)
+        ch_sts = np.moveaxis(ch_sts, 4, 2)
+        ch_stm = np.moveaxis(ch_stm, 4, 2)
+
         self.stm_maps_data['cc_sts'] = cc_sts
         self.stm_maps_data['cc_stm'] = cc_stm
         self.stm_maps_data['ch_sts'] = ch_sts
         self.stm_maps_data['ch_stm'] = ch_stm
 
     
-    def apply_zero_threshold(self, data_array, z_thresh):
+    def apply_zero_threshold(self, data_array, zero_thresh):
         # apply it to every energy slice independently
-        for i_series in range(data_array.shape[0]):
-            for i_e in range(data_array.shape[3]):
-                sli = data_array[i_series, :, :, i_e]
-                slice_absmax = np.max(np.abs(sli))
-                sli[np.abs(sli) < slice_absmax*z_thresh] = 0.0
+        for i_0 in range(data_array.shape[0]): # spin or fwhm
+            for i_series in range(data_array.shape[1]):
+                for i_e in range(data_array.shape[2]):
+                    sli = data_array[i_0, i_series, i_e, :, :]
+                    slice_absmax = np.max(np.abs(sli))
+                    sli[np.abs(sli) < slice_absmax*zero_thresh] = 0.0
 
     def collect_local_grid(self, local_arr, global_shape, to_rank = 0):
         """
@@ -297,17 +304,17 @@ class STM:
         n_ch = len(self.stm_maps_data['heights'])
         n_fwhms = len(self.stm_maps_data['fwhms'])
 
-        cc_sts = self.collect_local_grid(self.stm_maps_data['cc_sts'].swapaxes(0, 2), np.array([nx, n_cc, n_fwhms, ny, ne]))
-        cc_stm = self.collect_local_grid(self.stm_maps_data['cc_stm'].swapaxes(0, 2), np.array([nx, n_cc, n_fwhms, ny, ne]))
-        ch_sts = self.collect_local_grid(self.stm_maps_data['ch_sts'].swapaxes(0, 2), np.array([nx, n_ch, n_fwhms, ny, ne]))
-        ch_stm = self.collect_local_grid(self.stm_maps_data['ch_stm'].swapaxes(0, 2), np.array([nx, n_ch, n_fwhms, ny, ne]))
+        cc_sts = self.collect_local_grid(self.stm_maps_data['cc_sts'].swapaxes(0, 3), np.array([nx, n_cc, ne, n_fwhms, ny]))
+        cc_stm = self.collect_local_grid(self.stm_maps_data['cc_stm'].swapaxes(0, 3), np.array([nx, n_cc, ne, n_fwhms, ny]))
+        ch_sts = self.collect_local_grid(self.stm_maps_data['ch_sts'].swapaxes(0, 3), np.array([nx, n_ch, ne, n_fwhms, ny]))
+        ch_stm = self.collect_local_grid(self.stm_maps_data['ch_stm'].swapaxes(0, 3), np.array([nx, n_ch, ne, n_fwhms, ny]))
         
         if self.mpi_rank == 0:
             # back to correct orientation
-            cc_sts = cc_sts.swapaxes(2, 0)
-            cc_stm = cc_stm.swapaxes(2, 0)
-            ch_sts = ch_sts.swapaxes(2, 0)
-            ch_stm = ch_stm.swapaxes(2, 0)
+            cc_sts = cc_sts.swapaxes(3, 0)
+            cc_stm = cc_stm.swapaxes(3, 0)
+            ch_sts = ch_sts.swapaxes(3, 0)
+            ch_stm = ch_stm.swapaxes(3, 0)
 
             save_data = {}
             save_data['cc_stm'] = cc_stm.astype(np.float16) # all values either way ~ between -2 and 8
@@ -316,10 +323,10 @@ class STM:
             save_data['ch_sts'] = ch_sts.astype(np.float32)
             ### ----------------
             ### Reduce filesize further by zero threshold
-            z_thres = 1e-3
-            #self.apply_zero_threshold(save_data['cc_sts'], z_thres)
-            #self.apply_zero_threshold(save_data['ch_stm'], z_thres)
-            #self.apply_zero_threshold(save_data['ch_sts'], z_thres)
+            zero_thresh = 1e-3
+            self.apply_zero_threshold(save_data['cc_sts'], zero_thresh)
+            self.apply_zero_threshold(save_data['ch_stm'], zero_thresh)
+            self.apply_zero_threshold(save_data['ch_sts'], zero_thresh)
             ### ----------------
 
             # additionally add info
@@ -473,10 +480,10 @@ class STM:
 
         ### collect STM/STS maps at orbital energies
 
-        cc_sts = self.collect_local_grid(self.stm_maps_data['cc_sts'].swapaxes(0, 2), np.array([nx, n_cc, n_fwhms, ny, ne]))
-        cc_stm = self.collect_local_grid(self.stm_maps_data['cc_stm'].swapaxes(0, 2), np.array([nx, n_cc, n_fwhms, ny, ne]))
-        ch_sts = self.collect_local_grid(self.stm_maps_data['ch_sts'].swapaxes(0, 2), np.array([nx, n_ch, n_fwhms, ny, ne]))
-        ch_stm = self.collect_local_grid(self.stm_maps_data['ch_stm'].swapaxes(0, 2), np.array([nx, n_ch, n_fwhms, ny, ne]))
+        cc_sts = self.collect_local_grid(self.stm_maps_data['cc_sts'].swapaxes(0, 3), np.array([nx, n_cc, ne, n_fwhms, ny]))
+        cc_stm = self.collect_local_grid(self.stm_maps_data['cc_stm'].swapaxes(0, 3), np.array([nx, n_cc, ne, n_fwhms, ny]))
+        ch_sts = self.collect_local_grid(self.stm_maps_data['ch_sts'].swapaxes(0, 3), np.array([nx, n_ch, ne, n_fwhms, ny]))
+        ch_stm = self.collect_local_grid(self.stm_maps_data['ch_stm'].swapaxes(0, 3), np.array([nx, n_ch, ne, n_fwhms, ny]))
 
         if self.mpi_rank == 0:
 
@@ -485,10 +492,10 @@ class STM:
             ch_orbs = ch_orbs.swapaxes(3, 0)
             cc_orbs = cc_orbs.swapaxes(3, 0)
 
-            cc_sts = cc_sts.swapaxes(2, 0)
-            cc_stm = cc_stm.swapaxes(2, 0)
-            ch_sts = ch_sts.swapaxes(2, 0)
-            ch_stm = ch_stm.swapaxes(2, 0)
+            cc_sts = cc_sts.swapaxes(3, 0)
+            cc_stm = cc_stm.swapaxes(3, 0)
+            ch_sts = ch_sts.swapaxes(3, 0)
+            ch_stm = ch_stm.swapaxes(3, 0)
 
             save_data = {}
             save_data['cc_stm'] = cc_stm.astype(np.float16) # all values either way ~ between -2 and 8
@@ -501,11 +508,11 @@ class STM:
 
             ### ----------------
             ### Reduce filesize further by zero threshold
-            z_thres = 1e-3
-            #self.apply_zero_threshold(save_data['cc_sts'], z_thres)
-            #self.apply_zero_threshold(save_data['ch_stm'], z_thres)
-            #self.apply_zero_threshold(save_data['ch_sts'], z_thres)
-            #self.apply_zero_threshold(save_data['ch_orbs'], z_thres)
+            zero_thresh = 1e-3
+            self.apply_zero_threshold(save_data['cc_sts'], zero_thresh)
+            self.apply_zero_threshold(save_data['ch_stm'], zero_thresh)
+            self.apply_zero_threshold(save_data['ch_sts'], zero_thresh)
+            self.apply_zero_threshold(save_data['ch_orbs'], zero_thresh)
             ### ----------------
             # additionally add info
             save_data['orbital_list'] = self.orb_maps_data['orbital_list'] 

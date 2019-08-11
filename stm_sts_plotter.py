@@ -124,7 +124,7 @@ def plot_stm_series(loaded_data, stm_dir, stm_itx_dir):
             title = '%s\nE=%.2f eV'%(series_label, energy)
             data = stm_series[series_label]
             ax = plt.gca()
-            make_plot(fig, ax, data[:, :, i_e], extent, title=title, title_size=title_font_size, cmap=cmap, noadd=False)
+            make_plot(fig, ax, data[i_e, :, :], extent, title=title, title_size=title_font_size, cmap=cmap, noadd=False)
             
             series_name = series_label.lower().replace(" ", '_').replace("=", '').replace(",", '')
             plot_name = "/%s_%03de%.2f" % (series_name, i_e, energy)
@@ -134,7 +134,7 @@ def plot_stm_series(loaded_data, stm_dir, stm_itx_dir):
             # ---------------------------------------------------
             # export IGOR format
             igorwave = igor.Wave2d(
-                    data=data[:, :, i_e],
+                    data=data[i_e, :, :],
                     xmin=extent[0],
                     xmax=extent[1],
                     xlabel='x [Angstroms]',
