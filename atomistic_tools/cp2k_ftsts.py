@@ -153,13 +153,6 @@ class FTSTS:
                 # Produce FTLDOS
                 self.ftldos += np.outer(self.morb_fts[ispin][:, i_mo], self.gaussian(self.e_arr - en_mo, fwhm))
 
-    def align_middle_of_gap(self):
-        cp2k_lumo_en =  self.cp2k_grid_orb.morb_energies[0][self.cp2k_grid_orb.homo_inds[0][0] + 1]
-        self.ldos_extent[2] -= cp2k_lumo_en/2
-        self.ldos_extent[3] -= cp2k_lumo_en/2
-        self.ftldos_extent[2] -= cp2k_lumo_en/2
-        self.ftldos_extent[3] -= cp2k_lumo_en/2
-
     def get_ftldos_bz(self, nbz, lattice_param):
         """
         Return part of previously calculated FTLDOS, which corresponds
