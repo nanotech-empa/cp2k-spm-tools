@@ -44,15 +44,15 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-class FormatScalarFormatter(matplotlib.ticker.ScalarFormatter):
-    def __init__(self, fformat="%1.1f", offset=True, mathText=True):
-        self.fformat = fformat
-        matplotlib.ticker.ScalarFormatter.__init__(self,useOffset=offset,
-                                                        useMathText=mathText)
-    def _set_format(self, vmin, vmax):
-        self.format = self.fformat
-        if self._useMathText:
-            self.format = '$%s$' % matplotlib.ticker._mathdefault(self.format)
+#class FormatScalarFormatter(matplotlib.ticker.ScalarFormatter):
+#    def __init__(self, fformat="%1.1f", offset=True, mathText=True):
+#        self.fformat = fformat
+#        matplotlib.ticker.ScalarFormatter.__init__(self,useOffset=offset,
+#                                                        useMathText=mathText)
+#    def _set_format(self, vmin, vmax):
+#        self.format = self.fformat
+#        if self._useMathText:
+#            self.format = '$%s$' % matplotlib.ticker._mathdefault(self.format)
 
 def make_plot(fig, ax, data, extent, title=None, title_size=None, center0=False, vmin=None, vmax=None, cmap='gist_heat', noadd=False):
     if center0:
@@ -67,10 +67,11 @@ def make_plot(fig, ax, data, extent, title=None, title_size=None, center0=False,
     else:
         ax.set_xlabel(r"x ($\AA$)")
         ax.set_ylabel(r"y ($\AA$)")
-        if 1e-3 < np.max(data) < 1e3:
-            cb = fig.colorbar(im, ax=ax)
-        else:
-            cb = fig.colorbar(im, ax=ax, format=FormatScalarFormatter("%.1f"))
+    #    if 1e-3 < np.max(data) < 1e3:
+    #        cb = fig.colorbar(im, ax=ax)
+    #    else:
+    #        cb = fig.colorbar(im, ax=ax, format=FormatScalarFormatter("%.1f"))
+        cb = fig.colorbar(im, ax=ax)
         cb.formatter.set_powerlimits((-2, 2))
         cb.update_ticks()
     ax.set_title(title, loc='left')

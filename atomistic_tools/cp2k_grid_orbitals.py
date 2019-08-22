@@ -4,8 +4,12 @@ Tools to put CP2K orbitals on a real space grid
 
 import os
 import numpy as np
+
 import scipy
 import scipy.io
+import scipy.interpolate
+import scipy.ndimage
+
 import time
 import copy
 import sys
@@ -14,8 +18,6 @@ import re
 import io
 import ase
 import ase.io
-
-import scipy.ndimage
 
 from .cube import Cube
 from .cp2k_wfn_file import Cp2kWfnFile
@@ -44,10 +46,11 @@ class Cp2kGridOrbitals:
 
         # geometry
         self.cell = None # Bohr radii / [au]
-        self.ase_atoms = None 
+        self.ase_atoms = None
+        self.atom_kinds = None # saves the kind for each atom
 
         # Basis set
-        self.elem_basis_name = None # basis set names we are using for elements
+        self.kind_elem_basis = None # element [1] and basis set name [2] for each kind
         self.basis_sets = None
 
         # The global energy limits when loading the orbitals
@@ -83,10 +86,10 @@ class Cp2kGridOrbitals:
     def read_cp2k_input(self, cp2k_input_file):
         """
         Reads from the cp2k input file:
-        * Basis set names for all elements
+        * Basis set names for all kinds
         * Cell size
         """
-        self.elem_basis_name = {}
+        self.kind_elem_basis = {}
         self.cell = np.zeros(3)
         with open(cp2k_input_file) as f:
             lines = f.readlines()
@@ -96,13 +99,36 @@ class Cp2kGridOrbitals:
                     continue
                 # Have we found the basis set info?
                 if parts[0] == "&KIND":
-                    elem = parts[1]
-                    for j in range(10):
+                    kind = parts[1]
+                    elem = None
+                    basis_name = None
+                    ## Loop over the proceeding lines to find the BASIS_SET and ELEMENT
+                    for j in range(1, 16):
                         parts = lines[i+j].split()
+                        if parts[0] == "ELEMENT":
+                            elem = parts[1]
                         if parts[0] == "BASIS_SET":
-                            basis = parts[1]
-                            self.elem_basis_name[elem] = basis
+                            basis_name = parts[1]
+                        if "&KIND" in lines[i+j]:
+                            # We are entering in another KIND section, stop
                             break
+                    if elem is None:
+                        # if ELEMENT was not explicitly stated
+                        if kind in ase.data.chemical_symbols:
+                            # kind itself is the element
+                            elem = kind
+                        else:
+                            # remove numbers
+                            kind_no_nr = ''.join([i for i in kind if not i.isdigit()])
+                            # remove anything appended by '_' or '-'
+                            kind_processed = kind_no_nr.replace("_", ' ').replace("-", ' ').split()[0]
+                            if kind_processed in ase.data.chemical_symbols:
+                                elem = kind_processed
+                            else:
+                                print("Error: couldn't determine element for kind '%s'" % kind)
+                                exit(1)
+                    self.kind_elem_basis[kind] = (elem, basis_name)
+
                 # Have we found the CELL info?
                 if parts[0] == "ABC":   
                     if parts[1] == "[angstrom]":
@@ -132,10 +158,17 @@ class Cp2kGridOrbitals:
     def read_xyz(self, file_xyz):
         """ Read atomic positions from .xyz file (in Bohr radiuses) """
         with open(file_xyz) as f:
-            fxyz_contents = f.read()
-        # Replace custom elements (e.g. for spin-pol calcs)
-        fxyz_contents = re.sub("([a-zA-Z]+)[0-9]+", r"\1", fxyz_contents)
-        self.ase_atoms = ase.io.read(io.StringIO(fxyz_contents), format="xyz")
+            fxyz_contents = f.readlines()
+
+        self.atom_kinds = []
+        for i_line, line in enumerate(fxyz_contents):
+            if i_line >= 2:
+                kind = line.split()[0]
+                self.atom_kinds.append(kind)
+                # Replace custom kinds with their corresponding element (e.g. for spin-pol calcs)
+                fxyz_contents[i_line] = self.kind_elem_basis[kind][0] + " " + " ".join(line.split()[1:]) + "\n"
+
+        self.ase_atoms = ase.io.read(io.StringIO("".join(fxyz_contents)), format="xyz")
 
         if self.cell is not None:
             self.ase_atoms.cell = self.cell / ang_2_bohr
@@ -150,7 +183,7 @@ class Cp2kGridOrbitals:
     def _magic_basis_normalization(self, basis_sets_):
         """ Normalizes basis sets to be compatible with cp2k """
         basis_sets = copy.deepcopy(basis_sets_)
-        for elem, bsets in basis_sets.items():
+        for kind, bsets in basis_sets.items():
             for bset in bsets:
                 for shell in bset:
                     l = shell[0]
@@ -172,54 +205,66 @@ class Cp2kGridOrbitals:
         return basis_sets
 
     def read_basis_functions(self, basis_set_file):
-        """ Reads the basis sets from basis_set_file specified in elem_basis_name
+        """ Reads the basis sets from basis_set_file specified in kind_elem_basis
 
         returns:
-        basis_sets["Element"] = 
+        basis_sets["kind"] = 
         """
         self.basis_sets = {}
+        used_elems_bases = list(self.kind_elem_basis.values())
+        corresp_kinds = list(self.kind_elem_basis.keys())
+
         with open(basis_set_file) as f:
             lines = f.readlines()
             for i in range(len(lines)):
                 parts = lines[i].split()
-                if len(parts) == 0:
+                if len(parts) <= 1:
                     continue
-                if parts[0] in self.elem_basis_name:
-                    elem = parts[0]
-                    if parts[1] == self.elem_basis_name[elem] or (len(parts) > 2 and parts[2] == self.elem_basis_name[elem]):
-                        # We have found the correct basis set
-                        basis_functions = []
-                        nsets = int(lines[i+1])
-                        cursor = 2
-                        for j in range(nsets):
-                            
-                            basis_functions.append([])
 
-                            comp = [int(x) for x in lines[i+cursor].split()]
-                            n_princ, l_min, l_max, n_exp = comp[:4]
-                            l_arr = np.arange(l_min, l_max+1, 1)
-                            n_basisf_for_l = comp[4:]
-                            assert len(l_arr) == len(n_basisf_for_l)
+                elem = parts[0]
+                trial_1 = (elem, parts[1])
+                trial_2 = None
+                if len(parts) > 2:
+                    trial_2 = (elem, parts[2])
+                
+                if trial_1 in used_elems_bases or trial_2 in used_elems_bases:
+                    # We have a basis set we're using
+                    # find all kinds using this basis set:
+                    kinds = [corresp_kinds[i] for i, e_b in enumerate(used_elems_bases) if e_b == trial_1 or e_b == trial_2]
 
-                            exps = []
-                            coeffs = []
+                    basis_functions = []
+                    nsets = int(lines[i+1])
+                    cursor = 2
+                    for j in range(nsets):
+                        
+                        basis_functions.append([])
 
-                            for k in range(n_exp):
-                                exp_c = [float(x) for x in lines[i+cursor+k+1].split()]
-                                exps.append(exp_c[0])
-                                coeffs.append(exp_c[1:])
+                        comp = [int(x) for x in lines[i+cursor].split()]
+                        n_princ, l_min, l_max, n_exp = comp[:4]
+                        l_arr = np.arange(l_min, l_max+1, 1)
+                        n_basisf_for_l = comp[4:]
+                        assert len(l_arr) == len(n_basisf_for_l)
 
-                            exps = np.array(exps)
-                            coeffs = np.array(coeffs)
+                        exps = []
+                        coeffs = []
 
-                            indx = 0
-                            for l, nl in zip(l_arr, n_basisf_for_l):
-                                for il in range(nl):
-                                    basis_functions[-1].append([l, exps, coeffs[:, indx]])
-                                    indx += 1
-                            cursor += n_exp + 1
+                        for k in range(n_exp):
+                            exp_c = [float(x) for x in lines[i+cursor+k+1].split()]
+                            exps.append(exp_c[0])
+                            coeffs.append(exp_c[1:])
 
-                        self.basis_sets[elem] = basis_functions
+                        exps = np.array(exps)
+                        coeffs = np.array(coeffs)
+
+                        indx = 0
+                        for l, nl in zip(l_arr, n_basisf_for_l):
+                            for il in range(nl):
+                                basis_functions[-1].append([l, exps, coeffs[:, indx]])
+                                indx += 1
+                        cursor += n_exp + 1
+
+                    for kind in kinds:
+                        self.basis_sets[kind] = basis_functions
 
         self.basis_sets = self._magic_basis_normalization(self.basis_sets)
 
@@ -380,6 +425,7 @@ class Cp2kGridOrbitals:
         dr_guess -- spatial discretization step [ang], real value will change for every axis due to rounding  
         x_eval_region -- x evaluation (min, max) in [au]. If min == max, then evaluation only works on a plane.
                         If set, no PBC applied in direction and also no eval_cutoff.
+                        If left at None, the whole range of the cell is taken and PBCs are applied.
         eval_cutoff -- cutoff in [ang] for orbital evaluation if eval_region is None
         """
 
@@ -452,7 +498,8 @@ class Cp2kGridOrbitals:
         self.last_calc_iz = eval_cell_n[2] - 1
 
         for i_at in range(len(self.ase_atoms)):
-            elem = self.ase_atoms[i_at].symbol
+            #elem = self.ase_atoms[i_at].symbol
+            kind = self.atom_kinds[i_at]
             pos = self.ase_atoms[i_at].position * ang_2_bohr
 
             # how does the position match with the grid?
@@ -475,7 +522,7 @@ class Cp2kGridOrbitals:
             for ispin in range(nspin):
                 morb_grids_local[ispin].fill(0.0)
 
-            for i_set, bset in enumerate(self.basis_sets[elem]):
+            for i_set, bset in enumerate(self.basis_sets[kind]):
                 for i_shell, shell in enumerate(bset):
                     l = shell[0]
                     es = shell[1]
