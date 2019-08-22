@@ -102,16 +102,26 @@ class Cp2kGridOrbitals:
                     kind = parts[1]
                     elem = None
                     basis_name = None
+                    subsec_count = 0
+                    ## ---------------------------------------------------------------------
                     ## Loop over the proceeding lines to find the BASIS_SET and ELEMENT
-                    for j in range(1, 16):
-                        parts = lines[i+j].split()
+                    for j in range(1, 100):
+                        line = lines[i+j]
+                        if line.strip()[0] == '&' and not line.strip().startswith("&END"):
+                            # We entered into a subsection of kind
+                            subsec_count += 1
+                        if line.strip().startswith("&END"):
+                            # We are either leaving &KIND or a subsection
+                            if subsec_count == 0:
+                                break
+                            else:
+                                subsec_count -= 1
+                        parts = line.split()
                         if parts[0] == "ELEMENT":
                             elem = parts[1]
                         if parts[0] == "BASIS_SET":
                             basis_name = parts[1]
-                        if "&KIND" in lines[i+j]:
-                            # We are entering in another KIND section, stop
-                            break
+                    ## ---------------------------------------------------------------------
                     if elem is None:
                         # if ELEMENT was not explicitly stated
                         if kind in ase.data.chemical_symbols:
