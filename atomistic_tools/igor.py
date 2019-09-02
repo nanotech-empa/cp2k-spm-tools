@@ -27,13 +27,15 @@ def igor_wave_factory(fname):
     while not re.match("WAVES",line):
         line = lines.pop(0)
     # 1d or 2d?
-    waves_str, name = line.split()
     d2 = False
-    if "N=" in waves_str:
+    if "N=" in line:
         d2 = True
-        match = re.search("WAVES/N=\(([\d,]+)\)",waves_str)
+        match = re.search("WAVES/N=\(([\d, ]+)\)",line)
         grid = match.group(1).split(',')
         grid = np.array(grid, dtype=int)
+        name = line.split(")")[-1].strip()
+    else:
+        name = line.split()[-1]
 
     line = lines.pop(0).strip()
     if not line == "BEGIN":
@@ -50,20 +52,26 @@ def igor_wave_factory(fname):
         data = data.reshape(grid)
 
     # read axes
+    axes = []
     line = lines.pop(0)
     matches = re.findall("SetScale.+?(?:;|$)", line)
-    axes = []
     for match in matches:
         ax = Axis(None,None,None,None)
         ax.read(match)
         axes.append(ax)
     
-    # the rest is discarded...
-
     if d2:
+        # read also the second axis
+        line = lines.pop(0)
+        matches = re.findall("SetScale.+?(?:;|$)", line)
+        for match in matches:
+            ax = Axis(None,None,None,None)
+            ax.read(match)
+            axes.append(ax)
         return Wave2d(data, axes, name)
     else:
         return Wave1d(data, axes, name)
+        
 
 
 
@@ -93,7 +101,7 @@ class Axis(object):
         X SetScale/P x 0,2.01342281879195e-11,"m", data_00381_Up;
         SetScale d 0,0,"V", data_00381_Up
         """
-        match = re.search("SetScale/?P? (.) ([+-\.\de]+),([+-\.\de]+),\"(\w+)\",\s*(\w+)", string)
+        match = re.search("SetScale/?P? (.) ([+-\.\de]+),([+-\.\de]+),[ ]*\"(.+)\",\s*(\w+)", string)
         self.symbol = match.group(1)
         self.min = float(match.group(2))
         self.delta = float(match.group(3))
