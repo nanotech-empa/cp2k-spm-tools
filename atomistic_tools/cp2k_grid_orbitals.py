@@ -766,31 +766,32 @@ class Cp2kGridOrbitals:
         if self.mpi_rank == 0:
 
             def gaussian3d(r_arr, sigma):
-                sigma = fwhm/2.355
+                #sigma = fwhm/2.355
                 return 1/(sigma**3*(2*np.pi)**(3/2))*np.exp(-(r_arr**2/(2*sigma**2)))
             
-            x = np.arange(0.0, self.eval_cell[0], self.dv[0]) + self.origin[0]
-            y = np.arange(0.0, self.eval_cell[1], self.dv[1]) + self.origin[1]
-            z = np.arange(0.0, self.eval_cell[2], self.dv[2]) + self.origin[2]
+            x = np.linspace(0.0, self.eval_cell[0], self.eval_cell_n[0]) + self.origin[0]
+            y = np.linspace(0.0, self.eval_cell[1], self.eval_cell_n[1]) + self.origin[1]
+            z = np.linspace(0.0, self.eval_cell[2], self.eval_cell_n[2]) + self.origin[2]
 
             for at in self.ase_atoms:
                 if at.number == 1:
                     # No core density for H
                     continue
-                p = at.position*ang_2_bohr
+                p = at.position * ang_2_bohr
 
-                if (p[0] < np.min(x) - 0.5 or p[0] > np.max(x) > 0.5 or
-                        p[1] < np.min(y) - 0.5 or p[1] > np.max(y) > 0.5 or
-                        p[2] < np.min(z) - 0.5 or p[2] > np.max(z) > 0.5):
+                if (p[0] < np.min(x) - 0.5 or p[0] > np.max(x) + 0.5 or
+                        p[1] < np.min(y) - 0.5 or p[1] > np.max(y) + 0.5 or
+                        p[2] < np.min(z) - 0.5 or p[2] > np.max(z) + 0.5):
                     continue
 
-                x_grid, y_grid, z_grid = np.meshgrid(x - p[0], y - p[1], z - p[2], indexing='ij')
+                # Distance of the **Center** of each voxel to the atom 
+                x_grid, y_grid, z_grid = np.meshgrid(x - p[0] - self.dv[0]/2, y - p[1] - self.dv[1]/2, z - p[2] - self.dv[2]/2, indexing='ij')
                 r_grid = np.sqrt(x_grid**2 + y_grid**2 + z_grid**2)
                 x_grid = None
                 y_grid = None
-                z_grid = None
+                z_grid = None                
 
-                core_charge = at.number - 4 # Basically, it holds for C
+                core_charge = at.number - at.number % 8 # not exact...
 
                 #r_cut = 0.5
                 #hat_func = (1.0-r_grid/r_cut)
@@ -798,11 +799,17 @@ class Cp2kGridOrbitals:
                 #total_charge_dens = hat_func*core_charge*gaussian3d(r_grid, 1.0*r_cut) + (1.0-hat_func)*total_charge_dens
 
                 # EMPIRICAL PARAMETER 1
-                fwhm = 0.5 # ang
-                total_charge_dens = core_charge*gaussian3d(r_grid, fwhm) + total_charge_dens
+                #fwhm = 0.5 # ang
+                #total_charge_dens = core_charge*gaussian3d(r_grid, fwhm) + total_charge_dens
+
+                r_hat = 0.7
+                h_hat = 20.0
+                hat_func = (h_hat-h_hat*r_grid/r_hat)
+                hat_func[r_grid > r_hat] = 0.0
+                total_charge_dens = np.maximum(hat_func, total_charge_dens)
 
             # EMPIRICAL PARAMETER 2
-            total_charge_dens = scipy.ndimage.gaussian_filter(total_charge_dens, sigma = 0.4, mode='nearest')
+            #total_charge_dens = scipy.ndimage.gaussian_filter(total_charge_dens, sigma = 0.4, mode='nearest')
 
             c = Cube(title="charge density", comment="modif. cube", ase_atoms=self.ase_atoms,
                     origin=self.origin, cell=self.eval_cell*np.eye(3), data=total_charge_dens)

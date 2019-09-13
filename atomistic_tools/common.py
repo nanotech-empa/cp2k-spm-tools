@@ -19,7 +19,7 @@ def is_number(s):
 eval_region_description = (
     "Specify evaluation region limits [xmin xmax ymin ymax zmin zmax] (ang) as a string: "
     "'G' corresponds to global cell limit (also enables PBC if both of pair are 'G'); "
-    "a number specifies absolute position wrt cell zero; t/b and number (e.g. 't2.5') "
+    "a number specifies absolute position wrt cell zero; p/n and number (e.g. 'p2.5') "
     "specifies distance [ang] from furthest-extending atom in positive (p) or negative (n) "
     "direction. Number with _element ('p2.5_C') correspondingly from furthest atom of "
     "elem. If xmin=xmax (within 1e-4), then only a plane is assumed.")

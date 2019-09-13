@@ -97,6 +97,11 @@ parser.add_argument(
     help=("Calculate charge density (all occupied orbitals are evaluated).")
 )
 parser.add_argument(
+    '--charge_dens_artif_core',
+    action='store_true',
+    help=("Calculate charge density with artificial core (all occ orbitals are evaluated).")
+)
+parser.add_argument(
     '--spin_dens',
     action='store_true',
     help=("Calculate spin density (all occupied orbitals are evaluated).")
@@ -175,6 +180,7 @@ for imo in np.arange(n_homo+n_lumo):
 
 if args.charge_dens:
     mol_grid_orb.calculate_and_save_charge_density(output_dir + "charge_density.cube")
+if args.charge_dens_artif_core:
     mol_grid_orb.calculate_and_save_charge_density_artif_core(output_dir + "charge_density_artif.cube")
 
 if args.spin_dens:
