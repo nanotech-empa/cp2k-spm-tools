@@ -178,6 +178,7 @@ parser.add_argument('--orbs_tip',
 parser.add_argument('--fwhm_tip',
     type=float,
     metavar='eV',
+    default=0.0,
     required=False,
     help="Full width at half maximum for Gaussian broadening of DOS for tip.")
 
@@ -240,7 +241,7 @@ print("Reading tip positions in {} seconds for rank {}.".format(end-start,
 start = time.time()
 tip_coeffs = tc.TipCoefficients(mpi_rank, mpi_size, mpi_comm)
 tip_coeffs.read_coefficients(args.orbs_tip, args.pdos_list, 
-    min(args.voltages)-4.0*args.fwhm_tip, max(args.voltages)+4.0*args.fwhm_tip)
+    -max(args.voltages)-4.0*args.fwhm_tip, -min(args.voltages)+4.0*args.fwhm_tip)
 tip_coeffs.initialize(pos_local, args.rotate)
 end = time.time()
 print("Reading tip coefficients in {} seconds for rank {}.".format(end-start,
@@ -310,6 +311,7 @@ if mpi_rank == 0:
             'lVec' : lVec,
             'voltages' : args.voltages,
             'input' : args}
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
     np.save(args.output+"_meta.npy", meta)
 start = time.time()
 hrstm = hs.Hrstm(tip_coeffs, dim_pos, wfn_grid_matrix, args.fwhm_sam,
