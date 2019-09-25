@@ -241,7 +241,8 @@ print("Reading tip positions in {} seconds for rank {}.".format(end-start,
 start = time.time()
 tip_coeffs = tc.TipCoefficients(mpi_rank, mpi_size, mpi_comm)
 tip_coeffs.read_coefficients(args.orbs_tip, args.pdos_list, 
-    -max(args.voltages)-4.0*args.fwhm_tip, -min(args.voltages)+4.0*args.fwhm_tip)
+    min(-max(args.voltages),0)-4.0*args.fwhm_tip,
+    max(-min(args.voltages),0)+4.0*args.fwhm_tip)
 tip_coeffs.initialize(pos_local, args.rotate)
 end = time.time()
 print("Reading tip coefficients in {} seconds for rank {}.".format(end-start,
