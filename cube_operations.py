@@ -28,6 +28,19 @@ parser.add_argument(
     type=str,
     help='Operations to apply to each cube. Enclose in quotation marks.')
 
+parser.add_argument(
+    '--proj_1d',
+    metavar='IDs',
+    type=str,
+    default='no',
+    help=("Projects to 'x', 'y' or 'z' dim, possibly averaging (e.g. 'z avg').")
+)
+parser.add_argument(
+    '--skip_result_cube',
+    action='store_true',
+    help=("Don't write the result cube.")
+)
+
 time0 = time.time()
 
 args = parser.parse_args()
@@ -74,7 +87,32 @@ for i_c, cube_file in enumerate(args.cubes):
     print("%s done, time: %.2fs"%(cube_file, (time.time() - time1)))
 
 
-print("Writing result...")
-result.write_cube_file("./result.cube")
+if not args.skip_result_cube:
+    print("Writing result...")
+    result.write_cube_file("./result.cube")
+
+proj_1d_ids = args.proj_1d.split()
+
+if not "no" in proj_1d_ids:
+    avg = 'avg' in proj_1d_ids
+    proj_dims = []
+    if 'x' in proj_1d_ids:
+        proj_dims.append(0)
+    if 'y' in proj_1d_ids:
+        proj_dims.append(1)
+    if 'z' in proj_1d_ids:
+        proj_dims.append(2)
+    
+    for pd in proj_dims:
+        if avg:
+            data_1d = np.mean(result.data, axis=tuple({0, 1, 2} - {pd}))
+        else:
+            data_1d = np.sum(result.data, axis=tuple({0, 1, 2} - {pd}))
+        x_arr = result.origin[pd] + np.linspace(0.0, result.cell[pd, pd], result.data.shape[pd])
+        x_arr /= ang_2_bohr
+        save_arr = np.column_stack((x_arr, data_1d))
+        avg_str = "_avg" if avg else ""
+        fname = "./proj_1d_%d" % pd + avg_str + ".txt"
+        np.savetxt(fname, save_arr)
 
 print("Finished, total time: %.2fs"%(time.time() - time0))
