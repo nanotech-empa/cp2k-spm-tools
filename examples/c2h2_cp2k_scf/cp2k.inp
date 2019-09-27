@@ -1,0 +1,92 @@
+&FORCE_EVAL
+  METHOD Quickstep
+  &DFT
+    BASIS_SET_FILE_NAME BASIS_MOLOPT
+    POTENTIAL_FILE_NAME GTH_POTENTIALS
+    RESTART_FILE_NAME ./PROJ-RESTART.wfn
+    &QS
+      METHOD GPW
+      EPS_DEFAULT 1.0E-14
+      EXTRAPOLATION ASPC
+      EXTRAPOLATION_ORDER 3
+    &END QS
+    &MGRID
+      CUTOFF 400
+      NGRIDS 5
+    &END
+    &SCF
+
+      SCF_GUESS ATOMIC
+      EPS_SCF 1.0E-7
+
+      MAX_SCF 100
+      CHOLESKY INVERSE
+      ADDED_MOS 10
+#      &SMEAR ON
+#        METHOD FERMI_DIRAC
+#        ELECTRONIC_TEMPERATURE 100
+#      &END
+      &MIXING
+        METHOD BROYDEN_MIXING
+        ALPHA 0.1
+        BETA 1.5
+        NBROYDEN 8
+      &END                                     
+      &DIAGONALIZATION
+        ALGORITHM STANDARD
+      &END
+
+      &OUTER_SCF
+        MAX_SCF 500
+        EPS_SCF 1.0E-7
+      &END
+    &END SCF
+
+    &XC
+      &XC_FUNCTIONAL PBE
+      &END XC_FUNCTIONAL
+    &END XC
+    &PRINT
+      &V_HARTREE_CUBE
+        STRIDE 6 6 6
+      &END
+      &MO_CUBES
+        NHOMO 1
+        NLUMO 1
+        STRIDE 6 6 6
+      &END
+    &END PRINT
+  &END DFT
+  &SUBSYS
+    &CELL
+      ABC 10.0 10.0 10.0
+    &END CELL
+    &TOPOLOGY
+      COORD_FILE_NAME ./c2h2-opt.xyz
+      COORDINATE xyz
+#      &CENTER_COORDINATES
+#      &END
+    &END
+    &KIND C
+      BASIS_SET TZV2P-MOLOPT-GTH
+      POTENTIAL GTH-PBE-q4
+    &END KIND
+    &KIND H
+      BASIS_SET TZV2P-MOLOPT-GTH
+      POTENTIAL GTH-PBE-q1
+    &END KIND
+  &END SUBSYS
+&END FORCE_EVAL
+&GLOBAL
+  PRINT_LEVEL LOW           
+  PROJECT PROJ
+  RUN_TYPE ENERGY
+  WALLTIME 86000
+  EXTENDED_FFT_LENGTHS
+  PREFERRED_DIAG_LIBRARY ELPA
+  ELPA_KERNEL AUTO           
+  &DBCSR                     
+    USE_MPI_ALLOCATOR .FALSE.
+  &END                       
+&END GLOBAL
+
