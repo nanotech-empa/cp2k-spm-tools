@@ -5,6 +5,7 @@ import numpy as np
 import scipy as sp
 import math
 import time
+import tarfile
 
 hartreeToEV = 27.21138602
 
@@ -38,43 +39,49 @@ def read_PDOS(filename, eMin=0.0, eMax=0.0):
          while columns to orbitals.
     eigs A list containing arrays for eigenvalues per spin.
     """
-    with open(filename) as f:
-        lines = list(line for line in (l.strip() for l in f) if line)
-        # TODO spins
-        noSpins = 1
-        noEigsTotal = len(lines)-2
-        noDer = len(lines[1].split()[5:])
+    # Open file
+    if type(filename) is not tarfile.ExFileObject:
+        f = open(filename)
+    else: # Tar file already open
+        f = filename
 
-        homoEnergies = [float(lines[0].split()[-2])*hartreeToEV]
-        pdos = [np.empty((noEigsTotal,noDer))]
-        eigs = [np.empty((noEigsTotal))]
+    lines = list(line for line in (l.strip() for l in f) if line)
+    # TODO spins
+    noSpins = 1
+    noEigsTotal = len(lines)-2
+    noDer = len(lines[1].split()[5:])
 
-        # Read all coefficients, cut later
-        for lineIdx, line in enumerate(lines[2:]):
-            parts = line.split()
-            eigs[0][lineIdx] = float(parts[1])*hartreeToEV
-            pdos[0][lineIdx,:] = [float(val) for val in parts[3:]]
+    homoEnergies = [float(lines[0].split()[-2])*hartreeToEV]
+    pdos = [np.empty((noEigsTotal,noDer))]
+    eigs = [np.empty((noEigsTotal))]
 
-        # Cut coefficients to energy range
-        startIdx = [None] * noSpins
-        for spinIdx in range(noSpins):
-            try:
-                startIdx[spinIdx] = np.where(eigs[spinIdx] >= eMin+homoEnergies[spinIdx])[0][0]
-            except:
-                startIdx[spinIdx] = 0
-        endIdx = [None] * noSpins
-        for spinIdx in range(noSpins):
-            try:
-                endIdx[spinIdx] = np.where(eigs[spinIdx] > eMax+homoEnergies[spinIdx])[0][0]
-            except:
-                endIdx[spinIdx] = len(eigs[spinIdx])
-        if endIdx <= startIdx:
-            raise ValueError("Restricted energy-range too restrictive: endIdx <= startIdx")
+    # Read all coefficients, cut later
+    for lineIdx, line in enumerate(lines[2:]):
+        parts = line.split()
+        eigs[0][lineIdx] = float(parts[1])*hartreeToEV
+        pdos[0][lineIdx,:] = [float(val) for val in parts[3:]]
 
-        eigs = [eigs[spinIdx][startIdx[spinIdx]:endIdx[spinIdx]] \
-            - homoEnergies[spinIdx] for spinIdx in range(noSpins)]
-        pdos = [pdos[spinIdx][startIdx[spinIdx]:endIdx[spinIdx],:] \
-            for spinIdx in range(noSpins)]
+    # Cut coefficients to energy range
+    startIdx = [None] * noSpins
+    for spinIdx in range(noSpins):
+        try:
+            startIdx[spinIdx] = np.where(eigs[spinIdx] >= eMin+homoEnergies[spinIdx])[0][0]
+        except:
+            startIdx[spinIdx] = 0
+    endIdx = [None] * noSpins
+    for spinIdx in range(noSpins):
+        try:
+            endIdx[spinIdx] = np.where(eigs[spinIdx] > eMax+homoEnergies[spinIdx])[0][0]
+        except:
+            endIdx[spinIdx] = len(eigs[spinIdx])
+    if endIdx <= startIdx:
+        raise ValueError("Restricted energy-range too restrictive: endIdx <= startIdx")
+
+    eigs = [eigs[spinIdx][startIdx[spinIdx]:endIdx[spinIdx]] \
+        - homoEnergies[spinIdx] for spinIdx in range(noSpins)]
+    pdos = [pdos[spinIdx][startIdx[spinIdx]:endIdx[spinIdx],:] \
+        for spinIdx in range(noSpins)]
+
     return pdos, eigs
 
 class TipCoefficients:
@@ -118,26 +125,40 @@ class TipCoefficients:
             self._singles = []
             idx = 0 # Index of input argument
             while idx < len(pdos_list):
-                try:
-                    single, self._ene = const_coeffs(
-                        s=float(pdos_list[idx]),
-                        py=float(pdos_list[idx+1]),
-                        pz=float(pdos_list[idx+2]),
-                        px=float(pdos_list[idx+3]))
-                    assert self.type != "gaussian", "Tried to mix tip types!"
-                    self._type = "constant"
-                    idx += 4
-                except ValueError:
-                    single, self._ene = read_PDOS(pdos_list[idx],
-                        emin, emax)
-                    # Take square root to obtain proper coefficients
-                    for ispin in range(len(single)):
-                        single[ispin] = \
-                            single[ispin][:,:(self.norbs+1)**2]**0.5
-                    idx += 1
+                # tar.gz file instead
+                if pdos_list[idx].endswith("tar.gz"):
+                    tar = tarfile.open(pdos_list[idx], "r:gz")
+                    for member in tar.getmembers():
+                        single, self._ene = read_PDOS(tar.extractfile(member), emin, emax)
+                        for ispin in range(len(single)):
+                            single[ispin] = \
+                                single[ispin][:,:(self.norbs+1)**2]**0.5
+                        self._singles.append(single)
                     assert self.type != "constant", "Tried to mix tip types!"
                     self._type = "gaussian"
-                self._singles.append(single)
+                    idx += 1
+                # Normal input
+                else:
+                    try:
+                        single, self._ene = const_coeffs(
+                            s=float(pdos_list[idx]),
+                            py=float(pdos_list[idx+1]),
+                            pz=float(pdos_list[idx+2]),
+                            px=float(pdos_list[idx+3]))
+                        assert self.type != "gaussian", "Tried to mix tip types!"
+                        self._type = "constant"
+                        idx += 4
+                    except ValueError:
+                        single, self._ene = read_PDOS(pdos_list[idx],
+                            emin, emax)
+                        # Take square root to obtain proper coefficients
+                        for ispin in range(len(single)):
+                            single[ispin] = \
+                                single[ispin][:,:(self.norbs+1)**2]**0.5
+                        idx += 1
+                        assert self.type != "constant", "Tried to mix tip types!"
+                        self._type = "gaussian"
+                    self._singles.append(single)
         # Broadcast untransformed coefficients and energies
         if self.mpi_comm is not None:
             self._singles = self.mpi_comm.bcast(self._singles, root=0)
