@@ -312,7 +312,8 @@ if mpi_rank == 0:
             'lVec' : lVec,
             'voltages' : args.voltages,
             'input' : args}
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+    if os.path.dirname(args.output) != '':
+        os.makedirs(os.path.dirname(args.output), exist_ok=True)
     np.save(args.output+"_meta.npy", meta)
 start = time.time()
 hrstm = hs.Hrstm(tip_coeffs, dim_pos, wfn_grid_matrix, args.fwhm_sam,
