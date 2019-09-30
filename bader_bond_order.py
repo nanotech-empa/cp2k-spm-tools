@@ -114,7 +114,7 @@ for f in sorted(os.listdir(args.bader_basins_dir)):
         bader_atoms.append(num)
         c = cube.Cube()
         c.read_cube_file(args.bader_basins_dir+"/"+f)
-        if np.abs(c.dv[0, 0] - args.dx) > 1e-5:
+        if np.abs(c.dv[0, 0] - args.dx) > 1e-3:
             print("ERROR: Basin cube dx doesn't match specified dx!")
             print(c.dv[0, 0], args.dx)
             exit(0)

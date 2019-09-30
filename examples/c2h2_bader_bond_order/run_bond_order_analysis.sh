@@ -11,7 +11,7 @@ mpirun -n 2 python3 ../../bader_bond_order.py \
   --output_file "./out/bond_order.txt" \
   --bader_basins_dir "./out/" \
 \
-  --dx 0.10 \
+  --dx 0.1 \
   --eval_cutoff 14.0 \
   --eval_region "n-2.0_H" "p2.0_H" "n-3.0_C" "p3.0_C" "n-3.0_C" "p3.0_C" \
 #  --eval_region "G" "G" "G" "G" "G" "G"

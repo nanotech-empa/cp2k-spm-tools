@@ -6,6 +6,9 @@ wget http://theory.cm.utexas.edu/henkelman/code/bader/download/bader_lnx_64.tar.
 
 tar -xvf bader_lnx_64.tar.gz
 
-./bader -p sel_atom 1 2 3 4 charge_density_artif.cube
+# neargrid
+#./bader -p sel_atom 1 2 3 4 charge_density_artif.cube
+# weight
+./bader -b weight -p sel_atom 1 2 3 4 charge_density_artif.cube
 
 
