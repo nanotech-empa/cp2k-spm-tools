@@ -107,6 +107,12 @@ parser.add_argument(
     help=("Calculate spin density (all occupied orbitals are evaluated).")
 )
 ### -----------------------------------------------------------
+parser.add_argument(
+    '--do_not_center_atoms',
+    action='store_true',
+    help=("Center atoms to cell.")
+)
+### -----------------------------------------------------------
 
 time0 = time.time()
 
@@ -145,7 +151,8 @@ if args.charge_dens or args.spin_dens:
 mol_grid_orb = cgo.Cp2kGridOrbitals(mpi_rank, mpi_size, comm, single_precision=False)
 mol_grid_orb.read_cp2k_input(args.cp2k_input_file)
 mol_grid_orb.read_xyz(args.xyz_file)
-mol_grid_orb.center_atoms_to_cell()
+if not args.do_not_center_atoms:
+    mol_grid_orb.center_atoms_to_cell()
 mol_grid_orb.read_basis_functions(args.basis_set_file)
 mol_grid_orb.load_restart_wfn_file(args.wfn_file, n_occ=n_homo_range, n_virt=n_lumo)
 
