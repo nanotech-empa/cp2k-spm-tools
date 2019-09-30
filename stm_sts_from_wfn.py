@@ -231,6 +231,7 @@ cp2k_grid_orb.calc_morbs_in_region(args.dx,
                                 x_eval_region = eval_reg[0],
                                 y_eval_region = eval_reg[1],
                                 z_eval_region = eval_reg[2],
+                                pbc = (True, True, False),
                                 reserve_extrap = args.extrap_extent,
                                 eval_cutoff = args.eval_cutoff)
 

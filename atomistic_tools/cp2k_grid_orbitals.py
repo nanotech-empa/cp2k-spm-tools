@@ -357,75 +357,149 @@ class Cp2kGridOrbitals:
         return 0
 
 
-    def _add_local_to_global_grid(self, loc_grid, glob_grid, origin_diff, wrap=(True, True, True)):
+    def _add_local_to_global_grid(self, loc_grid, glob_grid, origin_diff):
         """
-        Method to add a grid to another one
+        Method to add a grid to another one only in the overlapping region
         Arguments:
         loc_grid -- grid that will be added to the glob_grid
-        glob_grid -- defines "wrapping" boundaries
-        origin_diff -- difference of origins between the grids; ignored for directions without wrapping
-        wrap -- specifies in which directions to wrap and take PBC into account
+        origin_diff -- difference of origins between the grids (loc->glob)
         """
         loc_n = np.shape(loc_grid)
         glob_n = np.shape(glob_grid)
         od = origin_diff
 
-        inds = []
-        l_inds = []
+        i_lc = []
+        i_gl = []
 
         for i in range(len(glob_n)):
-            
-            if wrap[i]:
-                # Move the origin_diff vector to the main global cell if wrapping is enabled
-                od[i] = od[i] % glob_n[i]
+            lc_start = max([0, od[i]])
+            lc_end = min([loc_n[i], glob_n[i] + od[i]])
+            i_lc.append(slice(lc_start, lc_end))
+            gl_start = max([0, -od[i]])
+            gl_end = min([glob_n[i], loc_n[i] - od[i]])
+            i_gl.append(slice(gl_start, gl_end))
+            if lc_start > lc_end or gl_start > gl_end:
+                return
+        
+        if len(i_lc) == 3:
+            glob_grid[i_gl[0], i_gl[1], i_gl[2]] += loc_grid[i_lc[0], i_lc[1], i_lc[2]]
+        else:
+            glob_grid[i_gl[0], i_gl[1]] += loc_grid[i_lc[0], i_lc[1]]
 
-                ixs = [[od[i], od[i] + loc_n[i]]]
-                l_ixs = [0]
-                while ixs[-1][1] > glob_n[i]:
-                    overshoot = ixs[-1][1]-glob_n[i]
-                    ixs[-1][1] = glob_n[i]
-                    l_ixs.append(l_ixs[-1]+glob_n[i]-ixs[-1][0])
-                    ixs.append([0, overshoot])
-                l_ixs.append(loc_n[i])
+    def _determine_1d_wrapped_indexes(self, loc_n, eval_n, glob_n, loc_s, eval_s):
+        # Move the loc and eval starting points to first global cell
+        loc_s = loc_s % glob_n
+        eval_s = eval_s % glob_n
 
-                inds.append(ixs)
-                l_inds.append(l_ixs)
+        # shift the loc grid to neighboring periodic images and save overlap indexes with eval grid
+        def overlap(i_shift):
+            loc_s_r = loc_s + i_shift * glob_n
+            od = eval_s - loc_s_r
+            l_i_start = max([0, od])
+            l_i_end = min([loc_n, eval_n + od])
+            e_i_start = max([0, -od])
+            e_i_end = min([eval_n, loc_n - od])
+            if l_i_start > l_i_end or e_i_start > e_i_end:
+                return None
+            return (l_i_start, l_i_end), (e_i_start, e_i_end)
+
+        loc_i_arr = []
+        eval_i_arr = []
+
+        for i_shift in range(0, 100, 1):
+            ovl = overlap(i_shift)
+            if ovl is None:
+                if i_shift > 1:
+                    break
+                else:
+                    continue
             else:
-                inds.append([-1])
-                l_inds.append([-1])
+                loc_i_arr.append(ovl[0])
+                eval_i_arr.append(ovl[1])
+        for i_shift in range(-1, -100, -1):
+            ovl = overlap(i_shift)
+            if ovl is None:
+                if i_shift < -2:
+                    break
+                else:
+                    continue
+            else:
+                loc_i_arr.append(ovl[0])
+                eval_i_arr.append(ovl[1])
+        return loc_i_arr, eval_i_arr
+        
 
-        l_ixs = l_inds[0]
-        l_iys = l_inds[1]
-        l_izs = l_inds[2]
-        for i, ix in enumerate(inds[0]):
-            for j, iy in enumerate(inds[1]):
-                for k, iz in enumerate(inds[2]):
+    def _add_local_to_eval_grid(self, loc_grid, eval_grid, glob_n, od_lg, od_eg, wrap=(True, True, True)):
+        """
+        Method to add a grid to another one
+        Arguments:
+        loc_grid -- grid that will be added to the glob_grid
+        glob_grid -- defines "wrapping" boundaries
+        od_lg -- origin diff between local and global grid
+        od_eg -- origin diff between eval and global grid
+        wrap -- specifies in which directions to wrap and take PBC into account
+        """
+        loc_n = np.shape(loc_grid)
+        eval_n = np.shape(eval_grid)
+        
+        loc_inds = []
+        eval_inds = []
+        
+        for i in range(len(glob_n)):
+            if wrap[i]:
+                li_arr, ei_arr = self._determine_1d_wrapped_indexes(loc_n[i], eval_n[i], glob_n[i], od_lg[i], od_eg[i])
+                loc_inds.append(li_arr)
+                eval_inds.append(ei_arr)
+            else:
+                loc_inds.append([None])
+                eval_inds.append([None])
+
+                
+        for lix, eix in zip(loc_inds[0], eval_inds[0]):
+            for liy, eiy in zip(loc_inds[1], eval_inds[1]):
+                if len(glob_n) == 3:
+                    for liz, eiz in zip(loc_inds[2], eval_inds[2]):
+                        if wrap[0]:
+                            i_lc_x = slice(lix[0], lix[1])
+                            i_ev_x = slice(eix[0], eix[1])
+                        else:
+                            i_lc_x = slice(None)
+                            i_ev_x = slice(None)
+                        if wrap[1]:
+                            i_lc_y = slice(liy[0], liy[1])
+                            i_ev_y = slice(eiy[0], eiy[1])
+                        else:
+                            i_lc_y = slice(None)
+                            i_ev_y = slice(None)
+                        if wrap[2]:
+                            i_lc_z = slice(liz[0], liz[1])
+                            i_ev_z = slice(eiz[0], eiz[1])
+                        else:
+                            i_lc_z = slice(None)
+                            i_ev_z = slice(None)
+                        eval_grid[i_ev_x, i_ev_y, i_ev_z] += loc_grid[i_lc_x, i_lc_y, i_lc_z]
+                else:
                     if wrap[0]:
-                        i_gl_x = slice(ix[0], ix[1])
-                        i_lc_x = slice(l_ixs[i], l_ixs[i+1])
+                        i_lc_x = slice(lix[0], lix[1])
+                        i_ev_x = slice(eix[0], eix[1])
                     else:
-                        i_gl_x = slice(None)
                         i_lc_x = slice(None)
+                        i_ev_x = slice(None)
                     if wrap[1]:
-                        i_gl_y = slice(iy[0], iy[1])
-                        i_lc_y = slice(l_iys[j], l_iys[j+1])
+                        i_lc_y = slice(liy[0], liy[1])
+                        i_ev_y = slice(eiy[0], eiy[1])
                     else:
-                        i_gl_y = slice(None)
                         i_lc_y = slice(None)
-                    if wrap[2]:
-                        i_gl_z = slice(iz[0], iz[1])
-                        i_lc_z = slice(l_izs[k], l_izs[k+1])
-                    else:
-                        i_gl_z = slice(None)
-                        i_lc_z = slice(None)
-                    
-                    glob_grid[i_gl_x, i_gl_y, i_gl_z] += loc_grid[i_lc_x, i_lc_y, i_lc_z]
+                        i_ev_y = slice(None)
+
+                    eval_grid[i_ev_x, i_ev_y] += loc_grid[i_lc_x, i_lc_y]
 
 
     def calc_morbs_in_region(self, dr_guess,
                             x_eval_region = None,
                             y_eval_region = None,
                             z_eval_region = None,
+                            pbc = (True, True, True),
                             eval_cutoff = 14.0,
                             reserve_extrap = 0.0,
                             print_info = True):
@@ -434,9 +508,9 @@ class Cp2kGridOrbitals:
         Arguments:
         dr_guess -- spatial discretization step [ang], real value will change for every axis due to rounding  
         x_eval_region -- x evaluation (min, max) in [au]. If min == max, then evaluation only works on a plane.
-                        If set, no PBC applied in direction and also no eval_cutoff.
-                        If left at None, the whole range of the cell is taken and PBCs are applied.
-        eval_cutoff -- cutoff in [ang] for orbital evaluation if eval_region is None
+                        If left at None, the whole range of the cell is taken.
+        pbc -- determines if periodic boundary conditions are applied in direction (x, y, z) (based on global cell)
+        eval_cutoff -- cutoff in [ang] for orbital evaluation
         """
 
         time1 = time.time()
@@ -448,47 +522,64 @@ class Cp2kGridOrbitals:
         global_cell_n = (np.round(self.cell/dr_guess)).astype(int)
         self.dv = self.cell / global_cell_n
 
-        # Define local grid for orbital evaluation
-        # and convenient PBC implementation
+        ### ----------------------------------------
+        ### Define evaluation grid
         eval_regions = [x_eval_region, y_eval_region, z_eval_region]
+        self.eval_cell_n = np.zeros(3, dtype=int)
+        self.origin = np.zeros(3)
+
+        for i in range(3):
+            if eval_regions[i] is None:
+                self.eval_cell_n[i] = global_cell_n[i]
+                self.origin[i] = 0.0
+            else:
+                v_min, v_max = eval_regions[i]
+                if pbc[i]:
+                    # if pbc is enabled, we need to shift to the "global grid"
+                    v_min = np.floor(v_min / self.dv[i]) * self.dv[i]
+                    v_max = np.ceil(v_max / self.dv[i]) * self.dv[i]
+                    self.eval_cell_n[i] = int(np.ceil((v_max - v_min) / self.dv[i]))
+                    self.origin[i] = v_min
+                else:
+                    # otherwise, define custom grid such that v_min and v_max are exactly included
+                    self.eval_cell_n[i] = int(np.round((v_max - v_min) / dr_guess))
+                    self.origin[i] = v_min
+                    self.dv[i] = (v_max - v_min) / self.eval_cell_n[i]
+        
+        ### Reserve extrapolation room in evaluation grid
+        self.last_calc_iz = self.eval_cell_n[2] - 1
+        ext_z_n = int(np.round(reserve_extrap/self.dv[2]))
+        self.eval_cell_n[2] += ext_z_n
+        self.eval_cell = self.eval_cell_n * self.dv
+
+        ### ----------------------------------------
+        ### Local evaluation grid around each atom
+        ### In non-periodic direction, specify directly evaluation grid
         loc_cell_arrays = []
         mid_ixs = np.zeros(3, dtype=int)
         loc_cell_n = np.zeros(3, dtype=int)
-        eval_cell_n = np.zeros(3, dtype=int)
-        self.origin = np.zeros(3)
         for i in range(3):
-            if eval_regions[i] is None:
-                # Define range in i direction with 0.0 at index mid_ixs[i]
+            if pbc[i]:
                 loc_arr = np.arange(0, eval_cutoff, self.dv[i])
                 mid_ixs[i] = int(len(loc_arr)/2)
                 loc_arr -= loc_arr[mid_ixs[i]]
                 loc_cell_arrays.append(loc_arr)
-                eval_cell_n[i] = global_cell_n[i]
-                self.origin[i] = 0.0
+                loc_cell_n[i] = len(loc_cell_arrays[i])
             else:
-                # Define the specified range in direction i
-                v_min, v_max = eval_regions[i]
-                ### TODO: Probably should use np.arange to have exactly matching dv in the local grid... ###
-                loc_cell_arrays.append(np.linspace(v_min, v_max, int(np.round((v_max-v_min)/self.dv[i]))+1))
+                loc_arr = np.arange(self.origin[i], self.origin[i] + (self.eval_cell_n[i]-ext_z_n-0.5)*self.dv[i], self.dv[i])
                 mid_ixs[i] = -1
-                eval_cell_n[i] = len(loc_cell_arrays[i])
-                self.origin[i] = v_min
-                
-            loc_cell_n[i] = len(loc_cell_arrays[i])
+                loc_cell_arrays.append(loc_arr)
+                loc_cell_n[i] = self.eval_cell_n[i]-ext_z_n
+        
 
         loc_cell_grids = np.meshgrid(loc_cell_arrays[0], loc_cell_arrays[1], loc_cell_arrays[2], indexing='ij')
 
-        # Some info
         if print_info:
-            print("Global cell: ", global_cell_n)
-            print("Eval cell: ", eval_cell_n)
-            print("local cell: ", loc_cell_n)
+            print("eval_cell_n: ", self.eval_cell_n)
+            print("loc_cell_n: ", loc_cell_n)
             print("---- Setup: %.4f" % (time.time() - time1))
-
-        time_radial_calc = 0.0
-        time_spherical = 0.0
-        time_loc_glob_add = 0.0
-        time_loc_lmorb_add = 0.0
+        ### ----------------------------------------
+        ### Allocate memory for the grids
 
         nspin = len(self.morb_composition)
 
@@ -496,19 +587,20 @@ class Cp2kGridOrbitals:
         morb_grids_local = []
         self.morb_grids = []
 
-        ext_z_n = int(np.round(reserve_extrap/self.dv[2]))
-
         for ispin in range(nspin):
             num_morbs.append(len(self.morb_composition[ispin][0][0][0][0]))
-            self.morb_grids.append(np.zeros((num_morbs[ispin], eval_cell_n[0], eval_cell_n[1], eval_cell_n[2] + ext_z_n), dtype=self.dtype))
+            self.morb_grids.append(np.zeros((num_morbs[ispin], self.eval_cell_n[0], self.eval_cell_n[1], self.eval_cell_n[2]), dtype=self.dtype))
             morb_grids_local.append(np.zeros((num_morbs[ispin], loc_cell_n[0], loc_cell_n[1], loc_cell_n[2]), dtype=self.dtype))
 
-        self.eval_cell_n = np.array([eval_cell_n[0], eval_cell_n[1], eval_cell_n[2] + ext_z_n])
-        self.eval_cell = self.eval_cell_n * self.dv
-        self.last_calc_iz = eval_cell_n[2] - 1
+        ### ----------------------------------------
+        ### Start the main loop
+
+        time_radial_calc = 0.0
+        time_spherical = 0.0
+        time_loc_glob_add = 0.0
+        time_loc_lmorb_add = 0.0
 
         for i_at in range(len(self.ase_atoms)):
-            #elem = self.ase_atoms[i_at].symbol
             kind = self.atom_kinds[i_at]
             pos = self.ase_atoms[i_at].position * ang_2_bohr
 
@@ -517,10 +609,10 @@ class Cp2kGridOrbitals:
             frac_shift = pos/self.dv - int_shift
             origin_diff = int_shift - mid_ixs
 
-            # Shift the local grid such that origin is on the atom
+            # Shift the local grid coordinates such that (0,0,0) is the atom
             rel_loc_cell_grids = []
             for i, loc_grid in enumerate(loc_cell_grids):
-                if eval_regions[i] is None:
+                if pbc[i]:
                     rel_loc_cell_grids.append(loc_grid - frac_shift[i]*self.dv[i])
                 else:
                     rel_loc_cell_grids.append(loc_grid - pos[i])
@@ -555,39 +647,25 @@ class Cp2kGridOrbitals:
                         time2 = time.time()
 
                         for i_spin in range(nspin):
-                            #print("---------------")
-                            #print(i_spin, len(self.morb_composition))
-                            #print(i_at, len(self.morb_composition[i_spin]))
-                            #print(i_set, len(self.morb_composition[i_spin][i_at]))
-                            #print(i_shell, len(self.morb_composition[i_spin][i_at][i_set]))
-                            #print(i_orb, len(self.morb_composition[i_spin][i_at][i_set][i_shell]))
-                            #print("---------------")
 
                             coef_arr = self.morb_composition[i_spin][i_at][i_set][i_shell][i_orb]
 
                             for i_mo in range(num_morbs[i_spin]):
                                 morb_grids_local[i_spin][i_mo] += coef_arr[i_mo]*atomic_orb
 
-                            # slow:
-                            #morb_grids_local += np.outer(coef_arr, atomic_orb).reshape(
-                            #                 num_morbs, loc_cell_n[0], loc_cell_n[1], loc_cell_n[2])
                         time_loc_lmorb_add += time.time() - time2
 
             time2 = time.time()
             for i_spin in range(nspin):
                 for i_mo in range(num_morbs[i_spin]):
-                    if ext_z_n == 0:
-                        self._add_local_to_global_grid(
+                    z_end_ind = None if ext_z_n == 0 else -ext_z_n
+                    self._add_local_to_eval_grid(
                             morb_grids_local[i_spin][i_mo],
-                            self.morb_grids[i_spin][i_mo],
+                            self.morb_grids[i_spin][i_mo][:, :, :z_end_ind],
+                            global_cell_n,
                             origin_diff,
-                            wrap=(mid_ixs != -1))
-                    else:
-                        self._add_local_to_global_grid(
-                            morb_grids_local[i_spin][i_mo],
-                            self.morb_grids[i_spin][i_mo][:, :, :-ext_z_n],
-                            origin_diff,
-                            wrap=(mid_ixs != -1))
+                            np.round(self.origin/self.dv).astype(int),
+                            wrap=pbc)
             time_loc_glob_add += time.time() - time2
 
         if print_info:
@@ -802,7 +880,7 @@ class Cp2kGridOrbitals:
                 #fwhm = 0.5 # ang
                 #total_charge_dens = core_charge*gaussian3d(r_grid, fwhm) + total_charge_dens
 
-                r_hat = 0.7
+                r_hat = 0.8
                 h_hat = 20.0
                 hat_func = (h_hat-h_hat*r_grid/r_hat)
                 hat_func[r_grid > r_hat] = 0.0
@@ -814,83 +892,3 @@ class Cp2kGridOrbitals:
             c = Cube(title="charge density", comment="modif. cube", ase_atoms=self.ase_atoms,
                     origin=self.origin, cell=self.eval_cell*np.eye(3), data=total_charge_dens)
             c.write_cube_file(filename)
-
-
-#    def _orb_plane_above_atoms(self, grid, height):
-#        """
-#        Returns the 2d plane above topmost atom in z direction
-#        height in [angstrom]
-#        """
-#        topmost_atom_z = np.max(self.ase_atoms.positions[:, 2]) # Angstrom
-#        plane_z = (height + topmost_atom_z) * ang_2_bohr
-#        plane_z_wrt_orig = plane_z - self.origin[2]
-#
-#        plane_index = int(np.round(plane_z_wrt_orig/self.eval_cell[2]*self.eval_cell_n[2]))
-#        return grid[:, :, plane_index]
-#
-#    def collect_and_save_ch_orbitals(self, orbital_list, height_list, path = "./orb.npz"):
-#        """
-#        Save constant-height planes of selected orbitals at selected heights
-#        orbital list wrt to HOMO
-#        """
-#        slice_list = []
-#
-#        for i_spin in range(self.nspin):
-#            slice_list.append([])
-#            for h in height_list:
-#                slice_list[i_spin].append([])
-#
-#            for i_mo in range(len(self.morb_energies[i_spin])):
-#                i_mo_wrt_homo = i_mo - self.i_homo_loc[i_spin]
-#
-#                if i_mo_wrt_homo in orbital_list:
-#                    for i_h, h in enumerate(height_list):
-#                        orb_plane = self._orb_plane_above_atoms(self.morb_grids[i_spin][i_mo], h)
-#                        slice_list[i_spin][i_h].append(orb_plane)
-#         
-#        # indexes of the slice_list: [i_spin], [i_h], [i_mo], [nx x ny]
-#        # gather to rank_0
-#        final_list = []
-#
-#        for i_spin in range(self.nspin):
-#            final_list.append([]) # i_spin
-#            for i_h in range(len(height_list)):
-#                plane_gather = self.mpi_comm.gather(slice_list[i_spin][i_h], root = 0)
-#
-#                if self.mpi_rank == 0:
-#                    # flatten the list of lists to numpy
-#                    flat_array = np.array([item for sublist in plane_gather for item in sublist])
-#                    final_list[i_spin].append(flat_array)        
-#
-#        # select energy ranges
-#        #self.gather_global_energies()
-#
-#        if self.mpi_rank == 0:
-#            # energy array
-#            # for rank 0, the homo index is given by loc_homo_ind
-#            save_energy_arr = []
-#            for i_spin in range(self.nspin):
-#                global_orb_list = [ind + self.i_homo_loc[i_spin] for ind in orbital_list]
-#                save_energy_arr.append(self.global_morb_energies[i_spin][global_orb_list])
-#            
-#            # turn the spin and height dimensions to numpy as well
-#            final_numpy = np.array([np.array(list_h) for list_h in final_list])
-#            save_data = {}
-#            save_data['orbitals'] = final_numpy
-#            save_data['heights'] = np.array(height_list)
-#            save_data['orb_list'] = np.array(orbital_list)
-#            save_data['x_arr'] = np.arange(0.0, self.eval_cell_n[0]*self.dv[0] + self.dv[0]/2, self.dv[0]) + self.origin[0]
-#            save_data['y_arr'] = np.arange(0.0, self.eval_cell_n[1]*self.dv[1] + self.dv[1]/2, self.dv[1]) + self.origin[1]
-#            save_data['energies'] = np.array(save_energy_arr)
-#            np.savez_compressed(path, **save_data)
-
-
-    ### -----------------------------------------
-    ### mpi communication
-    ### -----------------------------------------
-
-    #def gather_global_energies(self):
-    #    self.global_morb_energies = []
-    #    for ispin in range(self.nspin):
-    #        morb_en_gather = self.mpi_comm.allgather(self.morb_energies[ispin])
-    #        self.global_morb_energies.append(np.hstack(morb_en_gather))
