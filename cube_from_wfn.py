@@ -72,6 +72,15 @@ parser.add_argument(
     default = ['G', 'G', 'G', 'G', 'G', 'G'],
     help=common.eval_region_description
 )
+parser.add_argument(
+    '--pbc',
+    type=int,
+    nargs=3,
+    metavar='X',
+    required=False,
+    default = [1, 1, 1],
+    help="periodic boundary conditions in directions [x,y,z]. (1=on, 0=off)"
+)
 ### -----------------------------------------------------------
 parser.add_argument(
     '--n_homo',
@@ -162,6 +171,7 @@ mol_grid_orb.calc_morbs_in_region(args.dx,
                                 x_eval_region = eval_reg[0],
                                 y_eval_region = eval_reg[1],
                                 z_eval_region = eval_reg[2],
+                                pbc=np.array(args.pbc, dtype=bool),
                                 reserve_extrap = 0.0,
                                 eval_cutoff = args.eval_cutoff)
 
@@ -188,7 +198,7 @@ for imo in np.arange(n_homo+n_lumo):
 if args.charge_dens:
     mol_grid_orb.calculate_and_save_charge_density(output_dir + "charge_density.cube")
 if args.charge_dens_artif_core:
-    mol_grid_orb.calculate_and_save_charge_density_artif_core(output_dir + "charge_density_artif.cube")
+    mol_grid_orb.calculate_and_save_charge_density(output_dir + "charge_density_artif.cube", artif_core=True)
 
 if args.spin_dens:
     mol_grid_orb.calculate_and_save_spin_density(output_dir + "spin_density.cube")

@@ -10,7 +10,7 @@ import argparse
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
 
-from atomistic_tools import common, cube
+from atomistic_tools import common, cube, cube_utils
 
 
 parser = argparse.ArgumentParser(
@@ -39,6 +39,11 @@ parser.add_argument(
     '--skip_result_cube',
     action='store_true',
     help=("Don't write the result cube.")
+)
+parser.add_argument(
+    '--add_artif_core',
+    action='store_true',
+    help=("Adds artifical core charge to result cube (mainly for Bader analysis).")
 )
 
 time0 = time.time()
@@ -86,6 +91,8 @@ for i_c, cube_file in enumerate(args.cubes):
 
     print("%s done, time: %.2fs"%(cube_file, (time.time() - time1)))
 
+if args.add_artif_core:
+    cube_utils.add_artif_core_charge(result)
 
 if not args.skip_result_cube:
     print("Writing result...")
