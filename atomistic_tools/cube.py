@@ -16,7 +16,7 @@ class Cube:
     """
 
     def __init__(self, title=None, comment=None, ase_atoms=None,
-                 origin=np.array([0.0, 0.0, 0.0]), cell=None, data=None):
+                 origin=np.array([0.0, 0.0, 0.0]), cell=None, cell_n=None, data=None):
         """
         cell in [au] and (3x3)
         """
@@ -26,6 +26,11 @@ class Cube:
         self.origin = origin
         self.cell = cell
         self.data = data
+        if data is not None:
+            self.cell_n = data.shape
+        else:
+            self.cell_n = None
+
 
     def write_cube_file(self, filename):
 
@@ -61,7 +66,7 @@ class Cube:
 
         f.close()
 
-    def read_cube_file(self, filename):
+    def read_cube_file(self, filename, read_data=True):
 
         f = open(filename, 'r')
         self.title = f.readline().rstrip()
@@ -72,11 +77,11 @@ class Cube:
 
         self.origin = np.array(line[1:], dtype=float)
 
-        shape = np.empty(3,dtype=int)
+        self.cell_n = np.empty(3,dtype=int)
         self.cell = np.empty((3, 3))
         for i in range(3):
             n, x, y, z = [float(s) for s in f.readline().split()]
-            shape[i] = int(n)
+            self.cell_n[i] = int(n)
             self.cell[i] = n * np.array([x, y, z])
 
         numbers = np.empty(natoms, int)
@@ -90,18 +95,20 @@ class Cube:
 
         self.ase_atoms = ase.Atoms(numbers=numbers, positions=positions)
 
-        # Option 1: less memory usage but might be slower
-        self.data = np.empty(shape[0]*shape[1]*shape[2], dtype=float)
-        cursor = 0
-        for i, line in enumerate(f):
-            ls = line.split()
-            self.data[cursor:cursor+len(ls)] = ls
-            cursor += len(ls)
+        if read_data:
+            # Option 1: less memory usage but might be slower
+            self.data = np.empty(self.cell_n[0]*self.cell_n[1]*self.cell_n[2], dtype=float)
+            cursor = 0
+            for i, line in enumerate(f):
+                ls = line.split()
+                self.data[cursor:cursor+len(ls)] = ls
+                cursor += len(ls)
 
-        # Option 2: Takes much more memory (but may be faster)
-        #data = np.array(f.read().split(), dtype=float)
+            # Option 2: Takes much more memory (but may be faster)
+            #data = np.array(f.read().split(), dtype=float)
 
-        self.data = self.data.reshape(shape)
+            self.data = self.data.reshape(self.cell_n)
+
         f.close()
 
     def get_plane_above_topmost_atom(self, height):
@@ -115,8 +122,47 @@ class Cube:
         plane_index = int(np.round(plane_z/self.cell[2, 2]*np.shape(self.data)[2]))
         return self.data[:, :, plane_index]
 
+    def get_z_index(self, z_ang):
+        # returns the index value for a given z coordinate in angstrom
+        return int(np.round(z_ang * ang_2_bohr/self.cell[2, 2]*np.shape(self.data)[2]))
+
     @property
     def dv(self):
         """ in [ang] """
-        return self.cell/self.data.shape/ang_2_bohr
+        return self.cell/self.cell_n/ang_2_bohr
+    
+    @property
+    def dv_ang(self):
+        """ in [ang] """
+        return self.cell/self.cell_n/ang_2_bohr
 
+    @property
+    def dv_au(self):
+        """ in [au] """
+        return self.cell/self.cell_n
+    
+    @property
+    def x_arr_au(self):
+        """ in [au] """
+        return np.arange(self.origin[0], self.origin[0] + (self.cell_n[0]-0.5)*self.dv_au[0,0], self.dv_au[0,0])
+    @property
+    def y_arr_au(self):
+        """ in [au] """
+        return np.arange(self.origin[1], self.origin[1] + (self.cell_n[1]-0.5)*self.dv_au[1,1], self.dv_au[1,1])
+    @property
+    def z_arr_au(self):
+        """ in [au] """
+        return np.arange(self.origin[2], self.origin[2] + (self.cell_n[2]-0.5)*self.dv_au[2,2], self.dv_au[2,2])
+
+    @property
+    def x_arr_ang(self):
+        """ in [ang] """
+        return self.x_arr_au/ang_2_bohr
+    @property
+    def y_arr_ang(self):
+        """ in [ang] """
+        return self.y_arr_au/ang_2_bohr
+    @property
+    def z_arr_ang(self):
+        """ in [ang] """
+        return self.z_arr_au/ang_2_bohr

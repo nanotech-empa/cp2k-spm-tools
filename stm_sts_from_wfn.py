@@ -14,6 +14,7 @@ import atomistic_tools.cp2k_grid_orbitals as cgo
 import atomistic_tools.cp2k_stm_sts as css
 from atomistic_tools import common
 from atomistic_tools.cube import Cube
+import atomistic_tools.cube_utils
 
 from mpi4py import MPI
 
@@ -255,6 +256,22 @@ sys.stdout.flush()
 time1 = time.time()
 
 ### ------------------------------------------------------
+### Calculate the ionization potential (just for output)
+### ------------------------------------------------------
+
+if mpi_rank == 0:
+    # NB: currently only accurate for isolated molecules
+    if cp2k_grid_orb.nspin == 1:
+        homo_en = cp2k_grid_orb.global_morb_energies[0][cp2k_grid_orb.i_homo_glob[0]]
+    else:
+        homo_en = np.max([
+            cp2k_grid_orb.global_morb_energies[0][cp2k_grid_orb.i_homo_glob[0]],
+            cp2k_grid_orb.global_morb_energies[1][cp2k_grid_orb.i_homo_glob[1]]
+        ])
+    ion_pot = atomistic_tools.cube_utils.calc_ioniz_potential(hart_cube, (homo_en + cp2k_grid_orb.ref_energy)/hart_2_ev)
+    print("IONIZATION POTENIAL (eV): %.6f (accurate only for isolated molecules)" % ion_pot)
+
+### ------------------------------------------------------
 ### Set up STM object
 ### ------------------------------------------------------
 
@@ -298,3 +315,5 @@ if e_arr is not None and len(fwhms) != 0 and (len(heights) != 0 or len(isovalues
     stm.collect_and_save_stm_maps(path=args.output_file)
 
 print("R%d/%d: finished, total time: %.2fs"%(mpi_rank, mpi_size, (time.time() - time0)))
+
+
