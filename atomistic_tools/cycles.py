@@ -92,18 +92,17 @@ def dumb_cycle_detection(ase_atoms_no_h, max_length):
 
 
 def cycle_normal(cycle, h):
-    vecs = []
-    n_pts = len(cycle)
-    for i in range(n_pts):
-        vecs.append(cycle[(i+1)%n_pts] - cycle[i])
-    normal_acc = np.zeros(3)
-    for i in range(n_pts):
-        cross = np.cross(vecs[i], vecs[(i+1)%n_pts])
-        if np.dot(cross, h*np.array([1, 1, 1]))  < 0.0:
-            cross *= -1.0
-        normal_acc += cross
-    avg_normal = normal_acc/np.linalg.norm(normal_acc)
-    return avg_normal
+    cycle = np.array(cycle)
+    centroid = np.mean(cycle, axis=0)
+
+    points = cycle - centroid
+    u, s, v = np.linalg.svd(points.T)
+    normal = u[:, -1]
+    normal /= np.linalg.norm(normal)
+    if np.dot(normal, h*np.array([1, 1, 1])) < 0.0:
+        normal *= -1.0
+    return normal
+
 
 def find_cycle_centers_and_normals(ase_atoms_no_h, cycles, h=0.0):
     """

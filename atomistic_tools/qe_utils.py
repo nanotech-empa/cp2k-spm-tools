@@ -3,9 +3,43 @@ import numpy as np
 
 from .cube import Cube
 
+import ase
+import ase.io
+
+import re
+
 import os
 
 import xml.etree.ElementTree as et
+
+ang_2_bohr = 1.0/0.529177210903
+
+def ase_atoms_from_pw_out(pw_out_file):
+    
+    with open(pw_out_file, 'r') as f:
+        contents = f.read()
+        
+    final_coords_str = re.search("Begin final coordinates\n([\s\S]*)End final coordinates", contents).group(1)
+    atoms = ase.Atoms()
+    for line in final_coords_str.split("\n"):
+        sp = line.split()
+        if len(sp) == 4:
+            atoms.append(ase.Atom(sp[0], np.array(sp[1:], dtype=float)))
+            
+    celldm1 = float(re.search("celldm\(1\)=(.*)celldm\(2\)=", contents).group(1))
+    cell_str = re.search("crystal axes:.*\n([\s\S]*)reciprocal axes", contents).group(1)
+    cell = []
+    for line in cell_str.split("\n"):
+        sp = line.split()
+        if len(sp) == 7:
+            cell += sp[3:6]
+    cell = np.array(cell, dtype=float).reshape((3,3)) * celldm1 / ang_2_bohr
+    
+    atoms.cell = cell
+    atoms.pbc = True
+    
+    return atoms
+
 
 def read_scf_fermi(scf_out_file):
     fermi = None
