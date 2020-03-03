@@ -8,7 +8,6 @@ import numpy as np
 import scipy
 import scipy.io
 import scipy.interpolate
-import scipy.ndimage
 
 import time
 import copy
@@ -21,6 +20,7 @@ import ase.io
 
 from .cube import Cube
 from .cp2k_wfn_file import Cp2kWfnFile
+from . import cube_utils
 
 from mpi4py import MPI
 
@@ -776,7 +776,7 @@ class Cp2kGridOrbitals:
             c.write_cube_file(filename)
 
 
-    def calculate_and_save_charge_density(self, filename="./charge_density.cube"):
+    def calculate_and_save_charge_density(self, filename="./charge_density.cube", artif_core=False):
 
         charge_dens = np.zeros(self.eval_cell_n)
         for i_spin in range(self.nspin):
@@ -796,6 +796,10 @@ class Cp2kGridOrbitals:
             comment = "Integrated charge: %.6f" % integrated_charge
             c = Cube(title="charge density", comment=comment, ase_atoms=self.ase_atoms,
                     origin=self.origin, cell=self.eval_cell*np.eye(3), data=total_charge_dens)
+            
+            if artif_core:
+                cube_utils.add_artif_core_charge(c)
+
             c.write_cube_file(filename)
 
     def calculate_and_save_spin_density(self, filename="./spin_density.cube"):
@@ -821,74 +825,4 @@ class Cp2kGridOrbitals:
             comment = "Integrated abs spin: %.6f" % integrated
             c = Cube(title="spin density", comment=comment, ase_atoms=self.ase_atoms,
                     origin=self.origin, cell=self.eval_cell*np.eye(3), data=total_spin_dens)
-            c.write_cube_file(filename)
-
-
-    def calculate_and_save_charge_density_artif_core(self, filename="./charge_density_artif.cube"):
-
-        charge_dens = np.zeros(self.eval_cell_n)
-        for i_spin in range(self.nspin):
-            for i_mo, grid in enumerate(self.morb_grids[i_spin]):
-                if i_mo > self.i_homo_loc[i_spin]:
-                    break
-                charge_dens += grid**2
-        if self.nspin == 1:
-            charge_dens *= 2
-        
-        total_charge_dens = np.zeros(self.eval_cell_n)
-        self.mpi_comm.Reduce(charge_dens, total_charge_dens, op=MPI.SUM)
-
-        # free memory
-        charge_dens = None
-
-        if self.mpi_rank == 0:
-
-            def gaussian3d(r_arr, sigma):
-                #sigma = fwhm/2.355
-                return 1/(sigma**3*(2*np.pi)**(3/2))*np.exp(-(r_arr**2/(2*sigma**2)))
-            
-            x = np.linspace(0.0, self.eval_cell[0], self.eval_cell_n[0]) + self.origin[0]
-            y = np.linspace(0.0, self.eval_cell[1], self.eval_cell_n[1]) + self.origin[1]
-            z = np.linspace(0.0, self.eval_cell[2], self.eval_cell_n[2]) + self.origin[2]
-
-            for at in self.ase_atoms:
-                if at.number == 1:
-                    # No core density for H
-                    continue
-                p = at.position * ang_2_bohr
-
-                if (p[0] < np.min(x) - 0.5 or p[0] > np.max(x) + 0.5 or
-                        p[1] < np.min(y) - 0.5 or p[1] > np.max(y) + 0.5 or
-                        p[2] < np.min(z) - 0.5 or p[2] > np.max(z) + 0.5):
-                    continue
-
-                # Distance of the **Center** of each voxel to the atom 
-                x_grid, y_grid, z_grid = np.meshgrid(x - p[0] - self.dv[0]/2, y - p[1] - self.dv[1]/2, z - p[2] - self.dv[2]/2, indexing='ij')
-                r_grid = np.sqrt(x_grid**2 + y_grid**2 + z_grid**2)
-                x_grid = None
-                y_grid = None
-                z_grid = None                
-
-                core_charge = at.number - at.number % 8 # not exact...
-
-                #r_cut = 0.5
-                #hat_func = (1.0-r_grid/r_cut)
-                #hat_func[r_grid > r_cut] = 0.0
-                #total_charge_dens = hat_func*core_charge*gaussian3d(r_grid, 1.0*r_cut) + (1.0-hat_func)*total_charge_dens
-
-                # EMPIRICAL PARAMETER 1
-                #fwhm = 0.5 # ang
-                #total_charge_dens = core_charge*gaussian3d(r_grid, fwhm) + total_charge_dens
-
-                r_hat = 0.8
-                h_hat = 20.0
-                hat_func = (h_hat-h_hat*r_grid/r_hat)
-                hat_func[r_grid > r_hat] = 0.0
-                total_charge_dens = np.maximum(hat_func, total_charge_dens)
-
-            # EMPIRICAL PARAMETER 2
-            #total_charge_dens = scipy.ndimage.gaussian_filter(total_charge_dens, sigma = 0.4, mode='nearest')
-
-            c = Cube(title="charge density", comment="modif. cube", ase_atoms=self.ase_atoms,
-                    origin=self.origin, cell=self.eval_cell*np.eye(3), data=total_charge_dens)
             c.write_cube_file(filename)
