@@ -9,22 +9,12 @@ Code is based on asetk module by Leopold Talirz
 import re
 import numpy as np
 
-def igor_wave_factory(fname):
-    """
-    Returns either wave1d or wave2d, corresponding to the input file
-    """
-    f=open(fname, 'r')
-    lines=f.readlines()
-    f.close()
-
-    #lines = content.split("\r")
-
-    line = lines.pop(0).strip()
-    if not line == "IGOR":
-        raise IOError("Files does not begin with 'IGOR'")
+def read_wave(lines):
 
     line = lines.pop(0)
     while not re.match("WAVES",line):
+        if len(lines) == 0:
+            return None
         line = lines.pop(0)
     # 1d or 2d?
     d2 = False
@@ -45,12 +35,16 @@ def igor_wave_factory(fname):
     datastring = ""
     line = lines.pop(0)
     while not re.match("END",line):
+        if len(lines) == 0:
+            return None
+        if line.startswith("X"):
+            return None
         datastring += line
         line = lines.pop(0)
     data = np.array(datastring.split(), dtype=float)
     if d2:
         data = data.reshape(grid)
-
+    
     # read axes
     axes = []
     line = lines.pop(0)
@@ -62,6 +56,7 @@ def igor_wave_factory(fname):
     
     if d2:
         # read also the second axis
+        # is this necessary? can there be 2 lines with "SetScale" ?
         line = lines.pop(0)
         matches = re.findall("SetScale.+?(?:;|$)", line)
         for match in matches:
@@ -71,8 +66,33 @@ def igor_wave_factory(fname):
         return Wave2d(data, axes, name)
     else:
         return Wave1d(data, axes, name)
-        
 
+
+
+def igor_wave_factory(fname):
+    """
+    Returns either wave1d or wave2d, corresponding to the input file
+    """
+    f=open(fname, 'r')
+    lines=f.readlines()
+    f.close()
+
+    #lines = content.split("\r")
+
+    line = lines.pop(0).strip()
+    if not line == "IGOR":
+        raise IOError("Files does not begin with 'IGOR'")
+
+    waves = []
+    while len(lines) != 0:
+        try:
+            wave = read_wave(lines)
+            if wave is not None:
+                waves.append(wave)
+        except Exception as e:
+            print("  Error: %.80s..." % str(e))
+
+    return waves
 
 
 class Axis(object):
@@ -101,7 +121,7 @@ class Axis(object):
         X SetScale/P x 0,2.01342281879195e-11,"m", data_00381_Up;
         SetScale d 0,0,"V", data_00381_Up
         """
-        match = re.search("SetScale/?P? (.) ([+-\.\de]+),([+-\.\de]+),[ ]*\"(.+)\",\s*(\w+)", string)
+        match = re.search("SetScale/?P? (.) ([+-\.\de]+),([+-\.\de]+),[ ]*\"(.*)\",\s*(\w+)", string)
         self.symbol = match.group(1)
         self.min = float(match.group(2))
         self.delta = float(match.group(3))
