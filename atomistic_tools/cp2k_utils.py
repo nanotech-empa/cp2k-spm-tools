@@ -115,8 +115,8 @@ def parse_cp2k_output(file_path):
                 if len(vals) == 10 and is_float(vals[0]):
                     results['gw_mo'][spin].append(int(vals[0]) - 1) # start orb count from 0
                     results['gw_occ'][spin].append(1 if vals[2] == 'occ' else 0)
-                    results['gw_e_scf'][spin].append(float(vals[4]) * hart_2_ev)
-                    results['gw_eval'][spin].append(float(vals[9]) * hart_2_ev)
+                    results['gw_e_scf'][spin].append(float(vals[4]))
+                    results['gw_eval'][spin].append(float(vals[9]))
                 i_line += 1
         # ----------------------------------------------------------------
         # IC output
@@ -153,8 +153,8 @@ def parse_cp2k_output(file_path):
                 if len(vals) == 7 and is_float(vals[0]):
                     results['ic_mo'][spin].append(int(vals[0]) - 1) # start orb count from 0
                     results['ic_occ'][spin].append(1 if vals[2] == 'occ' else 0)
-                    results['ic_en'][spin].append(float(vals[4]) * hart_2_ev)
-                    results['ic_delta'][spin].append(float(vals[5]) * hart_2_ev)
+                    results['ic_en'][spin].append(float(vals[4]))
+                    results['ic_delta'][spin].append(float(vals[5]))
                 i_line += 1
         # ----------------------------------------------------------------
         i_line += 1
