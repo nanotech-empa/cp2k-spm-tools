@@ -542,9 +542,9 @@ class Cp2kGridOrbitals:
                     self.origin[i] = v_min
                 else:
                     # otherwise, define custom grid such that v_min and v_max are exactly included
-                    self.eval_cell_n[i] = int(np.round((v_max - v_min) / dr_guess))
+                    self.eval_cell_n[i] = int(np.round((v_max - v_min) / dr_guess)) + 1
                     self.origin[i] = v_min
-                    self.dv[i] = (v_max - v_min) / self.eval_cell_n[i]
+                    self.dv[i] = (v_max + dr_guess - v_min) / self.eval_cell_n[i]
         
         ### Reserve extrapolation room in evaluation grid
         self.last_calc_iz = self.eval_cell_n[2] - 1
