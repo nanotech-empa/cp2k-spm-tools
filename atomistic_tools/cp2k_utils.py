@@ -17,6 +17,7 @@ def is_float(s):
         return True
     except ValueError:
         return False
+
     
 def parse_cp2k_output(file_path):
     
@@ -82,80 +83,95 @@ def parse_cp2k_output(file_path):
                 i_line += 1
         # ----------------------------------------------------------------
         # GW output
-        if "GW quasiparticle energies" in line:
+        if "Sigx-vxc (eV)" in line and "E_GW (eV)" in line:
             add_res_list('gw_mo')
             add_res_list('gw_occ')
             add_res_list('gw_e_scf')
             add_res_list('gw_eval')
 
-            spin = 1 if 'beta' in line else 0
+            i_line += 1
 
-            if len(results['gw_mo']) > spin:
-                # we already have a set, overwrite with later iteration
-                results['gw_mo'][spin] = []
-                results['gw_occ'][spin] = []
-                results['gw_e_scf'][spin] = []
-                results['gw_eval'][spin] = []
-            else:
-                results['gw_mo'].append([])
-                results['gw_occ'].append([])
-                results['gw_e_scf'].append([])
-                results['gw_eval'].append([])
-
-            i_line += 10
+            gw_mo = []
+            gw_occ = []
+            gw_e_scf = []
+            gw_eval = []
 
             while True:
                 line_loc = lines[i_line]
                 if "GW HOMO-LUMO gap" in line_loc:
+                    
+                    spin = 1 if "Beta" in line_loc else 0
+
+                    if len(results['gw_mo']) > spin:
+                        # we already have a set, overwrite with later iteration
+                        results['gw_mo'][spin] = gw_mo
+                        results['gw_occ'][spin] = gw_occ
+                        results['gw_e_scf'][spin] = gw_e_scf
+                        results['gw_eval'][spin] = gw_eval
+                    else:
+                        results['gw_mo'].append(gw_mo)
+                        results['gw_occ'].append(gw_occ)
+                        results['gw_e_scf'].append(gw_e_scf)
+                        results['gw_eval'].append(gw_eval)
+
                     break
+
                 vals = line_loc.split()
                 # header & example line:
-                #             MO      E_SCF       Sigc   Sigc_fit   Sigx-vxc          Z       E_GW
-                #     75 ( occ )    -10.030      1.723      0.000     -4.297      1.000    -10.031
-                if len(vals) == 10 and is_float(vals[0]):
-                    results['gw_mo'][spin].append(int(vals[0]) - 1) # start orb count from 0
-                    results['gw_occ'][spin].append(1 if vals[2] == 'occ' else 0)
-                    results['gw_e_scf'][spin].append(float(vals[4]))
-                    results['gw_eval'][spin].append(float(vals[9]))
+                #     Molecular orbital   E_SCF (eV)       Sigc (eV)   Sigx-vxc (eV)       E_GW (eV)
+                #        1 ( occ )           -26.079           6.728         -10.116         -26.068
+                if len(vals) == 8 and is_float(vals[0]):
+                    gw_mo.append(int(vals[0]) - 1) # start orb count from 0
+                    gw_occ.append(1 if vals[2] == 'occ' else 0)
+                    gw_e_scf.append(float(vals[4]))
+                    gw_eval.append(float(vals[7]))
                 i_line += 1
         # ----------------------------------------------------------------
         # IC output
-        if "Single-electron energies" in line and " with image charge (ic) correction" in line:
+        if "E_n before ic corr" in line and "Delta E_ic" in line:
             add_res_list('ic_mo')
             add_res_list('ic_occ')
             add_res_list('ic_en')
             add_res_list('ic_delta')
 
-            spin = 1 if 'beta' in line else 0
+            i_line += 1
 
-            if len(results['ic_mo']) > spin:
-                # we already have a set, overwrite with later iteration
-                results['ic_mo'][spin] = []
-                results['ic_occ'][spin] = []
-                results['ic_en'][spin] = []
-                results['ic_delta'][spin] = []
-            else:
-                results['ic_mo'].append([])
-                results['ic_occ'].append([])
-                results['ic_en'].append([])
-                results['ic_delta'].append([])
-
-            i_line += 7
+            ic_mo = []
+            ic_occ = []
+            ic_en = []
+            ic_delta = []
 
             while True:
                 line_loc = lines[i_line]
                 if "IC HOMO-LUMO gap" in line_loc:
+                    
+                    spin = 1 if "Beta" in line_loc else 0
+
+                    if len(results['ic_mo']) > spin:
+                        # we already have a set, overwrite with later iteration
+                        results['ic_mo'][spin] = ic_mo
+                        results['ic_occ'][spin] = ic_occ
+                        results['ic_en'][spin] = ic_en
+                        results['ic_delta'][spin] = ic_delta
+                    else:
+                        results['ic_mo'].append(ic_mo)
+                        results['ic_occ'].append(ic_occ)
+                        results['ic_en'].append(ic_en)
+                        results['ic_delta'].append(ic_delta)
+
                     break
+
                 vals = line_loc.split()
                 # header & example line:
-                #             MO     E_n before ic corr           Delta E_ic    E_n after ic corr
-                #     80 ( occ )                 -6.952                1.186               -5.766
+                #           MO     E_n before ic corr           Delta E_ic    E_n after ic corr
+                #   70 ( occ )                -11.735                1.031              -10.705
                 if len(vals) == 7 and is_float(vals[0]):
-                    results['ic_mo'][spin].append(int(vals[0]) - 1) # start orb count from 0
-                    results['ic_occ'][spin].append(1 if vals[2] == 'occ' else 0)
-                    results['ic_en'][spin].append(float(vals[4]))
-                    results['ic_delta'][spin].append(float(vals[5]))
+                    ic_mo.append(int(vals[0]) - 1) # start orb count from 0
+                    ic_occ.append(1 if vals[2] == 'occ' else 0)
+                    ic_en.append(float(vals[4]))
+                    ic_delta.append(float(vals[5]))
                 i_line += 1
+
         # ----------------------------------------------------------------
         i_line += 1
 
