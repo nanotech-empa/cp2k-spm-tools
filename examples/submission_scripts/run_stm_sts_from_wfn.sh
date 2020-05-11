@@ -2,7 +2,7 @@
 
 FOLDER=".."
 
-mpirun -n 4 python3 ~/work/atomistic_tools/stm_sts_smart.py \
+mpirun -n 4 python3 ~/work/atomistic_tools/stm_sts_from_wfn.py \
   --cp2k_input_file "$FOLDER"/cp2k.inp \
   --basis_set_file "$FOLDER"/BASIS_MOLOPT \
   --xyz_file "$FOLDER"/undeca-N-uks-opt-sp1.xyz \
