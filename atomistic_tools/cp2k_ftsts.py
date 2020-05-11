@@ -72,7 +72,11 @@ class FTSTS:
         i_crop_1 = np.argmax(max_for_every_x > tol)
         i_crop_2 = len(max_for_every_x) - np.argmax(max_for_every_x[::-1] > tol)
 
-        return ldos[i_crop_1:i_crop_2]
+        return ldos[i_crop_1:i_crop_2], i_crop_1, i_crop_2
+
+    def crop_edges(self, ldos, dist=10.0):
+        crop_index = int(np.round(dist / self.dv[0]))
+        return ldos[crop_index:-crop_index]
 
     def fourier_transform(self, ldos):
 
@@ -122,19 +126,22 @@ class FTSTS:
 
                 self.morbs_1d[ispin][:, i_mo] = morb_1d
 
-    def take_fts(self, crop=True, remove_row_avg=True, padding=1.0):
+    def take_fts(self, crop_padding=True, crop_edges=0.0, remove_row_avg=True, padding=1.0):
         self.morb_fts = []
         for ispin in range(self.nspin):
             tmp_morbs = self.morbs_1d[ispin]
-            if crop:
-                tmp_morbs = self.crop_padding(tmp_morbs)
+            if crop_padding:
+                tmp_morbs, i_crop_1, i_crop_2 = self.crop_padding(tmp_morbs)
+            if crop_edges > 0.0:
+                tmp_morbs = self.crop_edges(tmp_morbs, dist=crop_edges)
             if remove_row_avg:
                 tmp_morbs = self.remove_row_average(tmp_morbs)
             if padding > 0.0:
                 tmp_morbs = self.add_padding(tmp_morbs, padding)
             self.k_arr, m_fts, self.dk = self.fourier_transform(tmp_morbs)
             self.morb_fts.append(m_fts)
-        #return tmp_morbs
+        borders = i_crop_1 * self.dv[0] + crop_edges, i_crop_2 * self.dv[0] - crop_edges
+        return borders
 
     def make_ftldos(self, emin, emax, de, fwhm):
         

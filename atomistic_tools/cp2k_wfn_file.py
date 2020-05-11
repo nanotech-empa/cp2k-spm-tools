@@ -220,7 +220,7 @@ class Cp2kWfnFile:
         * ...
         """
 
-        f = open(restart_file, 'r')
+        f = open(restart_file, 'rb')
         inpf = scipy.io.FortranFile(f, 'r')
 
         self.natom, self.nspin, self.nao, self.nset_max, self.nshell_max = inpf.read_ints()
