@@ -11,7 +11,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-from atomistic_tools import igor
+from cp2k_spm_tools import igor
 
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602

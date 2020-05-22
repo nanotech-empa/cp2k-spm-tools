@@ -20,16 +20,16 @@ ang2bohr   = 1.88972612546
 ev2hartree = 0.03674930814
 
 # Own includes
-import atomistic_tools.cp2k_stm_sts as css
-from atomistic_tools import common
-from atomistic_tools.cube import Cube
+import cp2k_spm_tools.cp2k_stm_sts as css
+from cp2k_spm_tools import common
+from cp2k_spm_tools.cube import Cube
 
 import hrstm_tools.tip_coeffs as tc
 import hrstm_tools.cp2k_grid_matrix as cgm
 import hrstm_tools.hrstm_utils as hu
 import hrstm_tools.hrstm as hs
 
-import atomistic_tools.cp2k_grid_orbitals as cgo
+import cp2k_spm_tools.cp2k_grid_orbitals as cgo
 #import hrstm_tools.ppstm_grid_orbitals as pgo
 
 from mpi4py import MPI

@@ -10,8 +10,8 @@ import argparse
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
 
-import atomistic_tools.cp2k_grid_orbitals as cgo
-from atomistic_tools import common, cube
+import cp2k_spm_tools.cp2k_grid_orbitals as cgo
+from cp2k_spm_tools import common, cube
 
 from mpi4py import MPI
 

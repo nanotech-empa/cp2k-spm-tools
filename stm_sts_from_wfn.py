@@ -10,11 +10,10 @@ import argparse
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
 
-import atomistic_tools.cp2k_grid_orbitals as cgo
-import atomistic_tools.cp2k_stm_sts as css
-from atomistic_tools import common
-from atomistic_tools.cube import Cube
-import atomistic_tools.cube_utils
+import cp2k_spm_tools.cp2k_grid_orbitals as cgo
+import cp2k_spm_tools.cp2k_stm_sts as css
+from cp2k_spm_tools import common, cube_utils
+from cp2k_spm_tools.cube import Cube
 
 from mpi4py import MPI
 
@@ -268,7 +267,7 @@ if mpi_rank == 0:
             cp2k_grid_orb.global_morb_energies[0][cp2k_grid_orb.i_homo_glob[0]],
             cp2k_grid_orb.global_morb_energies[1][cp2k_grid_orb.i_homo_glob[1]]
         ])
-    ion_pot = atomistic_tools.cube_utils.calc_ioniz_potential(hart_cube, (homo_en + cp2k_grid_orb.ref_energy)/hart_2_ev)
+    ion_pot = cube_utils.calc_ioniz_potential(hart_cube, (homo_en + cp2k_grid_orb.ref_energy)/hart_2_ev)
     print("IONIZATION POTENIAL (eV): %.6f (accurate only for isolated molecules)" % ion_pot)
 
 ### ------------------------------------------------------

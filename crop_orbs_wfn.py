@@ -10,7 +10,7 @@ import argparse
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
 
-import atomistic_tools.cp2k_wfn_file as cwf
+import cp2k_spm_tools.cp2k_wfn_file as cwf
 
 parser = argparse.ArgumentParser(
     description='Crops CP2K RESTART.wfn file.')
