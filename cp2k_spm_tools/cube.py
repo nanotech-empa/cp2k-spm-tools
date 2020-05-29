@@ -75,6 +75,12 @@ class Cube:
         line = f.readline().split()
         natoms = int(line[0])
 
+        if natoms < 0:
+            print("Warning: the cube %s has negative number of atoms")
+            print("         meaning that there could be multiple data sections")
+            print("         and each of those will have a header")
+            natoms = -natoms
+
         self.origin = np.array(line[1:], dtype=float)
 
         self.cell_n = np.empty(3,dtype=int)
