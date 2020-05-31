@@ -43,11 +43,11 @@ class Cp2kWfnFile:
         self.lfomo = None
         self.nelectron = None
 
-        self.i_homo_cp2k = None # cp2k homo indexes, takes also smearing into account (counting start from 1)
+        self.i_homo_cp2k = None # cp2k homo indexes, takes also smearing into account (counting starts from 1)
         self.evals = None
         self.occs = None
 
-        self.i_homo = None # global indexes, corresponds to WFN nr (counting start from 1)
+        self.i_homo = None # global indexes, corresponds to WFN nr (counting starts from 1)
         self.homo_ens = None
         # ------------------------------------------------------------------
         # "selected data", meaning corresponding to energy/n_orb limits
@@ -70,6 +70,8 @@ class Cp2kWfnFile:
         self.glob_morb_energies = None # contains all energies in the selected range
         self.morb_energies = None # energies for this mpi process only
         self.ref_energy = None
+
+        self.morb_indexes = None # global indexes corresponding to WFN nr (counting starts from 1)
         
 
     def write_ascii_gz(self, out_file):
@@ -256,6 +258,7 @@ class Cp2kWfnFile:
         self.homo_ens = []
         self.lumo_ens = []
         self.coef_array = []
+        self.morb_indexes = []
 
         self.evals_sel = []
         self.occs_sel = []
@@ -385,6 +388,7 @@ class Cp2kWfnFile:
             ### Read the coefficients from file
 
             self.coef_array.append([])
+            self.morb_indexes.append([])
 
             first_imo = -1
 
@@ -402,8 +406,10 @@ class Cp2kWfnFile:
                     first_imo = imo
 
                 self.coef_array[ispin].append(coefs)
+                self.morb_indexes[ispin].append(imo+1)
             
             self.coef_array[ispin] = np.array(self.coef_array[ispin])
+            self.morb_indexes[ispin] = np.array(self.morb_indexes[ispin])
 
             self.i_homo_loc.append(self.i_homo[ispin] - first_imo) # Global homo index wrt to the initial MO
             ### ---------------------------------------------------------------------
