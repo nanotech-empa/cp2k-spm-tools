@@ -57,7 +57,7 @@ def add_artif_core_charge(charge_dens_cube):
             continue
             
         # Distance of the **Center** of each voxel to the atom 
-        x_grid, y_grid, z_grid = np.meshgrid(x - p[0] - dv_au[0]/2, y - p[1] - dv_au[1]/2, z - p[2] - dv_au[2]/2, indexing='ij')
+        x_grid, y_grid, z_grid = np.meshgrid(x - p[0] - dv_au[0]/2, y - p[1] - dv_au[1]/2, z - p[2] - dv_au[2]/2, indexing='ij', copy=False)
         r_grid = np.sqrt(x_grid**2 + y_grid**2 + z_grid**2)
         x_grid = None
         y_grid = None
