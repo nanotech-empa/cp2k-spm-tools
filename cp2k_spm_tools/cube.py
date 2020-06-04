@@ -75,11 +75,13 @@ class Cube:
         line = f.readline().split()
         natoms = int(line[0])
 
+        section_headers = False
         if natoms < 0:
-            print("Warning: the cube %s has negative number of atoms")
-            print("         meaning that there could be multiple data sections")
-            print("         and each of those will have a header")
+            #print("Warning: the cube %s has negative number of atoms")
+            #print("         meaning that there could be multiple data sections")
+            #print("         and each of those will have a header")
             natoms = -natoms
+            section_headers = True
 
         self.origin = np.array(line[1:], dtype=float)
 
@@ -105,6 +107,9 @@ class Cube:
             # Option 1: less memory usage but might be slower
             self.data = np.empty(self.cell_n[0]*self.cell_n[1]*self.cell_n[2], dtype=float)
             cursor = 0
+            if section_headers:
+                f.readline()
+
             for i, line in enumerate(f):
                 ls = line.split()
                 self.data[cursor:cursor+len(ls)] = ls
@@ -117,20 +122,50 @@ class Cube:
 
         f.close()
 
-    def get_plane_above_topmost_atom(self, height):
+    def swapaxes(self, ax1, ax2):
+
+        # Atomic positions: careful, the ase cell is not modified
+        p = self.ase_atoms.positions
+        p[:, ax1], p[:, ax2] = p[:, ax1], p[:, ax2].copy()
+
+        self.origin[ax1], self.origin[ax2] = self.origin[ax2], self.origin[ax1].copy()
+
+        self.cell[:, ax1], self.cell[:, ax2] = self.cell[:, ax1], self.cell[:, ax2].copy()
+
+        self.data = np.swapaxes(self.data, ax1, ax2)
+
+        self.cell_n = self.data.shape
+
+
+
+    def get_plane_above_topmost_atom(self, height, axis=2):
         """
-        Returns the 2d plane above topmost atom in z direction
+        Returns the 2d plane above topmost atom in direction (default: z)
         height in [angstrom]
         """
-        topmost_atom_z = np.max(self.ase_atoms.positions[:, 2]) # Angstrom
-        plane_z = (height + topmost_atom_z) * ang_2_bohr
+        topmost_atom_z = np.max(self.ase_atoms.positions[:, axis]) # Angstrom
+        plane_z = (height + topmost_atom_z) * ang_2_bohr - self.origin[axis]
 
-        plane_index = int(np.round(plane_z/self.cell[2, 2]*np.shape(self.data)[2]))
-        return self.data[:, :, plane_index]
+        plane_index = int(np.round(plane_z/self.cell[axis, axis]*np.shape(self.data)[axis]))
+
+        if axis == 0:
+            return self.data[plane_index, :, :]
+        elif axis == 1:
+            return self.data[:, plane_index, :]
+        else:
+            return self.data[:, :, plane_index]
+
+    def get_x_index(self, x_ang):
+        # returns the index value for a given x coordinate in angstrom
+        return int(np.round((x_ang * ang_2_bohr - self.origin[0])/self.cell[0, 0]*np.shape(self.data)[0]))
+
+    def get_y_index(self, y_ang):
+        # returns the index value for a given y coordinate in angstrom
+        return int(np.round((y_ang * ang_2_bohr - self.origin[1])/self.cell[1, 1]*np.shape(self.data)[1]))
 
     def get_z_index(self, z_ang):
         # returns the index value for a given z coordinate in angstrom
-        return int(np.round(z_ang * ang_2_bohr/self.cell[2, 2]*np.shape(self.data)[2]))
+        return int(np.round((z_ang * ang_2_bohr - self.origin[2])/self.cell[2, 2]*np.shape(self.data)[2]))
 
     @property
     def dv(self):
