@@ -191,7 +191,19 @@ class Cp2kGridOrbitals:
     ### -----------------------------------------
 
     def _magic_basis_normalization(self, basis_sets_):
-        """ Normalizes basis sets to be compatible with cp2k """
+        """
+        Normalizes basis sets to be compatible with cp2k
+        
+        Interestingly, this normalization works for the gridding but doesn't match with CP2K MOlog output
+
+        Normalization implementations in cp2k source:
+        https://github.com/cp2k/cp2k/blob/9040e97c1294d63d7d5ee35f6c01e65bd5845113/src/aobasis/basis_set_types.F
+
+        "usual" case: "SUBROUTINE init_orb_basis_set" Case (2)
+        - normalise_gcc_orb
+        - init_norm_cgf_orb
+        
+        """
         basis_sets = copy.deepcopy(basis_sets_)
         for kind, bsets in basis_sets.items():
             for bset in bsets:
@@ -274,7 +286,7 @@ class Cp2kGridOrbitals:
                         cursor += n_exp + 1
 
                     for kind in kinds:
-                        self.basis_sets[kind] = basis_functions
+                        self.basis_sets[kind] = copy.deepcopy(basis_functions)
 
         self.basis_sets = self._magic_basis_normalization(self.basis_sets)
 
@@ -621,8 +633,8 @@ class Cp2kGridOrbitals:
                     rel_loc_cell_grids[1]**2 + \
                     rel_loc_cell_grids[2]**2
 
-            for ispin in range(nspin):
-                morb_grids_local[ispin].fill(0.0)
+            for i_spin in range(nspin):
+                morb_grids_local[i_spin].fill(0.0)
 
             for i_set, bset in enumerate(self.basis_sets[kind]):
                 for i_shell, shell in enumerate(bset):

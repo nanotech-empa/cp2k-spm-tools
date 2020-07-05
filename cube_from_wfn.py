@@ -189,7 +189,21 @@ for imo in np.arange(n_homo+n_lumo):
     i_rel_homo = imo - n_homo + 1
     for ispin in range(mol_grid_orb.nspin):
 
-        name = "HOMO%+d_S%d" % (i_rel_homo, ispin)
+        if imo >= len(mol_grid_orb.cwf.morb_indexes[ispin]):
+            continue
+
+        global_index = mol_grid_orb.cwf.morb_indexes[ispin][imo]
+
+        if i_rel_homo < 0:
+            hl_label = "HOMO%+d" % i_rel_homo
+        elif i_rel_homo == 0:
+            hl_label = "HOMO"
+        elif i_rel_homo == 1:
+            hl_label = "LUMO"
+        else:
+            hl_label = "LUMO%+d" % (i_rel_homo-1)
+
+        name = "S%d_%d_%s" % (ispin, global_index, hl_label)
         mol_grid_orb.write_cube(output_dir + name + ".cube", i_rel_homo, spin=ispin)
 
         if args.orb_square:

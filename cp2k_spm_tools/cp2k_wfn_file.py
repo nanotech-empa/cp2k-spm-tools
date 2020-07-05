@@ -337,7 +337,8 @@ class Cp2kWfnFile:
                     print("WARNING: possibly not enough ADDED_MOS, last eigenvalue is %.2f" % (self.evals[ispin][-1]-self.ref_energy))
 
             # num HOMO/LUMO range (if specified)
-            ref_ind_global = np.max(self.i_homo) 
+            #ref_ind_global = np.max(self.i_homo)
+            ref_ind_global = self.i_homo[ispin]
             if n_occ is not None:
                 ind_start_n = ref_ind_global - n_occ + 1
                 if ind_start is None or ind_start_n < ind_start:
