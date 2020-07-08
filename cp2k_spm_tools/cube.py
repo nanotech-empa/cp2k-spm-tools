@@ -146,7 +146,7 @@ class Cube:
         topmost_atom_z = np.max(self.ase_atoms.positions[:, axis]) # Angstrom
         plane_z = (height + topmost_atom_z) * ang_2_bohr - self.origin[axis]
 
-        plane_index = int(np.round(plane_z/self.cell[axis, axis]*np.shape(self.data)[axis]))
+        plane_index = int(np.round(plane_z/self.cell[axis, axis]*np.shape(self.data)[axis] - 0.499))
 
         if axis == 0:
             return self.data[plane_index, :, :]

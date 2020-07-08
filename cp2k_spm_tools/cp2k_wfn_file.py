@@ -47,7 +47,7 @@ class Cp2kWfnFile:
         self.evals = None
         self.occs = None
 
-        self.i_homo = None # global indexes, corresponds to WFN nr (counting starts from 1)
+        self.i_homo = None # global indexes, corresponds to WFN nr (counting starts from 0)
         self.homo_ens = None
         # ------------------------------------------------------------------
         # "selected data", meaning corresponding to energy/n_orb limits
@@ -63,6 +63,7 @@ class Cp2kWfnFile:
 
         self.i_homo_glob = None # indexes wrt to the first selected orbital
         self.ref_index_glob = None # reference index for selecting orbitals
+        self.ref_index_cp2k = None # reference index for selecting orbitals for the CP2K counting (WFN number)
 
         # ------------------------------------------------------------------
         # Transformed into easily accessible format
@@ -71,7 +72,7 @@ class Cp2kWfnFile:
         self.morb_energies = None # energies for this mpi process only
         self.ref_energy = None
 
-        self.morb_indexes = None # global indexes corresponding to WFN nr (counting starts from 1)
+        self.global_morb_indexes = None # global indexes corresponding to WFN nr (counting starts from 1)
         
 
     def write_ascii_gz(self, out_file):
@@ -258,7 +259,7 @@ class Cp2kWfnFile:
         self.homo_ens = []
         self.lumo_ens = []
         self.coef_array = []
-        self.morb_indexes = []
+        self.global_morb_indexes = []
 
         self.evals_sel = []
         self.occs_sel = []
@@ -308,6 +309,10 @@ class Cp2kWfnFile:
             self.ref_energy = 0.5 * (self.homo_ens[0] + self.lumo_ens[0])
         # -------------------------------------------------------------------
 
+        # If selecting orbitals with n_occ and n_virt in case of high multiplicities
+        # i.e. when one spin channel has more electrons than the other, use this index for reference
+        self.ref_index_cp2k = int(np.mean(self.i_homo))
+
         for ispin in range(self.nspin):
 
             # Skip the 2nd spin header, as we already processed that
@@ -337,17 +342,15 @@ class Cp2kWfnFile:
                     print("WARNING: possibly not enough ADDED_MOS, last eigenvalue is %.2f" % (self.evals[ispin][-1]-self.ref_energy))
 
             # num HOMO/LUMO range (if specified)
-            #ref_ind_global = np.max(self.i_homo)
-            ref_ind_global = self.i_homo[ispin]
             if n_occ is not None:
-                ind_start_n = ref_ind_global - n_occ + 1
+                ind_start_n = self.ref_index_cp2k - n_occ + 1
                 if ind_start is None or ind_start_n < ind_start:
                     ind_start = ind_start_n
                 if ind_start < 0:
                     print("WARNING: n_occ out of bounds.")
                     ind_start = 0
             if n_virt is not None:
-                ind_end_n = ref_ind_global + n_virt + 1
+                ind_end_n = self.ref_index_cp2k + n_virt + 1
                 if ind_end is None or ind_end_n > ind_end:
                     ind_end = ind_end_n
                 if ind_end > len(self.evals[ispin]):
@@ -385,11 +388,12 @@ class Cp2kWfnFile:
             self.occs_sel.append(self.occs[ispin][ind_start:ind_end])
             self.evals_loc.append(self.evals[ispin][loc_ind_start:loc_ind_end])
 
+            self.global_morb_indexes.append(np.arange(1, self.nmo[ispin]+1)[ind_start:ind_end])
+
             ### ---------------------------------------------------------------------
             ### Read the coefficients from file
 
             self.coef_array.append([])
-            self.morb_indexes.append([])
 
             first_imo = -1
 
@@ -407,17 +411,16 @@ class Cp2kWfnFile:
                     first_imo = imo
 
                 self.coef_array[ispin].append(coefs)
-                self.morb_indexes[ispin].append(imo+1)
             
             self.coef_array[ispin] = np.array(self.coef_array[ispin])
-            self.morb_indexes[ispin] = np.array(self.morb_indexes[ispin])
 
             self.i_homo_loc.append(self.i_homo[ispin] - first_imo) # Global homo index wrt to the initial MO
             ### ---------------------------------------------------------------------
             
         inpf.close()
 
-        self.ref_index_glob = np.max(self.i_homo_glob)
+        # The reference index w.r.t. to global data start
+        self.ref_index_glob = int(np.mean(self.i_homo_glob))
 
 
     def convert_readable(self):

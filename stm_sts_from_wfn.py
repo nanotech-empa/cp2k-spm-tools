@@ -290,12 +290,7 @@ if len(orb_fwhms) != 0 and (len(orb_heights) != 0 or len(orb_isovalues) != 0):
 
     orbital_list = list(range(-args.n_homo + 1, args.n_lumo + 1))
 
-    stm.create_orbital_images(orbital_list, orb_heights, orb_isovalues)
-
-    orbital_list_wrt_0 = list(np.array(orbital_list) + stm.cgo.i_homo_glob[0])
-    orbital_energies = stm.global_morb_energies[0][orbital_list_wrt_0]
-
-    stm.calculate_stm_maps(orb_fwhms, orb_isovalues, orb_heights, orbital_energies)
+    stm.create_orb_series(orbital_list, orb_heights, orb_isovalues, orb_fwhms)
 
     stm.collect_and_save_orb_maps(path=args.orb_output_file)
 

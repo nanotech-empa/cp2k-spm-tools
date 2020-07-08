@@ -54,22 +54,39 @@ class STM:
         self.local_cell = None
         self.local_origin = None
 
-        ### Parameters for the STM/STS maps
-#        self.sts_isovalues = None
-#        self.sts_heights = None
+#        # List of dictionaries containing everything to do with STM/STS maps
+#        self.stm_maps_data_list = []
 #
-#        # output maps
-#        self.e_arr = None
-#        self.cc_ldos = None
-#        self.cc_map = None
-#        self.ch_ldos = None
-#        self.ch_map = None
+#        # Dictionary containing everything to do with orbital maps
+#        self.orb_maps_data = None
+        
+        # Dictionary containing all the STM/STS/ORB output
+        self.series_output = {}
+        """
+        self.series_output = {
+            's0 orb': {
+                'general_info': {
+                    'energies': [-0.4, -0.3, -0.1, ...],
+                    'orb_indexes': [255, 256, 257, ...],
+                    'HOMO': 257,
+                },
+                'series_info': [
+                    {'type': 'ch-orb', 'height': 3.0},
+                    {'type': 'ch-sts', 'height': 3.0, 'fwhm': 0.1},
+                    ...,
+                ],
+                'series_data': [
+                    [n_orb, nx, ny],
+                    [n_orb, nx, ny],
+                    ...,
+                ]
+            }
+            's1 orb': {
+                ...
+            }
+        }
+        """
 
-        # Dictionary containing everything to do with STM/STS maps
-        self.stm_maps_data = None
-
-        # Dictionary containing everything to do with orbital maps
-        self.orb_maps_data = None
 
     def x_ind_per_rank(self, rank):
         # which x indexes to allocate to rank
@@ -222,124 +239,8 @@ class STM:
         plane_index = int(np.round(plane_z_wrt_orig/self.local_cell[2]*self.local_cell_n[2]))
         return local_data[:, :, plane_index]
 
-    
-    def calculate_stm_maps(self, fwhms, isovalues, heights, energies):
-        
-        self.stm_maps_data = {}
 
-        self.stm_maps_data['isovalues'] = np.array(isovalues)
-        self.stm_maps_data['heights'] = np.array(heights)
-        self.stm_maps_data['fwhms'] = np.array(fwhms)
-
-        e_arr = np.sort(energies)
-        emin = e_arr[0]
-        emax = e_arr[-1]
-
-        self.stm_maps_data['e_arr'] = e_arr 
-
-        if emin * emax >= 0.0:
-            cc_sts, cc_stm, ch_sts, ch_stm = self.create_series(e_arr, fwhms, heights, isovalues)
-        else:
-            e_arr_neg = e_arr[e_arr <= 0.0]
-            e_arr_pos = e_arr[e_arr > 0.0]
-
-            cc_sts_n, cc_stm_n, ch_sts_n, ch_stm_n = self.create_series(e_arr_neg, fwhms, heights, isovalues)
-            cc_sts_p, cc_stm_p, ch_sts_p, ch_stm_p = self.create_series(e_arr_pos, fwhms, heights, isovalues)
-
-            cc_sts = np.concatenate((cc_sts_n, cc_sts_p), axis=4)
-            cc_stm = np.concatenate((cc_stm_n, cc_stm_p), axis=4)
-            ch_sts = np.concatenate((ch_sts_n, ch_sts_p), axis=4)
-            ch_stm = np.concatenate((ch_stm_n, ch_stm_p), axis=4)
-
-        # Move energy axis to position 2
-        cc_sts = np.moveaxis(cc_sts, 4, 2)
-        cc_stm = np.moveaxis(cc_stm, 4, 2)
-        ch_sts = np.moveaxis(ch_sts, 4, 2)
-        ch_stm = np.moveaxis(ch_stm, 4, 2)
-
-        self.stm_maps_data['cc_sts'] = cc_sts
-        self.stm_maps_data['cc_stm'] = cc_stm
-        self.stm_maps_data['ch_sts'] = ch_sts
-        self.stm_maps_data['ch_stm'] = ch_stm
-
-    
-    def apply_zero_threshold(self, data_array, zero_thresh):
-        # apply it to every energy slice independently
-        for i_0 in range(data_array.shape[0]): # spin or fwhm
-            for i_series in range(data_array.shape[1]):
-                for i_e in range(data_array.shape[2]):
-                    sli = data_array[i_0, i_series, i_e, :, :]
-                    slice_absmax = np.max(np.abs(sli))
-                    sli[np.abs(sli) < slice_absmax*zero_thresh] = 0.0
-
-    def collect_local_grid(self, local_arr, global_shape, to_rank = 0):
-        """
-        local_arr needs to have x as first axis
-        """
-
-        size_except_x = np.prod(global_shape[1:])
-
-        nx_per_rank = np.array([ self.x_ind_per_rank(r)[1] - self.x_ind_per_rank(r)[0] for r in range(self.mpi_size) ])
-
-        if self.mpi_rank == to_rank:
-            recvbuf = np.empty(sum(nx_per_rank)*size_except_x, dtype=self.cgo.dtype)
-            print("R%d expecting counts: " % (self.mpi_rank) + str(nx_per_rank*size_except_x))
-        else:
-            recvbuf = None
-            
-        sendbuf = local_arr.ravel()
-
-        self.mpi_comm.Gatherv(sendbuf=sendbuf, recvbuf=[recvbuf, nx_per_rank*size_except_x], root=to_rank)
-        if self.mpi_rank == to_rank:
-            recvbuf = recvbuf.reshape(global_shape)
-        return recvbuf
-
-
-    def collect_and_save_stm_maps(self, path = "./stm.npz"):
-
-        nx = self.cell_n[0]
-        ny = self.cell_n[1]
-        ne = len(self.stm_maps_data['e_arr'])
-        n_cc = len(self.stm_maps_data['isovalues'])
-        n_ch = len(self.stm_maps_data['heights'])
-        n_fwhms = len(self.stm_maps_data['fwhms'])
-
-        cc_sts = self.collect_local_grid(self.stm_maps_data['cc_sts'].swapaxes(0, 3), np.array([nx, n_cc, ne, n_fwhms, ny]))
-        cc_stm = self.collect_local_grid(self.stm_maps_data['cc_stm'].swapaxes(0, 3), np.array([nx, n_cc, ne, n_fwhms, ny]))
-        ch_sts = self.collect_local_grid(self.stm_maps_data['ch_sts'].swapaxes(0, 3), np.array([nx, n_ch, ne, n_fwhms, ny]))
-        ch_stm = self.collect_local_grid(self.stm_maps_data['ch_stm'].swapaxes(0, 3), np.array([nx, n_ch, ne, n_fwhms, ny]))
-        
-        if self.mpi_rank == 0:
-            # back to correct orientation
-            cc_sts = cc_sts.swapaxes(3, 0)
-            cc_stm = cc_stm.swapaxes(3, 0)
-            ch_sts = ch_sts.swapaxes(3, 0)
-            ch_stm = ch_stm.swapaxes(3, 0)
-
-            save_data = {}
-            save_data['cc_stm'] = cc_stm.astype(np.float16) # all values either way ~ between -2 and 8
-            save_data['cc_sts'] = cc_sts.astype(np.float32)
-            save_data['ch_stm'] = ch_stm.astype(np.float32)
-            save_data['ch_sts'] = ch_sts.astype(np.float32)
-            ### ----------------
-            ### Reduce filesize further by zero threshold
-            zero_thresh = 1e-3
-            self.apply_zero_threshold(save_data['cc_sts'], zero_thresh)
-            self.apply_zero_threshold(save_data['ch_stm'], zero_thresh)
-            self.apply_zero_threshold(save_data['ch_sts'], zero_thresh)
-            ### ----------------
-
-            # additionally add info
-            save_data['isovalues'] = self.stm_maps_data['isovalues']
-            save_data['heights'] = self.stm_maps_data['heights']
-            save_data['fwhms'] = self.stm_maps_data['fwhms']
-            save_data['e_arr'] = self.stm_maps_data['e_arr']
-            save_data['x_arr'] = np.arange(0.0, self.cell_n[0]*self.dv[0] + self.dv[0]/2, self.dv[0]) + self.origin[0]
-            save_data['y_arr'] = np.arange(0.0, self.cell_n[1]*self.dv[1] + self.dv[1]/2, self.dv[1]) + self.origin[1]
-            np.savez_compressed(path, **save_data)
-
-
-    def create_series(self, e_arr, fwhms, heights, isovalues):
+    def build_stm_series(self, e_arr, fwhms, heights, isovalues):
 
         print("Create series: " + str(e_arr))
 
@@ -421,107 +322,418 @@ class STM:
         else:
             return cc_ldos, cc_map, ch_ldos, ch_map
 
-    ### -----------------------------------------
-    ### Orbital analysis and export
-    ### -----------------------------------------
+    
+    def calculate_stm_maps(self, fwhms, isovalues, heights, energies, series_name='stm', i_series_offset=0):
+        """
+        STM maps for specified energies, isovalues, heights, fwhms.
+        """
 
-    def create_orbital_images(self, orbital_list, height_list=[], isoval_list=[]):
+        e_arr = np.sort(energies)
+        emin = e_arr[0]
+        emax = e_arr[-1]
 
-        self.orb_maps_data = {}
+        if series_name not in self.series_output:
+            number_of_series = (len(heights) + len(isovalues)) * len(fwhms) * 2
+            self.series_output[series_name] = {
+                'general_info': {'energies': e_arr},
+                'series_info': [],
+                'series_data': np.zeros((number_of_series, len(e_arr), self.local_cell_n[0], self.local_cell_n[1]), dtype=self.cgo.dtype)
+            }
+        
 
-        ens_list = []
-        orb_list = [] # orbital indexes of spin channels wrt to their SOMO
-        for i_spin in range(self.nspin):
-            orbital_list_wrt_ref = list(np.array(orbital_list) + self.cgo.cwf.ref_index_glob)
-            ens_list.append(self.global_morb_energies[i_spin][orbital_list_wrt_ref])
-            orb_list.append(np.array(orbital_list) + self.cgo.cwf.ref_index_glob - self.cgo.i_homo_glob[i_spin])
-        self.orb_maps_data['energies'] = np.array(ens_list)
-        self.orb_maps_data['orbital_list'] = np.array(orb_list)
+        if emin * emax >= 0.0:
+            cc_sts, cc_stm, ch_sts, ch_stm = self.build_stm_series(e_arr, fwhms, heights, isovalues)
+        else:
+            e_arr_neg = e_arr[e_arr <= 0.0]
+            e_arr_pos = e_arr[e_arr > 0.0]
 
-        if len(height_list) != 0:
-            self.orb_maps_data['ch_orbs'] = np.zeros(
-                (self.nspin, len(height_list), len(orbital_list), self.local_cell_n[0], self.local_cell_n[1]),
-                dtype=self.cgo.dtype)
+            cc_sts_n, cc_stm_n, ch_sts_n, ch_stm_n = self.build_stm_series(e_arr_neg, fwhms, heights, isovalues)
+            cc_sts_p, cc_stm_p, ch_sts_p, ch_stm_p = self.build_stm_series(e_arr_pos, fwhms, heights, isovalues)
 
-        if len(isoval_list) != 0:
-            self.orb_maps_data['cc_orbs'] = np.zeros(
-                (self.nspin, len(isoval_list), len(orbital_list), self.local_cell_n[0], self.local_cell_n[1]),
-                dtype=self.cgo.dtype)
+            cc_sts = np.concatenate((cc_sts_n, cc_sts_p), axis=4)
+            cc_stm = np.concatenate((cc_stm_n, cc_stm_p), axis=4)
+            ch_sts = np.concatenate((ch_sts_n, ch_sts_p), axis=4)
+            ch_stm = np.concatenate((ch_stm_n, ch_stm_p), axis=4)
 
-        for i_spin in range(self.nspin):
-            i_orb_count = 0
-            for i_mo in range(len(self.global_morb_energies[i_spin])):
-                i_mo_wrt_ref = i_mo - self.cgo.cwf.ref_index_glob
-                if i_mo_wrt_ref in orbital_list:
-                    for i_h, h in enumerate(height_list):
-                        self.orb_maps_data['ch_orbs'][i_spin, i_h, i_orb_count, :, :] = (
-                            self.local_data_plane_above_atoms(self.local_orbitals[i_spin][i_mo], h)
-                        )
-                    for i_isov, isov in enumerate(isoval_list):
-                        i_isosurf = self._get_isosurf_indexes(self.local_orbitals[i_spin][i_mo]**2, isov, True)
-                        self.orb_maps_data['cc_orbs'][i_spin, i_isov, i_orb_count, :, :] = (
-                            self._index_with_interpolation(i_isosurf, self.z_arr)
-                        )
-                    i_orb_count += 1
+        # Move energy axis to position 2
+        cc_sts = np.moveaxis(cc_sts, 4, 2)
+        cc_stm = np.moveaxis(cc_stm, 4, 2)
+        ch_sts = np.moveaxis(ch_sts, 4, 2)
+        ch_stm = np.moveaxis(ch_stm, 4, 2)
 
-    def collect_and_save_orb_maps(self, path = "./orb.npz"):
+        ### ------------------------------------
+        ### Save the data to self.series_output
+
+        i_series_counter = i_series_offset
+
+        for i_fwhm, fwhm in enumerate(fwhms):
+
+            for i_h, h in enumerate(heights):
+                self.series_output[series_name]['series_info'].append({
+                    'type': 'const-height sts',
+                    'height': h,
+                    'fwhm': fwhm,
+                })
+                self.series_output[series_name]['series_data'][i_series_counter, :, :, :] = ch_sts[i_fwhm, i_h, :, :, :]
+                i_series_counter += 1
+
+            for i_isov, isov in enumerate(isovalues):
+                self.series_output[series_name]['series_info'].append({
+                    'type': 'const-isovalue sts',
+                    'isovalue': isov,
+                    'fwhm': fwhm,
+                })
+                self.series_output[series_name]['series_data'][i_series_counter, :, :, :] = cc_sts[i_fwhm, i_isov, :, :, :]
+                i_series_counter += 1
+
+            for i_h, h in enumerate(heights):
+                self.series_output[series_name]['series_info'].append({
+                    'type': 'const-height stm',
+                    'height': h,
+                    'fwhm': fwhm,
+                })
+                self.series_output[series_name]['series_data'][i_series_counter, :, :, :] = ch_stm[i_fwhm, i_h, :, :, :]
+                i_series_counter += 1
+
+            for i_isov, isov in enumerate(isovalues):
+                self.series_output[series_name]['series_info'].append({
+                    'type': 'const-isovalue stm',
+                    'isovalue': isov,
+                    'fwhm': fwhm,
+                })
+                self.series_output[series_name]['series_data'][i_series_counter, :, :, :] = cc_stm[i_fwhm, i_isov, :, :, :]
+                i_series_counter += 1
+            
+
+    def collect_local_grid(self, local_arr, global_shape, to_rank = 0):
+        """
+        local_arr needs to have x as first axis
+        """
+
+        size_except_x = np.prod(global_shape[1:])
+
+        nx_per_rank = np.array([ self.x_ind_per_rank(r)[1] - self.x_ind_per_rank(r)[0] for r in range(self.mpi_size) ])
+
+        if self.mpi_rank == to_rank:
+            recvbuf = np.empty(sum(nx_per_rank)*size_except_x, dtype=self.cgo.dtype)
+            print("R%d expecting counts: " % (self.mpi_rank) + str(nx_per_rank*size_except_x))
+        else:
+            recvbuf = None
+            
+        sendbuf = local_arr.ravel()
+
+        self.mpi_comm.Gatherv(sendbuf=sendbuf, recvbuf=[recvbuf, nx_per_rank*size_except_x], root=to_rank)
+        if self.mpi_rank == to_rank:
+            recvbuf = recvbuf.reshape(global_shape)
+        return recvbuf
+
+    def collect_series_maps(self):
 
         nx = self.cell_n[0]
         ny = self.cell_n[1]
-        ne = len(self.stm_maps_data['e_arr'])
-        n_cc = len(self.stm_maps_data['isovalues'])
-        n_ch = len(self.stm_maps_data['heights'])
-        n_fwhms = len(self.stm_maps_data['fwhms'])
 
-        ### collect orbital maps
+        for label, ser in self.series_output.items():
 
-        ch_orbs = self.collect_local_grid(self.orb_maps_data['ch_orbs'].swapaxes(0, 3), np.array([nx, n_ch, ne, self.nspin, ny]))
-        cc_orbs = self.collect_local_grid(self.orb_maps_data['cc_orbs'].swapaxes(0, 3), np.array([nx, n_cc, ne, self.nspin, ny]))
+            ne = len(ser['general_info']['energies'])
+            n_ser = len(ser['series_info'])
 
-        ### collect STM/STS maps at orbital energies
+            ser['series_data'] = self.collect_local_grid(ser['series_data'].swapaxes(0, 2), np.array([nx, ne, n_ser, ny]))
 
-        cc_sts = self.collect_local_grid(self.stm_maps_data['cc_sts'].swapaxes(0, 3), np.array([nx, n_cc, ne, n_fwhms, ny]))
-        cc_stm = self.collect_local_grid(self.stm_maps_data['cc_stm'].swapaxes(0, 3), np.array([nx, n_cc, ne, n_fwhms, ny]))
-        ch_sts = self.collect_local_grid(self.stm_maps_data['ch_sts'].swapaxes(0, 3), np.array([nx, n_ch, ne, n_fwhms, ny]))
-        ch_stm = self.collect_local_grid(self.stm_maps_data['ch_stm'].swapaxes(0, 3), np.array([nx, n_ch, ne, n_fwhms, ny]))
+            if self.mpi_rank == 0:
+                ser['series_data'] = ser['series_data'].swapaxes(2, 0)
 
+    def apply_zero_threshold(self, data_array, zero_thresh):
+        # apply it to every energy slice independently
+        for i_series in range(data_array.shape[0]):
+            for i_e in range(data_array.shape[1]):
+                sli = data_array[i_series, i_e, :, :]
+                slice_absmax = np.max(np.abs(sli))
+                sli[np.abs(sli) < slice_absmax*zero_thresh] = 0.0
+
+    def collect_and_save_stm_maps(self, path = "./stm.npz"):
+
+        self.collect_series_maps()
+        
         if self.mpi_rank == 0:
 
-            # back to correct orientation
-
-            ch_orbs = ch_orbs.swapaxes(3, 0)
-            cc_orbs = cc_orbs.swapaxes(3, 0)
-
-            cc_sts = cc_sts.swapaxes(3, 0)
-            cc_stm = cc_stm.swapaxes(3, 0)
-            ch_sts = ch_sts.swapaxes(3, 0)
-            ch_stm = ch_stm.swapaxes(3, 0)
-
-            save_data = {}
-            save_data['cc_stm'] = cc_stm.astype(np.float16) # all values either way ~ between -2 and 8
-            save_data['cc_sts'] = cc_sts.astype(np.float32)
-            save_data['ch_stm'] = ch_stm.astype(np.float32)
-            save_data['ch_sts'] = ch_sts.astype(np.float32)
-
-            save_data['ch_orbs'] = ch_orbs.astype(np.float32)
-            save_data['cc_orbs'] = cc_orbs.astype(np.float16)
+            save_data = {
+                'stm_general_info': self.series_output['stm']['general_info'],
+                'stm_series_info': self.series_output['stm']['series_info'],
+                'stm_series_data': self.series_output['stm']['series_data'].astype(np.float32),
+            }
 
             ### ----------------
             ### Reduce filesize further by zero threshold
             zero_thresh = 1e-3
-            self.apply_zero_threshold(save_data['cc_sts'], zero_thresh)
-            self.apply_zero_threshold(save_data['ch_stm'], zero_thresh)
-            self.apply_zero_threshold(save_data['ch_sts'], zero_thresh)
-            self.apply_zero_threshold(save_data['ch_orbs'], zero_thresh)
+            self.apply_zero_threshold(save_data['stm_series_data'], zero_thresh)
             ### ----------------
+
             # additionally add info
-            save_data['orbital_list'] = self.orb_maps_data['orbital_list'] 
-            save_data['energies'] = self.orb_maps_data['energies']
-            save_data['isovalues'] = self.stm_maps_data['isovalues']
-            save_data['heights'] = self.stm_maps_data['heights']
-            save_data['fwhms'] = self.stm_maps_data['fwhms']
-            save_data['e_arr'] = self.stm_maps_data['e_arr']
-            save_data['x_arr'] = np.arange(0.0, self.cell_n[0]*self.dv[0] + self.dv[0]/2, self.dv[0]) + self.origin[0]
-            save_data['y_arr'] = np.arange(0.0, self.cell_n[1]*self.dv[1] + self.dv[1]/2, self.dv[1]) + self.origin[1]
+            save_data['stm_general_info']['x_arr'] = np.arange(0.0, self.cell_n[0]*self.dv[0] + self.dv[0]/2, self.dv[0]) + self.origin[0]
+            save_data['stm_general_info']['y_arr'] = np.arange(0.0, self.cell_n[1]*self.dv[1] + self.dv[1]/2, self.dv[1]) + self.origin[1]
             np.savez_compressed(path, **save_data)
 
+        # Reset, otherwise can cause problems (more versatile to NOT reset, though)
+        self.series_output = {}
+
+    ### -----------------------------------------
+    ### Orbital analysis and export
+    ### -----------------------------------------
+
+    def create_orb_series(self, orb_indexes, height_list=[], isoval_list=[], fwhm_list=[]):
+        """
+        orb_indexes - orbital indexes w.r.t. to "ref_index_glob" for both spin channels
+        """
+        orb_indexes_wrt_data_start = []
+        n_orb = len(orb_indexes)
+
+        ens_list = []
+
+        # Setup the series' dictionaries
+        for i_spin in range(self.nspin):
+            label = 's%d_orb' % i_spin
+            self.series_output[label] = {}
+
+            orb_indexes_wrt_data_start.append(list(np.array(orb_indexes) + self.cgo.cwf.ref_index_glob))
+
+        # Orbital / energy info
+        for i_spin in range(self.nspin):
+            label = 's%d_orb' % i_spin
+
+            ens_list.append(self.global_morb_energies[i_spin][orb_indexes_wrt_data_start[i_spin]])
+            physical_index_list = self.cgo.cwf.global_morb_indexes[i_spin][orb_indexes_wrt_data_start[i_spin]]
+
+            self.series_output[label]['general_info'] = {
+                'energies': ens_list[-1],
+                'orb_indexes': physical_index_list,
+                'homo': physical_index_list[self.cgo.i_homo_glob[i_spin]],
+                'spin': i_spin,
+            }
+            self.series_output[label]['series_info'] = []
+        
+        number_of_series = (len(height_list) + len(isoval_list)) * (1 + 2*len(fwhm_list))
+
+
+        # Orbital series
+        for i_spin in range(self.nspin):
+            label = 's%d_orb' % i_spin
+
+            self.series_output[label]['series_data'] = np.zeros(
+                (number_of_series, n_orb, self.local_cell_n[0], self.local_cell_n[1]),
+            dtype=self.cgo.dtype)
+
+            i_series_counter = 0
+
+            ### constant-height orbital series
+
+            for i_h, h in enumerate(height_list):
+                # series info
+                self.series_output[label]['series_info'].append({
+                    'type': 'const-height orbital',
+                    'height': h,
+                })
+
+                # series data
+                i_orb_count = 0
+                for i_mo in orb_indexes_wrt_data_start[i_spin]:
+                    self.series_output[label]['series_data'][i_series_counter, i_orb_count, :, :] = (
+                        self.local_data_plane_above_atoms(self.local_orbitals[i_spin][i_mo], h)
+                    )
+                    i_orb_count += 1
+                i_series_counter += 1
+
+            ### constant-isovalue orbital series
+
+            for i_isov, isov in enumerate(isoval_list):
+                # series info
+                self.series_output[label]['series_info'].append({
+                    'type': 'const-isovalue orbital^2',
+                    'isovalue': isov,
+                })
+
+                # series data
+                i_orb_count = 0
+                for i_mo in orb_indexes_wrt_data_start[i_spin]:
+                    i_isosurf = self._get_isosurf_indexes(self.local_orbitals[i_spin][i_mo]**2, isov, True)
+                    self.series_output[label]['series_data'][i_series_counter, i_orb_count, :, :] = (
+                        self._index_with_interpolation(i_isosurf, self.z_arr)
+                    )
+                    i_orb_count += 1
+
+                i_series_counter += 1
+
+            self.calculate_stm_maps(
+                fwhm_list, isoval_list, height_list, ens_list[i_spin], series_name='s%d_orb'%i_spin, i_series_offset=i_series_counter
+            )
+
+
+#    def create_orbital_images(self, orbital_list, height_list=[], isoval_list=[]):
+#
+#        self.orb_maps_data = {}
+#
+#        ens_list = []
+#        orb_list = [] # orbital indexes of spin channels wrt to their SOMO
+#        physical_index_list = [] # physical global orbital indexes (count starts from 1)
+#        for i_spin in range(self.nspin):
+#            orbital_list_wrt_ref = list(np.array(orbital_list) + self.cgo.cwf.ref_index_glob)
+#            ens_list.append(self.global_morb_energies[i_spin][orbital_list_wrt_ref])
+#            orb_list.append(np.array(orbital_list) + self.cgo.cwf.ref_index_glob - self.cgo.i_homo_glob[i_spin])
+#            physical_index_list.append(self.cgo.cwf.morb_indexes[i_spin][orbital_list_wrt_ref])
+#
+#        self.orb_maps_data['energies'] = np.array(ens_list)
+#        self.orb_maps_data['relative_indexes'] = np.array(orb_list)
+#        self.orb_maps_data['physical_indexes'] = np.array(physical_index_list)
+#
+#        if len(height_list) != 0:
+#            self.orb_maps_data['ch_orbs'] = np.zeros(
+#                (self.nspin, len(height_list), len(orbital_list), self.local_cell_n[0], self.local_cell_n[1]),
+#                dtype=self.cgo.dtype)
+#
+#        if len(isoval_list) != 0:
+#            self.orb_maps_data['cc_orbs'] = np.zeros(
+#                (self.nspin, len(isoval_list), len(orbital_list), self.local_cell_n[0], self.local_cell_n[1]),
+#                dtype=self.cgo.dtype)
+#
+#        for i_spin in range(self.nspin):
+#            i_orb_count = 0
+#            for i_mo in range(len(self.global_morb_energies[i_spin])):
+#                i_mo_wrt_ref = i_mo - self.cgo.cwf.ref_index_glob
+#                if i_mo_wrt_ref in orbital_list:
+#                    for i_h, h in enumerate(height_list):
+#                        self.orb_maps_data['ch_orbs'][i_spin, i_h, i_orb_count, :, :] = (
+#                            self.local_data_plane_above_atoms(self.local_orbitals[i_spin][i_mo], h)
+#                        )
+#                    for i_isov, isov in enumerate(isoval_list):
+#                        i_isosurf = self._get_isosurf_indexes(self.local_orbitals[i_spin][i_mo]**2, isov, True)
+#                        self.orb_maps_data['cc_orbs'][i_spin, i_isov, i_orb_count, :, :] = (
+#                            self._index_with_interpolation(i_isosurf, self.z_arr)
+#                        )
+#                    i_orb_count += 1
+
+    def collect_and_save_orb_maps(self, path = "./orb.npz"):
+
+        self.collect_series_maps()
+        
+        if self.mpi_rank == 0:
+
+            save_data = {
+                's0_orb_general_info': self.series_output['s0_orb']['general_info'],
+                's0_orb_series_info': self.series_output['s0_orb']['series_info'],
+                's0_orb_series_data': self.series_output['s0_orb']['series_data'].astype(np.float32),
+            }
+
+            ### ----------------
+            ### Reduce filesize further by zero threshold
+            zero_thresh = 1e-3
+            self.apply_zero_threshold(save_data['s0_orb_series_data'], zero_thresh)
+            ### ----------------
+
+            # additionally add info
+            save_data['s0_orb_general_info']['x_arr'] = np.arange(0.0, self.cell_n[0]*self.dv[0] + self.dv[0]/2, self.dv[0]) + self.origin[0]
+            save_data['s0_orb_general_info']['y_arr'] = np.arange(0.0, self.cell_n[1]*self.dv[1] + self.dv[1]/2, self.dv[1]) + self.origin[1]
+
+            if "s1_orb" in self.series_output:
+                save_data['s1_orb_general_info'] = self.series_output['s1_orb']['general_info']
+                save_data['s1_orb_series_info'] = self.series_output['s1_orb']['series_info']
+                save_data['s1_orb_series_data'] = self.series_output['s1_orb']['series_data'].astype(np.float32)
+
+                self.apply_zero_threshold(save_data['s1_orb_series_data'], zero_thresh)
+                save_data['s1_orb_general_info']['x_arr'] = np.arange(0.0, self.cell_n[0]*self.dv[0] + self.dv[0]/2, self.dv[0]) + self.origin[0]
+                save_data['s1_orb_general_info']['y_arr'] = np.arange(0.0, self.cell_n[1]*self.dv[1] + self.dv[1]/2, self.dv[1]) + self.origin[1]
+
+            np.savez_compressed(path, **save_data)
+
+        # Reset, otherwise can cause problems (more versatile to NOT reset, though)
+        self.series_output = {}
+
+
+#        nx = self.cell_n[0]
+#        ny = self.cell_n[1]
+#        ne = len(self.orb_maps_data['energies'])
+#
+#        stm_maps_data = self.stm_maps_data_list[0]
+#        n_cc = len(stm_maps_data['isovalues'])
+#        n_ch = len(stm_maps_data['heights'])
+#        n_fwhms = len(stm_maps_data['fwhms'])
+#
+#        ### collect orbital maps
+#
+#        ch_orbs = self.collect_local_grid(self.orb_maps_data['ch_orbs'].swapaxes(0, 3), np.array([nx, n_ch, ne, self.nspin, ny]))
+#        cc_orbs = self.collect_local_grid(self.orb_maps_data['cc_orbs'].swapaxes(0, 3), np.array([nx, n_cc, ne, self.nspin, ny]))
+#
+#        if self.mpi_rank == 0:
+#
+#            # back to correct orientation
+#            ch_orbs = ch_orbs.swapaxes(3, 0)
+#            cc_orbs = cc_orbs.swapaxes(3, 0)
+#
+#            cc_sts_list = []
+#            cc_stm_list = []
+#            ch_sts_list = []
+#            ch_stm_list = []
+#
+#            e_arr_list = []
+#
+#
+#        ### collect STM/STS maps at orbital energies
+#
+#        for i_spin in range(self.nspin):
+#
+#            stm_maps_data = self.stm_maps_data_list[i_spin]
+#
+#            cc_sts = self.collect_local_grid(stm_maps_data['cc_sts'].swapaxes(0, 3), np.array([nx, n_cc, ne, n_fwhms, ny]))
+#            cc_stm = self.collect_local_grid(stm_maps_data['cc_stm'].swapaxes(0, 3), np.array([nx, n_cc, ne, n_fwhms, ny]))
+#            ch_sts = self.collect_local_grid(stm_maps_data['ch_sts'].swapaxes(0, 3), np.array([nx, n_ch, ne, n_fwhms, ny]))
+#            ch_stm = self.collect_local_grid(stm_maps_data['ch_stm'].swapaxes(0, 3), np.array([nx, n_ch, ne, n_fwhms, ny]))
+#
+#            if self.mpi_rank == 0:
+#
+#                # back to correct orientation
+#
+#                cc_sts = cc_sts.swapaxes(3, 0)
+#                cc_stm = cc_stm.swapaxes(3, 0)
+#                ch_sts = ch_sts.swapaxes(3, 0)
+#                ch_stm = ch_stm.swapaxes(3, 0)
+#
+#                cc_sts_list.append(cc_sts)
+#                cc_stm_list.append(cc_stm)
+#                ch_sts_list.append(ch_sts)
+#                ch_stm_list.append(ch_stm)
+#
+#                e_arr_list.append(stm_maps_data['e_arr'])
+#
+#
+#        # Build the final output data structure
+#
+#        if self.mpi_rank == 0:
+#
+#            save_data = {}
+#
+#            save_data['cc_stm'] = np.array(cc_stm_list).astype(np.float16) # all values either way ~ between -2 and 8
+#            save_data['cc_sts'] = np.array(cc_sts_list).astype(np.float32)
+#            save_data['ch_stm'] = np.array(ch_stm_list).astype(np.float32)
+#            save_data['ch_sts'] = np.array(ch_sts_list).astype(np.float32)
+#
+#            save_data['ch_orbs'] = ch_orbs.astype(np.float32)
+#            save_data['cc_orbs'] = cc_orbs.astype(np.float16)
+#
+#            ### ----------------
+#            ### Reduce filesize further by zero threshold
+#            zero_thresh = 1e-3
+#            self.apply_zero_threshold(save_data['cc_sts'], zero_thresh)
+#            self.apply_zero_threshold(save_data['ch_stm'], zero_thresh)
+#            self.apply_zero_threshold(save_data['ch_sts'], zero_thresh)
+#            self.apply_zero_threshold(save_data['ch_orbs'], zero_thresh)
+#            ### ----------------
+#            # additionally add info
+#            save_data['relative_indexes'] = self.orb_maps_data['relative_indexes']
+#            save_data['physical_indexes'] = self.orb_maps_data['physical_indexes']
+#
+#            save_data['energies'] = self.orb_maps_data['energies']
+#            save_data['isovalues'] = self.stm_maps_data['isovalues']
+#            save_data['heights'] = self.stm_maps_data['heights']
+#            save_data['fwhms'] = self.stm_maps_data['fwhms']
+#            save_data['e_arr'] = self.stm_maps_data['e_arr']
+#            save_data['x_arr'] = np.arange(0.0, self.cell_n[0]*self.dv[0] + self.dv[0]/2, self.dv[0]) + self.origin[0]
+#            save_data['y_arr'] = np.arange(0.0, self.cell_n[1]*self.dv[1] + self.dv[1]/2, self.dv[1]) + self.origin[1]
+#            np.savez_compressed(path, **save_data)

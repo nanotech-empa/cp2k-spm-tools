@@ -189,10 +189,10 @@ for imo in np.arange(n_homo+n_lumo):
     i_rel_homo = imo - n_homo + 1
     for ispin in range(mol_grid_orb.nspin):
 
-        if imo >= len(mol_grid_orb.cwf.morb_indexes[ispin]):
+        if imo >= len(mol_grid_orb.cwf.global_morb_indexes[ispin]):
             continue
 
-        global_index = mol_grid_orb.cwf.morb_indexes[ispin][imo]
+        global_index = mol_grid_orb.cwf.global_morb_indexes[ispin][imo]
 
         if i_rel_homo < 0:
             hl_label = "HOMO%+d" % i_rel_homo
