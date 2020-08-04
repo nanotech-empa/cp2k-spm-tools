@@ -34,9 +34,6 @@ class Cube:
 
     def write_cube_file(self, filename):
 
-        positions = self.ase_atoms.positions * ang_2_bohr
-        numbers = self.ase_atoms.get_atomic_numbers()
-
         natoms = len(self.ase_atoms)
 
         f = open(filename, 'w')
@@ -58,9 +55,13 @@ class Cube:
         for i in range(3):
             f.write("%5d %12.6f %12.6f %12.6f\n"%(self.data.shape[i], dv_br[i][0], dv_br[i][1], dv_br[i][2]))
 
-        for i in range(natoms):
-            at_x, at_y, at_z = positions[i]
-            f.write("%5d %12.6f %12.6f %12.6f %12.6f\n"%(numbers[i], 0.0, at_x, at_y, at_z))
+        if natoms > 0:
+
+            positions = self.ase_atoms.positions * ang_2_bohr
+            numbers = self.ase_atoms.get_atomic_numbers()
+            for i in range(natoms):
+                at_x, at_y, at_z = positions[i]
+                f.write("%5d %12.6f %12.6f %12.6f %12.6f\n"%(numbers[i], 0.0, at_x, at_y, at_z))
 
         self.data.tofile(f, sep='\n', format='%12.6e')
 
@@ -126,11 +127,12 @@ class Cube:
 
         # Atomic positions: careful, the ase cell is not modified
         p = self.ase_atoms.positions
-        p[:, ax1], p[:, ax2] = p[:, ax1], p[:, ax2].copy()
+        p[:, ax1], p[:, ax2] = p[:, ax2], p[:, ax1].copy()
 
         self.origin[ax1], self.origin[ax2] = self.origin[ax2], self.origin[ax1].copy()
 
-        self.cell[:, ax1], self.cell[:, ax2] = self.cell[:, ax1], self.cell[:, ax2].copy()
+        self.cell[:, ax1], self.cell[:, ax2] = self.cell[:, ax2], self.cell[:, ax1].copy()
+        self.cell[ax1, :], self.cell[ax2, :] = self.cell[ax2, :], self.cell[ax1, :].copy()
 
         self.data = np.swapaxes(self.data, ax1, ax2)
 

@@ -710,8 +710,6 @@ class Cp2kGridOrbitals:
     def extrapolate_morbs_spin(self, ispin, vacuum_pot=None, hart_plane=None, use_weighted_avg=True):
         """
         Extrapolate molecular orbitals from a specified plane to a box or another plane
-        in case of "single_plane = True", the orbitals will be only extrapolated on
-        a plane "extent" distance away
         Extent in bohr !!!
 
         Either the vacuum potential or the hartree plane is needed!
