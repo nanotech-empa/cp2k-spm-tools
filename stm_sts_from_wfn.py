@@ -91,9 +91,10 @@ parser.add_argument(
     metavar='H',
     default=4.0,
     required=True,
-    help="The extent of the extrapolation region. (angstrom)")
+    help="The extent of the extrapolation region. (angstrom)"
+)
 ### ----------------------------------------------------------------------
-### Gas phase analysis parameters
+### Gas phase analysis parameters - image at orbital energies
 parser.add_argument(
     '--n_homo',
     type=int,
@@ -125,7 +126,7 @@ parser.add_argument(
     default=[0.02],
     help="Full width at half maximum for orbital STS gaussian broadening. (eV)")
 ### ----------------------------------------------------------------------
-### Slab system analysis parameters
+### Slab system analysis parameters - images at specified energies
 ###
 ### Option 1: continuous selection
 parser.add_argument(
@@ -162,6 +163,18 @@ parser.add_argument(
     type=float,
     default=[0.1],
     help="Full width at half maximum for STS gaussian broadening. (eV)")
+### ----------------------------------------------------------------------
+### P - tip ratio list
+parser.add_argument(
+    '--p_tip_ratios',
+    nargs='+',
+    type=float,
+    metavar='P',
+    default=[0.0],
+    help=("List of p character of the STM tip: 0.0 corresponds"
+          "to fully s-type and 1.0 to fully p-type tip")
+)
+### ----------------------------------------------------------------------
 
 
 time0 = time.time()
@@ -254,6 +267,7 @@ print("R%d/%d: extrapolated wfn, %.2fs"%(mpi_rank, mpi_size, (time.time() - time
 sys.stdout.flush()
 time1 = time.time()
 
+
 ### ------------------------------------------------------
 ### Calculate the ionization potential (just for output)
 ### ------------------------------------------------------
@@ -267,14 +281,14 @@ if mpi_rank == 0:
             cp2k_grid_orb.global_morb_energies[0][cp2k_grid_orb.i_homo_glob[0]],
             cp2k_grid_orb.global_morb_energies[1][cp2k_grid_orb.i_homo_glob[1]]
         ])
-    ion_pot = cube_utils.calc_ioniz_potential(hart_cube, (homo_en + cp2k_grid_orb.ref_energy)/hart_2_ev)
+    ion_pot = cube_utils.find_vacuum_level_naive(hart_cube) - (homo_en + cp2k_grid_orb.ref_energy)
     print("IONIZATION POTENIAL (eV): %.6f (accurate only for isolated molecules)" % ion_pot)
 
 ### ------------------------------------------------------
 ### Set up STM object
 ### ------------------------------------------------------
 
-stm = css.STM(mpi_comm = comm, cp2k_grid_orb = cp2k_grid_orb)
+stm = css.STM(mpi_comm = comm, cp2k_grid_orb = cp2k_grid_orb, p_tip_ratios = args.p_tip_ratios)
 stm.gather_global_energies()
 stm.divide_by_space()
 
