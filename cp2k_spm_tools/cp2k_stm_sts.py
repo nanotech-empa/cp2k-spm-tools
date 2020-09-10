@@ -128,13 +128,13 @@ class STM:
                 
                 if self.mpi_rank == rank:
                     recvbuf = np.empty(sum(orbitals_per_rank)*num_spatial_points, dtype=self.cgo.dtype)
-                    print("R%d expecting counts: " % (self.mpi_rank) + str(orbitals_per_rank*num_spatial_points))
+                    #print("R%d expecting counts: " % (self.mpi_rank) + str(orbitals_per_rank*num_spatial_points))
                     sys.stdout.flush()
                 else:
                     recvbuf = None
 
                 sendbuf = self.cgo.morb_grids[ispin][:, ix_start:ix_end, :, :].ravel()
-                print("R%d -> %d sending %d" %(self.mpi_rank, rank, len(sendbuf)))
+                #print("R%d -> %d sending %d" %(self.mpi_rank, rank, len(sendbuf)))
                 sys.stdout.flush()
 
                 # Send the orbitals
@@ -257,7 +257,7 @@ class STM:
 
     def build_stm_series(self, e_arr, fwhms, heights, isovalues, p_tip_ratio=0.0):
 
-        print("Create series: " + str(e_arr))
+        #print("Create series: " + str(e_arr))
 
         rev_output = False
         if np.abs(e_arr[-1]) < np.abs(e_arr[0]):
@@ -295,12 +295,12 @@ class STM:
                     close_energies.append(self.global_morb_energies[ispin][close_i1:close_i2])
                     close_grids.append(self.local_orbitals[ispin][close_i1:close_i2])
                 
-                print("fwhm %.2f, energy range %.4f : %.4f" % (fwhm, last_e, e))
-                if close_i2 is not None:
-                    print("---- contrib %d:%d" % (close_i1, close_i2))
-                else:
-                    print("---- contrib %d:" % (close_i1))
-                print("---- ens:" + str(close_energies))
+                #print("fwhm %.2f, energy range %.4f : %.4f" % (fwhm, last_e, e))
+                #if close_i2 is not None:
+                #    print("---- contrib %d:%d" % (close_i1, close_i2))
+                #else:
+                #    print("---- contrib %d:" % (close_i1))
+                #print("---- ens:" + str(close_energies))
 
                 # ---------------------
                 # Update charge density
@@ -445,7 +445,7 @@ class STM:
 
         if self.mpi_rank == to_rank:
             recvbuf = np.empty(sum(nx_per_rank)*size_except_x, dtype=self.cgo.dtype)
-            print("R%d expecting counts: " % (self.mpi_rank) + str(nx_per_rank*size_except_x))
+            #print("R%d expecting counts: " % (self.mpi_rank) + str(nx_per_rank*size_except_x))
         else:
             recvbuf = None
             
