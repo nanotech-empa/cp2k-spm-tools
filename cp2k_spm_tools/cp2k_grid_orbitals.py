@@ -24,7 +24,7 @@ from . import cube_utils
 
 from mpi4py import MPI
 
-ang_2_bohr = 1.0/0.52917721067
+ang_2_bohr = 1.88972612463
 hart_2_ev = 27.21138602
 
 class Cp2kGridOrbitals:
