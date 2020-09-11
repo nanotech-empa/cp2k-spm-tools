@@ -18,7 +18,7 @@ Requirements:
 
 When everything is set up correctly, the bash scripts in `examples/` folder can be executed without any further input and illustrate the usage of the various scripts. For example `example/benzene_stm/run_stm_sts_from_wfn.sh` evaluates the STM/STS signatures of isolated benzene at each orbital energy (`out/orb/`) as well as in an arbitrary energy range (`out/stm/`). The corresponding CP2K calculation is included in the repository.
 
-**NB: The DFT calculation has to be performed with the diagonalization algorithm rather than orbital transformation (OT).**
+**NB: In all cases, the underlying DFT calculation has to be performed with the diagonalization algorithm rather than orbital transformation (OT).**
 
 ### Evaluating molecular orbitals on an arbitrary grid
 
