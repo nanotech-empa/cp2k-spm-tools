@@ -6,7 +6,7 @@ mkdir out
 
 mpirun -n 2 python3 ../../cube_from_wfn.py \
   --cp2k_input_file "$FOLDER"/cp2k.inp \
-  --basis_set_file "$FOLDER"/BASIS_MOLOPT \
+  --basis_set_file ../BASIS_MOLOPT \
   --xyz_file "$FOLDER"/geom.xyz \
   --wfn_file "$FOLDER"/PROJ-RESTART.wfn \
   --output_dir "./out/" \

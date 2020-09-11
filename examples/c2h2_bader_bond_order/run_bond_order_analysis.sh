@@ -4,7 +4,7 @@ FOLDER="../c2h2_cp2k_scf"
 
 mpirun -n 2 python3 ../../bader_bond_order.py \
   --cp2k_input_file "$FOLDER"/cp2k.inp \
-  --basis_set_file "$FOLDER"/BASIS_MOLOPT \
+  --basis_set_file ../BASIS_MOLOPT \
   --xyz_file "$FOLDER"/geom.xyz \
   --wfn_file "$FOLDER"/PROJ-RESTART.wfn \
 \
