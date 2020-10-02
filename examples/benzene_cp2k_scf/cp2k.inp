@@ -31,16 +31,17 @@
         NBROYDEN 8
       &END
 
-#      &OT
-#        PRECONDITIONER  FULL_SINGLE_INVERSE
-#        MINIMIZER  CG
-#      &END
-
       &OUTER_SCF
         MAX_SCF 50
         EPS_SCF 1.0E-7
       &END
     &END SCF
+
+    &POISSON
+      PERIODIC NONE
+      PSOLVER MT # cell size double charge density size + 4 ang
+    &END
+
     &XC
       &XC_FUNCTIONAL PBE
       &END XC_FUNCTIONAL
@@ -58,7 +59,7 @@
   &END DFT
   &SUBSYS
     &CELL
-      ABC 12.0 12.0 8.0
+      ABC 14.0 14.0 14.0
     &END CELL
     &TOPOLOGY
       COORD_FILE_NAME ./geom.xyz
