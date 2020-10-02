@@ -11,6 +11,17 @@ Features include:
 * Orbital hybridization analysis for adsorbed systems
 * High-resolution STM (HRSTM) simulations
 
+Requirements:
+* numerical and scientific python libraries `numpy`, `scipy`
+* Atomistic simulation environment `ase`
+* `mpi4py` provides MPI parallelization
+
+When everything is set up correctly, the bash scripts in `examples/` folder can be executed without any further input and illustrate the usage of the various scripts. For example `example/benzene_stm/run_stm_sts_from_wfn.sh` evaluates the STM/STS signatures of isolated benzene at each orbital energy (`out/orb/`) as well as in an arbitrary energy range (`out/stm/`). The corresponding CP2K calculation is included in the repository.
+
+**NB: In all cases, the underlying DFT calculation has to be performed with the diagonalization algorithm rather than orbital transformation (OT).**
+
+### Evaluating molecular orbitals on an arbitrary grid
+
 Most of the functionality of this library is built on top of the possibility to evaluate the Kohn-Sham orbitals encoded in the `.wfn` file on an arbitrarily defined grid. This is illustrated by the following script applied for a nanographene adsorbed on a Au(111) slab (total of 1252 atoms and 10512 electrons):
 
 ```python
@@ -36,5 +47,5 @@ cgo.write_cube("./homo.cube", orbital_nr=0)
 
 The evaluated HOMO orbital in the defined region:
 
-
 <img src="examples/example.png" width="600">
+
