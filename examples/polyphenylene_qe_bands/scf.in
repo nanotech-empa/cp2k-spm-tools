@@ -1,0 +1,45 @@
+&CONTROL
+  calculation = 'scf'
+  forc_conv_thr =   1.0000000000d-04
+  nstep = 500
+  outdir = './out/'
+  prefix = 'aiida'
+  pseudo_dir = './pseudo/'
+  verbosity = 'high'
+  wf_collect = .true.
+/
+&SYSTEM
+  degauss =   1.0000000000d-03
+  ecutrho =   4.0000000000d+02
+  ecutwfc =   5.0000000000d+01
+  ibrav = 0
+  nat = 10
+  ntyp = 2
+  occupations = 'smearing'
+/
+&ELECTRONS
+  conv_thr =   1.0000000000d-08
+  electron_maxstep = 50
+  mixing_beta =   2.5000000000d-01
+  scf_must_converge = .false.
+/
+ATOMIC_SPECIES
+C      12.011 C.pbe-n-kjpaw_psl.1.0.0.UPF
+H      1.008 H.pbe-kjpaw_psl.1.0.0.UPF
+ATOMIC_POSITIONS angstrom
+C            1.4882287748       9.9343530111       7.5000000000 
+C            0.7403927550       8.7403446191       7.5000000000 
+C            1.4882393474       7.5463384392       7.5000000000 
+C            2.8771544707       7.5463352743       7.5000000000 
+C            3.6249942816       8.7403419277       7.5000000000 
+C            2.8771484655       9.9343510018       7.5000000000 
+H            0.9816065183      10.8985988749       7.5000000000 
+H            0.9816268197       6.5820898224       7.5000000000 
+H            3.3837694459       6.5820830565       7.5000000000 
+H            3.3837598655      10.8985994430       7.5000000000 
+K_POINTS automatic
+51 1 1 0 0 0
+CELL_PARAMETERS angstrom
+      4.3651102589       0.0000000000       0.0000000000
+      0.0000000000      17.4807780202       0.0000000000
+      0.0000000000       0.0000000000      15.0000000000
