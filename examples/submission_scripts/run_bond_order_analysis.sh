@@ -2,7 +2,7 @@
 
 FOLDER=".."
 
-mpirun -n 2 python3 ~/work/bader_charge_analysis/bader_bond_order.py \
+mpirun -n 2 bader_bond_order.py \
   --cp2k_input_file "$FOLDER"/cp2k.inp \
   --basis_set_file "$FOLDER"/BASIS_MOLOPT \
   --xyz_file "$FOLDER"/c2h2-opt.xyz \
