@@ -72,7 +72,7 @@ class Cp2kGridOrbitals:
         # Orbitals on discrete grid
         self.morb_grids = None
         self.dv = None # [dx, dy, dz] in [au]
-        self.origin = None
+        self.origin = None # origin point of the evaluation grid
         self.eval_cell = None
         self.eval_cell_n = None
 

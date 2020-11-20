@@ -108,7 +108,7 @@ parser.add_argument(
 parser.add_argument(
     '--charge_dens_artif_core',
     action='store_true',
-    help=("Calculate charge density with artificial core (all occ orbitals are evaluated).")
+    help=("Calculate charge density with 'fake' artificial core (all occ orbitals are evaluated).")
 )
 parser.add_argument(
     '--spin_dens',
