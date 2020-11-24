@@ -519,7 +519,7 @@ class Cp2kGridOrbitals:
         Puts the molecular orbitals onto a specified grid
         Arguments:
         dr_guess -- spatial discretization step [ang], real value will change for every axis due to rounding  
-        x_eval_region -- x evaluation (min, max) in [au]. If min == max, then evaluation only works on a plane.
+        x_eval_region -- x evaluation (min, max) in [ang]. If min == max, then evaluation only works on a plane.
                         If left at None, the whole range of the cell is taken.
         pbc -- determines if periodic boundary conditions are applied in direction (x, y, z) (based on global cell)
         eval_cutoff -- cutoff in [ang] for orbital evaluation
@@ -531,12 +531,14 @@ class Cp2kGridOrbitals:
         eval_cutoff *= ang_2_bohr
         reserve_extrap *= ang_2_bohr
 
+        eval_regions_ang = [x_eval_region, y_eval_region, z_eval_region]
+        eval_regions = [np.array(er)*ang_2_bohr if er is not None else er for er in eval_regions_ang]
+
         global_cell_n = (np.round(self.cell/dr_guess)).astype(int)
         self.dv = self.cell / global_cell_n
 
         ### ----------------------------------------
         ### Define evaluation grid
-        eval_regions = [x_eval_region, y_eval_region, z_eval_region]
         self.eval_cell_n = np.zeros(3, dtype=int)
         self.origin = np.zeros(3)
 

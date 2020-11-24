@@ -263,11 +263,11 @@ wfn_grid_orb.read_basis_functions(args.basis_set_file)
 wfn_grid_orb.load_restart_wfn_file(args.wfn_file,
     emin=args.emin-4.0*args.fwhm_sam, emax=args.emax+4.0*args.fwhm_sam)
 wfn_grid_orb.calc_morbs_in_region(args.dx_wfn,
-    z_eval_region=eval_region_wfn[2]*ang2bohr,
+    z_eval_region=eval_region_wfn[2],
 # Hack for PPSTM: actually used for workfunction
 #    reserve_extrap = args.wn,
     reserve_extrap = args.extrap_dist,
-    eval_cutoff = args.rcut*ang2bohr)
+    eval_cutoff = args.rcut)
 end = time.time()
 print("Building CP2K wave function matrix in {} seconds for rank {}.".format(
   end-start, mpi_rank))
