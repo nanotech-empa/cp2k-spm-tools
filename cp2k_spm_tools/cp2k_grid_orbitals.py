@@ -78,6 +78,9 @@ class Cp2kGridOrbitals:
 
         self.last_calc_iz = None # last directly calculated z plane (others extrapolated)
         
+    @property
+    def cell_ang(self):
+        return self.cell/ang_2_bohr
 
     ### -----------------------------------------
     ### General cp2k routines
