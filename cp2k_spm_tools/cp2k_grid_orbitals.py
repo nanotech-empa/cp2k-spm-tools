@@ -782,7 +782,7 @@ class Cp2kGridOrbitals:
             print("R%d/%d is writing HOMO%+d cube" %(self.mpi_rank, self.mpi_size, orbital_nr))
 
             energy = self.morb_energies[spin][local_ind]
-            comment = "E=%.8f eV (wrt HOMO)" % energy
+            comment = "E=%.8f eV (wrt middle of gap)" % energy
 
             if not square:
                 c = Cube(title="HOMO%+d"%orbital_nr, comment=comment, ase_atoms=self.ase_atoms,
