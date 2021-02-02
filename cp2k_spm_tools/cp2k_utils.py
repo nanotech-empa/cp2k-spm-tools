@@ -84,10 +84,11 @@ def parse_cp2k_output(file_path):
         # ----------------------------------------------------------------
         # GW output
         if "Sigx-vxc (eV)" in line and "E_GW (eV)" in line:
-            add_res_list('gw_mo')
-            add_res_list('gw_occ')
-            add_res_list('gw_e_scf')
+            add_res_list('mo')
+            add_res_list('occ')
             add_res_list('gw_eval')
+            add_res_list('g0w0_eval')
+            add_res_list('g0w0_e_scf')
 
             i_line += 1
 
@@ -102,17 +103,17 @@ def parse_cp2k_output(file_path):
                     
                     spin = 1 if "Beta" in line_loc else 0
 
-                    if len(results['gw_mo']) > spin:
+                    if len(results['mo']) > spin:
                         # we already have a set, overwrite with later iteration
-                        results['gw_mo'][spin] = gw_mo
-                        results['gw_occ'][spin] = gw_occ
-                        results['gw_e_scf'][spin] = gw_e_scf
+                        results['mo'][spin] = gw_mo
+                        results['occ'][spin] = gw_occ
                         results['gw_eval'][spin] = gw_eval
                     else:
-                        results['gw_mo'].append(gw_mo)
-                        results['gw_occ'].append(gw_occ)
-                        results['gw_e_scf'].append(gw_e_scf)
+                        results['mo'].append(gw_mo)
+                        results['occ'].append(gw_occ)
                         results['gw_eval'].append(gw_eval)
+                        results['g0w0_eval'].append(gw_eval)
+                        results['g0w0_e_scf'].append(gw_e_scf)
 
                     break
 
@@ -129,8 +130,8 @@ def parse_cp2k_output(file_path):
         # ----------------------------------------------------------------
         # IC output
         if "E_n before ic corr" in line and "Delta E_ic" in line:
-            add_res_list('ic_mo')
-            add_res_list('ic_occ')
+            add_res_list('mo')
+            add_res_list('occ')
             add_res_list('ic_en')
             add_res_list('ic_delta')
 
@@ -147,15 +148,15 @@ def parse_cp2k_output(file_path):
                     
                     spin = 1 if "Beta" in line_loc else 0
 
-                    if len(results['ic_mo']) > spin:
+                    if len(results['mo']) > spin:
                         # we already have a set, overwrite with later iteration
-                        results['ic_mo'][spin] = ic_mo
-                        results['ic_occ'][spin] = ic_occ
+                        results['mo'][spin] = ic_mo
+                        results['occ'][spin] = ic_occ
                         results['ic_en'][spin] = ic_en
                         results['ic_delta'][spin] = ic_delta
                     else:
-                        results['ic_mo'].append(ic_mo)
-                        results['ic_occ'].append(ic_occ)
+                        results['mo'].append(ic_mo)
+                        results['occ'].append(ic_occ)
                         results['ic_en'].append(ic_en)
                         results['ic_delta'].append(ic_delta)
 
@@ -178,19 +179,28 @@ def parse_cp2k_output(file_path):
     # ----------------------------------------------------------------
     # Determine HOMO indexes w.r.t. outputted eigenvalues
     results['homo'] = []
-    for i_spin in range(results['nspin']):
+
+    if 'occ' in results:
         # In case of GW and IC, the MO count doesn't start from 0
         # so use the occupations
-        if 'gw_occ' in results:
-            results['homo'].append(results['gw_occ'][i_spin].index(0) - 1)
-        elif 'ic_occ' in results:
-            results['homo'].append(results['ic_occ'][i_spin].index(0) - 1)
-        else:
-            # In case of normal SCF, use the electron numbers
+        for i_spin in range(results['nspin']):
+            results['homo'].append(results['occ'][i_spin].index(0) - 1)
+    else:
+        # In case of normal SCF, use the electron numbers
+        for i_spin in range(results['nspin']):
             if results['nspin'] == 1:
                 results['homo'].append(int(results['num_el'][i_spin]/2) - 1)
             else:
                 results['homo'].append(results['num_el'][i_spin] - 1)
+            # Also create 'mo' and 'occ' arrays
+            add_res_list('occ')
+            add_res_list('mo')
+            occ = np.ones(len(results['evals'][i_spin]))
+            occ[results['homo'][i_spin]+1:] = 0
+            mo = np.arange(len(results['evals'][i_spin]))
+            results['occ'].append(occ)
+            results['mo'].append(mo)
+
 
     # ----------------------------------------------------------------
     # convert "lowest level" to numpy arrays
