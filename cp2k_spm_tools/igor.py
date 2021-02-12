@@ -238,7 +238,7 @@ class Wave(object):
         shape = self.data.shape
         for i_ax in range(len(shape)):
             ax = self.axes[i_ax]
-            if header is not "":
+            if header != "":
                 header += "\n"
             header += "axis %d: %s [unit: %s] [%.6e, %.6e], delta=%.6e, n=%d" % (
                 i_ax, ax.symbol, ax.unit, ax.min, ax.min+ax.delta*(shape[i_ax]-1), ax.delta, shape[i_ax]
