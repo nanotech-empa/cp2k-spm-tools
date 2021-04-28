@@ -240,12 +240,24 @@ time1 = time.time()
 
 eval_reg = common.parse_eval_region_input(args.eval_region, cp2k_grid_orb.ase_atoms, cp2k_grid_orb.cell)
 
+# --------
+# Make sure extrap extent is compatible with heights
+atoms_max_z = np.max(cp2k_grid_orb.ase_atoms.positions[:, 2])
+eval_z_above_atoms = eval_reg[2][1] - atoms_max_z
+extrap_extent = args.extrap_extent
+for hs in [args.orb_heights, args.heights]:
+    if hs is not None:
+        if np.max(hs) - eval_z_above_atoms > extrap_extent:
+            print("Increasing extrap. extent to be compatible with heights.")
+            extrap_extent = np.max(hs)- eval_z_above_atoms
+# --------
+
 cp2k_grid_orb.calc_morbs_in_region(args.dx,
                                 x_eval_region = eval_reg[0],
                                 y_eval_region = eval_reg[1],
                                 z_eval_region = eval_reg[2],
                                 pbc = (True, True, False),
-                                reserve_extrap = args.extrap_extent,
+                                reserve_extrap = extrap_extent,
                                 eval_cutoff = args.eval_cutoff)
 
 print("R%d/%d: evaluated wfn, %.2fs"%(mpi_rank, mpi_size, (time.time() - time1)))
