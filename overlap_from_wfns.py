@@ -178,7 +178,7 @@ slab_grid_orb = cgo.Cp2kGridOrbitals(mpi_rank, mpi_size, mpi_comm=comm, single_p
 slab_grid_orb.read_cp2k_input(args.cp2k_input_file1)
 slab_grid_orb.read_xyz(args.xyz_file1)
 slab_grid_orb.read_basis_functions(args.basis_set_file1)
-slab_grid_orb.load_restart_wfn_file(args.wfn_file1, emin=args.emin1, emax=args.emax1)
+slab_grid_orb.load_restart_wfn_file(args.wfn_file1, emin=args.emin1-0.05, emax=args.emax1+0.05)
 
 print("R%d/%d: loaded G1, %.2fs"%(mpi_rank, mpi_size, (time.time() - time1)))
 sys.stdout.flush()
@@ -201,45 +201,59 @@ time1 = time.time()
 
 ve = np.prod(slab_grid_orb.dv)
 
-# The gas phase orbitals can be expressed in the basis of slab orbitals
-# |phi_i> = \sum_j <psi_j|phi_i> |psi_j>
-# And the modulus is
-# <phi_i|phi_i> = \sum_j |<psi_j|phi_i>|^2 = 1
-# Therefore, the matrix of  
-# |<phi_i|psi_j>|^2
-# is a good description of the amount of gas phase orbitals in slab orbitals
-# (positive; integral between j1 to j2 gives the amount of |phi_i> in that region)
-overlap_matrix =  (np.einsum('iklm, jklm',
-    slab_grid_orb.morb_grids[0],
-    mol_grid_orb.morb_grids[0])*ve)**2
+output_dict = {}
 
-print("R%d/%d: overlap finished, %.2fs"%(mpi_rank, mpi_size, (time.time()-time1) ))
-sys.stdout.flush()
+for i_spin_slab in range(slab_grid_orb.nspin):
+    for i_spin_mol in range(mol_grid_orb.nspin):
 
-overlap_matrix_rav = overlap_matrix.ravel()
-sendcounts = np.array(comm.gather(len(overlap_matrix_rav), 0))
+        # The gas phase orbitals can be expressed in the basis of slab orbitals
+        # |phi_i> = \sum_j <psi_j|phi_i> |psi_j>
+        # And the modulus is
+        # <phi_i|phi_i> = \sum_j |<psi_j|phi_i>|^2 = 1
+        # Therefore, the matrix of  
+        # |<phi_i|psi_j>|^2
+        # is a good description of the amount of gas phase orbitals in slab orbitals
+        # (positive; integral between j1 to j2 gives the amount of |phi_i> in that region)
+        overlap_matrix =  (np.einsum('iklm, jklm',
+            slab_grid_orb.morb_grids[i_spin_slab],
+            mol_grid_orb.morb_grids[i_spin_mol])*ve)**2
+
+        print("R%d/%d: overlap finished, %.2fs"%(mpi_rank, mpi_size, (time.time()-time1) ))
+        sys.stdout.flush()
+
+        overlap_matrix_rav = overlap_matrix.ravel()
+        sendcounts = np.array(comm.gather(len(overlap_matrix_rav), 0))
+
+        if mpi_rank == 0:
+            print("sendcounts: {}, total: {}".format(sendcounts, sum(sendcounts)))
+            recvbuf = np.empty(sum(sendcounts), dtype=float)
+        else:
+            recvbuf = None
+
+        comm.Gatherv(sendbuf=overlap_matrix_rav, recvbuf=[recvbuf, sendcounts], root=0)
+
+        if mpi_rank == 0:
+            overlap_matrix_collected = recvbuf.reshape((
+                len(slab_grid_orb.global_morb_energies[i_spin_slab]),
+                len(mol_grid_orb.global_morb_energies[i_spin_mol]),
+            ))
+            output_dict["overlap_matrix_s{}s{}".format(i_spin_slab, i_spin_mol)] = overlap_matrix_collected
 
 if mpi_rank == 0:
-    print("sendcounts: {}, total: {}".format(sendcounts, sum(sendcounts)))
-    recvbuf = np.empty(sum(sendcounts), dtype=float)
-else:
-    recvbuf = None
 
-comm.Gatherv(sendbuf=overlap_matrix_rav, recvbuf=[recvbuf, sendcounts], root=0)
+    output_dict['metadata'] = [{
+        'nspin_g1': slab_grid_orb.nspin,
+        'nspin_g2': mol_grid_orb.nspin,
+        'homo_i_g2': mol_grid_orb.i_homo_loc,
+    }]
 
-if mpi_rank == 0:
-    energies_g1 = slab_grid_orb.global_morb_energies[0]
-    energies_g2 = mol_grid_orb.morb_energies[0]
-    homo_g2 = mol_grid_orb.i_homo_loc[0]
-
-    overlap_matrix_collected = recvbuf.reshape(
-        len(energies_g1),
-        len(energies_g2))
+    for i_spin_slab in range(slab_grid_orb.nspin):
+        output_dict["energies_g1_s{}".format(i_spin_slab)] = slab_grid_orb.global_morb_energies[i_spin_slab]
+    for i_spin_mol in range(mol_grid_orb.nspin):
+        output_dict["energies_g2_s{}".format(i_spin_mol)] = mol_grid_orb.global_morb_energies[i_spin_mol]
+        # NB: Count starts from 1!
+        output_dict["orb_indexes_g2_s{}".format(i_spin_mol)] = mol_grid_orb.cwf.global_morb_indexes[i_spin_mol]
         
-    np.savez(args.output_file,
-        overlap_matrix=overlap_matrix_collected,
-        en_grp1=energies_g1,
-        en_grp2=energies_g2,
-        homo_grp2=homo_g2)
+    np.savez(args.output_file, **output_dict)
     print("Finish! Total time: %.2fs" % (time.time() - time0))
 

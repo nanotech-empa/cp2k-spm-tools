@@ -300,7 +300,7 @@ class Cp2kGridOrbitals:
 
     def load_restart_wfn_file(self, restart_file, emin=None, emax=None, n_occ=None, n_virt=None):
         """
-        Reads the specified molecular orbitals from cp2k restart wavefunction file
+        Reads the specified molecular orbitals from cp2k restart wavefunction file.
         If both, energy limits and counts are given, then the extreme is used
         Note that the energy range is in eV and with respect to HOMO energy.
         """
