@@ -57,7 +57,6 @@ def parse_eval_region_input(eval_reg_inp, ase_atoms, cell):
                     print("Unrecognized option ", eval_regions_inp[i][j])
                     sys.exit(1)
                 eval_regions[i][j] = float(reg_str)
-                eval_regions[i][j] *= ang_2_bohr
                 
             else:
                 ref_at_pos = reg_str[0]
@@ -74,7 +73,6 @@ def parse_eval_region_input(eval_reg_inp, ase_atoms, cell):
                 eval_regions[i][j] = (np.min(sel_positions[:, i]) + ref_shift_val
                                         if ref_at_pos == 'n' else
                                     np.max(sel_positions[:, i]) + ref_shift_val)
-                eval_regions[i][j] *= ang_2_bohr
 
         if np.abs(eval_regions[i][0] - eval_regions[i][1]) < 1e-3:
             eval_regions[i][0] = eval_regions[i][1]

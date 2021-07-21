@@ -24,7 +24,7 @@ from . import cube_utils
 
 from mpi4py import MPI
 
-ang_2_bohr = 1.0/0.52917721067
+ang_2_bohr = 1.88972612463
 hart_2_ev = 27.21138602
 
 class Cp2kGridOrbitals:
@@ -72,12 +72,15 @@ class Cp2kGridOrbitals:
         # Orbitals on discrete grid
         self.morb_grids = None
         self.dv = None # [dx, dy, dz] in [au]
-        self.origin = None
+        self.origin = None # origin point of the evaluation grid
         self.eval_cell = None
         self.eval_cell_n = None
 
         self.last_calc_iz = None # last directly calculated z plane (others extrapolated)
         
+    @property
+    def cell_ang(self):
+        return self.cell/ang_2_bohr
 
     ### -----------------------------------------
     ### General cp2k routines
@@ -297,7 +300,7 @@ class Cp2kGridOrbitals:
 
     def load_restart_wfn_file(self, restart_file, emin=None, emax=None, n_occ=None, n_virt=None):
         """
-        Reads the specified molecular orbitals from cp2k restart wavefunction file
+        Reads the specified molecular orbitals from cp2k restart wavefunction file.
         If both, energy limits and counts are given, then the extreme is used
         Note that the energy range is in eV and with respect to HOMO energy.
         """
@@ -519,7 +522,7 @@ class Cp2kGridOrbitals:
         Puts the molecular orbitals onto a specified grid
         Arguments:
         dr_guess -- spatial discretization step [ang], real value will change for every axis due to rounding  
-        x_eval_region -- x evaluation (min, max) in [au]. If min == max, then evaluation only works on a plane.
+        x_eval_region -- x evaluation (min, max) in [ang]. If min == max, then evaluation only works on a plane.
                         If left at None, the whole range of the cell is taken.
         pbc -- determines if periodic boundary conditions are applied in direction (x, y, z) (based on global cell)
         eval_cutoff -- cutoff in [ang] for orbital evaluation
@@ -531,12 +534,14 @@ class Cp2kGridOrbitals:
         eval_cutoff *= ang_2_bohr
         reserve_extrap *= ang_2_bohr
 
+        eval_regions_ang = [x_eval_region, y_eval_region, z_eval_region]
+        eval_regions = [np.array(er)*ang_2_bohr if er is not None else er for er in eval_regions_ang]
+
         global_cell_n = (np.round(self.cell/dr_guess)).astype(int)
         self.dv = self.cell / global_cell_n
 
         ### ----------------------------------------
         ### Define evaluation grid
-        eval_regions = [x_eval_region, y_eval_region, z_eval_region]
         self.eval_cell_n = np.zeros(3, dtype=int)
         self.origin = np.zeros(3)
 
@@ -764,6 +769,8 @@ class Cp2kGridOrbitals:
 
         print("Extrapolation time: %.3f s"%(time.time()-time1))
 
+
+
     ### -----------------------------------------
     ### Export data
     ### -----------------------------------------
@@ -775,7 +782,7 @@ class Cp2kGridOrbitals:
             print("R%d/%d is writing HOMO%+d cube" %(self.mpi_rank, self.mpi_size, orbital_nr))
 
             energy = self.morb_energies[spin][local_ind]
-            comment = "E=%.8f eV (wrt HOMO)" % energy
+            comment = "E=%.8f eV (wrt middle of gap)" % energy
 
             if not square:
                 c = Cube(title="HOMO%+d"%orbital_nr, comment=comment, ase_atoms=self.ase_atoms,

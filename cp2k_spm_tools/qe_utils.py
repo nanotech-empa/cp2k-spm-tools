@@ -64,7 +64,11 @@ def read_band_xml_datafile(eig_datafile_xml_node, data_dir):
     eig_vals = [float(i)*27.21138602 for i in eigval_node.text.split()]
     return eig_vals
 
-def read_band_data(data_dir):
+def read_band_data_old_xml(data_dir):
+    """
+    Reads data from QE bands calculations (Old XML)
+    (This XML format is enabled by default for QE <6.2)
+    """
 
     data_file_xml = et.parse(data_dir+"data-file.xml")
     data_file_root = data_file_xml.getroot()
@@ -101,12 +105,14 @@ def read_band_data(data_dir):
 
     return kpts, eig_vals, fermi_en
 
-def read_band_data_new_xml(xml_file):
+def read_band_data(xml_file):
     """
     Reads data from QE bands calculations (new XML)
+    (This XML format is enabled by default for QE >=6.2)
+    NB: Fermi energy from BANDS calculation can be very inaccurate
     Returns:
       - kpts[i_kpt] = [kx, ky, kz] in [2*pi/a] 
-      - eigvals[i_kpt, i_band] in [eV]
+      - eigvals[i_spin, i_band, i_kpt] in [eV]
       - fermi_en in [eV]
     """
     
@@ -115,24 +121,55 @@ def read_band_data_new_xml(xml_file):
 
     output_node = data_file_root.find('output')
 
-    # Find fermi
     band_node = output_node.find('band_structure')
     fermi_en = float(band_node.find('fermi_energy').text)*27.21138602
-    lsda = band_node.find('spinorbit').text
+
+    lsda = band_node.find('lsda').text.lower() == 'true'
+
+    nelec = int(float(band_node.find('nelec').text))
 
     kpts = []
-    eigvals = []
+
+    if lsda:
+        eigvals = [[], []]
+    else:
+        eigvals = [[]]
 
     for kpt in band_node.findall("ks_energies"):
         k_coords = np.array(kpt.find('k_point').text.split(), dtype=float)
         kpts.append(k_coords)
 
         eig_vals = np.array(kpt.find('eigenvalues').text.split(), dtype=float)
-        eigvals.append(eig_vals*27.21138602)
+        eig_vals *= 27.21138602
+
+        if lsda:
+            eigvals[0].append(eig_vals[:len(eig_vals)//2])
+            eigvals[1].append(eig_vals[len(eig_vals)//2:])
+        else:
+            eigvals[0].append(eig_vals)
+
     kpts = np.array(kpts)
-    eigvals = np.array(eigvals)
+    # transpose to get from [i_s][i_k][i_band] -> [i_s][i_band][i_k]
+    eigvals = np.array([np.array(ev).T for ev in eigvals])
+    #eigvals = np.array(eigvals)
     
     return kpts, eigvals, fermi_en
+
+def read_scf_data(xml_file):
+    """
+    Reads data from QE SCF calculation (new XML)
+    (This XML format is enabled by default for QE >=6.2)
+    """
+    
+    data_file_xml = et.parse(xml_file)
+    data_file_root = data_file_xml.getroot()
+
+    output_node = data_file_root.find('output')
+
+    band_node = output_node.find('band_structure')
+    fermi_en = float(band_node.find('fermi_energy').text)*27.21138602
+
+    return fermi_en
 
 
 def vb_onset(bands, fermi_en):

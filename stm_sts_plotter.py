@@ -18,7 +18,7 @@ hart_2_ev = 27.21138602
 
 fig_y = 4.0
 
-title_font_size = 18
+title_font_size = 14
 
 parser = argparse.ArgumentParser(
     description='Makes images from the STM .npz files.')
@@ -67,20 +67,20 @@ def make_plot(fig, ax, data, extent, title=None, title_size=None, center0=False,
 
 def make_series_label(info, i_spin=None):
     if info['type'] == 'const-height sts':
-        label = 'ch-sts fwhm=%.2f h=%.1f' % (info['fwhm'], info['height'])
+        label = 'p$_{tip}$=%.1f ch-sts fwhm=%.2f h=%.1f' % (info['p_tip_ratio'], info['fwhm'], info['height'])
     elif info['type'] == 'const-height stm':
-        label = 'ch-stm fwhm=%.2f h=%.1f' % (info['fwhm'], info['height'])
+        label = 'p$_{tip}$=%.1f ch-stm fwhm=%.2f h=%.1f' % (info['p_tip_ratio'], info['fwhm'], info['height'])
     elif info['type'] == 'const-isovalue sts':
-        label = 'cc-sts fwhm=%.2f isov=%.0e' % (info['fwhm'], info['isovalue'])
+        label = 'p$_{tip}$=%.1f cc-sts fwhm=%.2f iv=%.0e' % (info['p_tip_ratio'], info['fwhm'], info['isovalue'])
     elif info['type'] == 'const-isovalue stm':
-        label = 'cc-stm fwhm=%.2f isov=%.0e' % (info['fwhm'], info['isovalue'])
+        label = 'p$_{tip}$=%.1f cc-stm fwhm=%.2f iv=%.0e' % (info['p_tip_ratio'], info['fwhm'], info['isovalue'])
     
     elif info['type'] == 'const-height orbital':
-        label = 'ch-orb h=%.1f, s%d' % (info['height'], i_spin)
-    elif info['type'] == 'const-height orbital^2':
-        label = 'ch-orb^2 h=%.1f, s%d' % (info['height'], i_spin)
-    elif info['type'] == 'const-isovalue orbital^2':
-        label = 'cc-orb^2 isov=%.0e, s%d' % (info['isovalue'], i_spin)
+        label = 's%d ch-orb h=%.1f' % (i_spin, info['height'])
+    elif info['type'] == 'const-height orbital sts':
+        label = 's%d p$_{tip}$=%.1f ch-orb-sts h=%.1f' % (i_spin, info['p_tip_ratio'], info['height'])
+    elif info['type'] == 'const-isovalue orbital sts':
+        label = 's%d p$_{tip}$=%.1f cc-orb-sts iv=%.0e' % (i_spin, info['p_tip_ratio'], info['isovalue'])
     else:
         print("No support for: " + str(info))
     
@@ -131,7 +131,7 @@ def plot_series_and_export_igor(general_info, info, data, make_plot_args, plot_d
             title += mo_label + ' '
         title += 'E=%.2f eV' % energy
 
-        plot_name = series_label.lower().replace(" ", '_').replace("=", '').replace('^', '').replace(',', '')
+        plot_name = series_label.lower().replace(" ", '_').replace("=", '').replace('^', '').replace(',', '').replace('$_{tip}$', '')
         if mo_label is not None:
             plot_name += "_mo%03d_e%.2f" % (orb_indexes[i_e], energy)
         else:
@@ -171,18 +171,14 @@ def plot_all_series(general_info, series_info, series_data, plot_dir, itx_dir):
             'center0': False
         }
 
-        if 'const-height sts' in info['type']:
+        if info['type'] == 'const-height sts':
             make_plot_args['cmap'] = 'seismic'
-        elif 'const-height orb' in info['type']:
-
+        elif info['type'] == 'const-height orbital sts':
             make_plot_args['cmap'] = 'seismic'
-
-            # ORB^2 export
-            orb2_info = copy.deepcopy(info)
-            orb2_info['type'] = 'const-height orbital^2'
-            print("Plotting series: " + str(orb2_info))
-            plot_series_and_export_igor(general_info, orb2_info, data**2, make_plot_args, plot_dir, itx_dir)
-
+        elif info['type'] == 'const-isovalue orbital sts':
+            make_plot_args['cmap'] = 'seismic'
+        elif info['type'] == 'const-height orbital':
+            make_plot_args['cmap'] = 'seismic'
             make_plot_args['center0'] = True
 
         print("Plotting series: " + str(info))

@@ -1,0 +1,82 @@
+&FORCE_EVAL
+  METHOD Quickstep
+  &DFT
+    BASIS_SET_FILE_NAME ./BASIS_MOLOPT
+    POTENTIAL_FILE_NAME ./POTENTIAL
+    RESTART_FILE_NAME ./PROJ-RESTART.wfn
+    &QS
+      METHOD GPW
+      EPS_DEFAULT 1.0E-14
+      EXTRAPOLATION ASPC
+      EXTRAPOLATION_ORDER 3
+    &END QS
+
+    &MGRID
+      CUTOFF 600
+      NGRIDS 5
+    &END
+
+    &SCF
+
+      SCF_GUESS RESTART
+      EPS_SCF 1.0E-7
+
+      MAX_SCF 1000
+      CHOLESKY INVERSE
+      ADDED_MOS 20
+      &MIXING
+        METHOD BROYDEN_MIXING
+        ALPHA 0.1           
+        BETA 1.5
+        NBUFFER 8
+      &END                                     
+      &DIAGONALIZATION
+        ALGORITHM STANDARD
+      &END
+
+      &OUTER_SCF
+        MAX_SCF 500
+        EPS_SCF 1.0E-7
+      &END
+    &END SCF
+
+    &XC
+      &XC_FUNCTIONAL PBE
+      &END XC_FUNCTIONAL
+    &END XC
+
+    &PRINT
+      &V_HARTREE_CUBE
+        FILENAME HART
+        STRIDE 24 24 24
+      &END
+    &END PRINT
+
+  &END DFT
+  &SUBSYS
+    &CELL
+      ABC 64.0 16.0 16.0
+    &END CELL
+    &TOPOLOGY
+     COORD_FILE_NAME ./ppp_12uc-opt.xyz
+     COORDINATE xyz
+    &END
+    &KIND C
+      BASIS_SET SZV-MOLOPT-GTH-q4
+      POTENTIAL GTH-PBE-q4
+    &END KIND
+    &KIND H
+      BASIS_SET SZV-MOLOPT-GTH-q1
+      POTENTIAL GTH-PBE-q1
+    &END KIND
+  &END SUBSYS
+&END FORCE_EVAL
+
+&GLOBAL
+  PRINT_LEVEL MEDIUM
+  PROJECT PROJ
+  RUN_TYPE ENERGY
+  WALLTIME 86000
+  EXTENDED_FFT_LENGTHS
+&END GLOBAL
+

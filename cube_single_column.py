@@ -16,7 +16,7 @@ from cp2k_spm_tools import common, cube, cube_utils, bader_wrapper
 
 
 parser = argparse.ArgumentParser(
-    description='Splits the cube file into smaller cubes centered around atoms.')
+    description='Reformats cube in case it contains uneven columns (not supported by some software).')
 
 parser.add_argument(
     'cube',

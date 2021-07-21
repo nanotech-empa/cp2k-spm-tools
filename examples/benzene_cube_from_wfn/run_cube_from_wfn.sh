@@ -1,4 +1,4 @@
-DIR="../c2h2_cp2k_scf/"
+DIR="../benzene_cp2k_scf/"
 
 # Path to cube_from_wfn.py
 # Leave empty if already in $PATH
@@ -14,7 +14,7 @@ mkdir cubes
   --output_dir ./cubes/ \
   --n_homo 1 \
   --n_lumo 1 \
-  --dx 0.1 \
+  --dx 0.2 \
   --eval_cutoff 14.0 \
 #  --orb_square \
 #  --charge_dens \

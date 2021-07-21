@@ -26,7 +26,7 @@ class STM:
     Class to perform STM and STS analysis on gridded orbitals
     """
 
-    def __init__(self, mpi_comm, cp2k_grid_orb):
+    def __init__(self, mpi_comm, cp2k_grid_orb, p_tip_ratios):
 
         self.cgo = cp2k_grid_orb
         self.nspin = self.cgo.nspin
@@ -38,6 +38,8 @@ class STM:
         self.global_morb_energies = self.cgo.global_morb_energies
 
         self.mpi_comm = mpi_comm
+
+        self.p_tip_ratios = p_tip_ratios
 
         self.global_morb_energies_by_rank = None
 
@@ -126,13 +128,13 @@ class STM:
                 
                 if self.mpi_rank == rank:
                     recvbuf = np.empty(sum(orbitals_per_rank)*num_spatial_points, dtype=self.cgo.dtype)
-                    print("R%d expecting counts: " % (self.mpi_rank) + str(orbitals_per_rank*num_spatial_points))
+                    #print("R%d expecting counts: " % (self.mpi_rank) + str(orbitals_per_rank*num_spatial_points))
                     sys.stdout.flush()
                 else:
                     recvbuf = None
 
                 sendbuf = self.cgo.morb_grids[ispin][:, ix_start:ix_end, :, :].ravel()
-                print("R%d -> %d sending %d" %(self.mpi_rank, rank, len(sendbuf)))
+                #print("R%d -> %d sending %d" %(self.mpi_rank, rank, len(sendbuf)))
                 sys.stdout.flush()
 
                 # Send the orbitals
@@ -165,7 +167,7 @@ class STM:
                 self.current_orbitals.append(rcv_buf.reshape(num_rcv_orb, cell_n[0], cell_n[1], cell_n[2]))
 
     ### -----------------------------------------
-    ### Making pictures
+    ### Making data series
     ### -----------------------------------------
 
     def _get_isosurf_indexes(self, data, value, interp=True):
@@ -239,10 +241,23 @@ class STM:
         plane_index = int(np.round(plane_z_wrt_orig/self.local_cell[2]*self.local_cell_n[2]))
         return local_data[:, :, plane_index]
 
+    def s_p_type_signal_plane(self, orb_plane, dx, dy, p_tip_ratio):
+        if p_tip_ratio <= 0.0:
+            return orb_plane**2
+        x_der, y_der = np.gradient(orb_plane)
+        p_type = (x_der/dx) ** 2 + (y_der/dy) ** 2
+        return (1.0 - p_tip_ratio) * orb_plane**2 + p_tip_ratio * p_type
 
-    def build_stm_series(self, e_arr, fwhms, heights, isovalues):
+    def s_p_type_signal_3d(self, orbital, dx, dy, p_tip_ratio):
+        if p_tip_ratio <= 0.0:
+            return orbital**2
+        x_der, y_der, z_der = np.gradient(orbital)
+        p_type = (x_der/dx) ** 2 + (y_der/dy) ** 2
+        return (1.0 - p_tip_ratio) * orbital**2 + p_tip_ratio * p_type
 
-        print("Create series: " + str(e_arr))
+    def build_stm_series(self, e_arr, fwhms, heights, isovalues, p_tip_ratio=0.0):
+
+        #print("Create series: " + str(e_arr))
 
         rev_output = False
         if np.abs(e_arr[-1]) < np.abs(e_arr[0]):
@@ -280,19 +295,21 @@ class STM:
                     close_energies.append(self.global_morb_energies[ispin][close_i1:close_i2])
                     close_grids.append(self.local_orbitals[ispin][close_i1:close_i2])
                 
-                print("fwhm %.2f, energy range %.4f : %.4f" % (fwhm, last_e, e))
-                if close_i2 is not None:
-                    print("---- contrib %d:%d" % (close_i1, close_i2))
-                else:
-                    print("---- contrib %d:" % (close_i1))
-                print("---- ens:" + str(close_energies))
+                #print("fwhm %.2f, energy range %.4f : %.4f" % (fwhm, last_e, e))
+                #if close_i2 is not None:
+                #    print("---- contrib %d:%d" % (close_i1, close_i2))
+                #else:
+                #    print("---- contrib %d:" % (close_i1))
+                #print("---- ens:" + str(close_energies))
 
                 # ---------------------
                 # Update charge density
                 for ispin in range(self.nspin):
                     for i_m, morb_en in enumerate(close_energies[ispin]):
                         broad_factor = self.gaussian_area(last_e, e, morb_en, fwhm)
-                        cur_charge_dens += broad_factor*close_grids[ispin][i_m]**2
+                        cur_charge_dens += broad_factor*(
+                            self.s_p_type_signal_3d(close_grids[ispin][i_m], self.dv[0], self.dv[1], p_tip_ratio)
+                        )
 
                 # ---------------------
                 # find surfaces corresponding to isovalues
@@ -303,7 +320,10 @@ class STM:
                     
                     for ispin in range(self.nspin):                    
                         for i_m, morb_en in enumerate(close_energies[ispin]):
-                            morb_on_surf = self._index_with_interpolation_3d(i_isosurf, close_grids[ispin][i_m]**2)
+                            morb_on_surf = self._index_with_interpolation_3d(
+                                i_isosurf,
+                                self.s_p_type_signal_3d(close_grids[ispin][i_m], self.dv[0], self.dv[1], p_tip_ratio)
+                            )
                             cc_ldos[i_fwhm, i_iso, :, :, i_e] += self.gaussian(e - morb_en, fwhm) * morb_on_surf
                 # ---------------------
                 # find constant height images
@@ -313,7 +333,10 @@ class STM:
 
                     for ispin in range(self.nspin):                    
                         for i_m, morb_en in enumerate(close_energies[ispin]):
-                            morb_on_plane = self.local_data_plane_above_atoms(close_grids[ispin][i_m]**2, height)
+                            morb_on_plane = self.local_data_plane_above_atoms(
+                                self.s_p_type_signal_3d(close_grids[ispin][i_m], self.dv[0], self.dv[1], p_tip_ratio),
+                                height
+                            )
                             ch_ldos[i_fwhm, i_h, :, :, i_e] += self.gaussian(e - morb_en, fwhm) * morb_on_plane
                 last_e = e
 
@@ -333,76 +356,82 @@ class STM:
         emax = e_arr[-1]
 
         if series_name not in self.series_output:
-            number_of_series = (len(heights) + len(isovalues)) * len(fwhms) * 2
+            number_of_series = (len(heights) + len(isovalues)) * len(fwhms) * 2 * len(self.p_tip_ratios)
             self.series_output[series_name] = {
                 'general_info': {'energies': e_arr},
                 'series_info': [],
                 'series_data': np.zeros((number_of_series, len(e_arr), self.local_cell_n[0], self.local_cell_n[1]), dtype=self.cgo.dtype)
             }
         
-
-        if emin * emax >= 0.0:
-            cc_sts, cc_stm, ch_sts, ch_stm = self.build_stm_series(e_arr, fwhms, heights, isovalues)
-        else:
-            e_arr_neg = e_arr[e_arr <= 0.0]
-            e_arr_pos = e_arr[e_arr > 0.0]
-
-            cc_sts_n, cc_stm_n, ch_sts_n, ch_stm_n = self.build_stm_series(e_arr_neg, fwhms, heights, isovalues)
-            cc_sts_p, cc_stm_p, ch_sts_p, ch_stm_p = self.build_stm_series(e_arr_pos, fwhms, heights, isovalues)
-
-            cc_sts = np.concatenate((cc_sts_n, cc_sts_p), axis=4)
-            cc_stm = np.concatenate((cc_stm_n, cc_stm_p), axis=4)
-            ch_sts = np.concatenate((ch_sts_n, ch_sts_p), axis=4)
-            ch_stm = np.concatenate((ch_stm_n, ch_stm_p), axis=4)
-
-        # Move energy axis to position 2
-        cc_sts = np.moveaxis(cc_sts, 4, 2)
-        cc_stm = np.moveaxis(cc_stm, 4, 2)
-        ch_sts = np.moveaxis(ch_sts, 4, 2)
-        ch_stm = np.moveaxis(ch_stm, 4, 2)
-
-        ### ------------------------------------
-        ### Save the data to self.series_output
-
         i_series_counter = i_series_offset
 
-        for i_fwhm, fwhm in enumerate(fwhms):
+        for p_tip_ratio in self.p_tip_ratios:
 
-            for i_h, h in enumerate(heights):
-                self.series_output[series_name]['series_info'].append({
-                    'type': 'const-height sts',
-                    'height': h,
-                    'fwhm': fwhm,
-                })
-                self.series_output[series_name]['series_data'][i_series_counter, :, :, :] = ch_sts[i_fwhm, i_h, :, :, :]
-                i_series_counter += 1
+            if emin * emax >= 0.0:
+                cc_sts, cc_stm, ch_sts, ch_stm = self.build_stm_series(e_arr, fwhms, heights, isovalues, p_tip_ratio)
+            else:
+                e_arr_neg = e_arr[e_arr <= 0.0]
+                e_arr_pos = e_arr[e_arr > 0.0]
 
-            for i_isov, isov in enumerate(isovalues):
-                self.series_output[series_name]['series_info'].append({
-                    'type': 'const-isovalue sts',
-                    'isovalue': isov,
-                    'fwhm': fwhm,
-                })
-                self.series_output[series_name]['series_data'][i_series_counter, :, :, :] = cc_sts[i_fwhm, i_isov, :, :, :]
-                i_series_counter += 1
+                cc_sts_n, cc_stm_n, ch_sts_n, ch_stm_n = self.build_stm_series(e_arr_neg, fwhms, heights, isovalues, p_tip_ratio)
+                cc_sts_p, cc_stm_p, ch_sts_p, ch_stm_p = self.build_stm_series(e_arr_pos, fwhms, heights, isovalues, p_tip_ratio)
 
-            for i_h, h in enumerate(heights):
-                self.series_output[series_name]['series_info'].append({
-                    'type': 'const-height stm',
-                    'height': h,
-                    'fwhm': fwhm,
-                })
-                self.series_output[series_name]['series_data'][i_series_counter, :, :, :] = ch_stm[i_fwhm, i_h, :, :, :]
-                i_series_counter += 1
+                cc_sts = np.concatenate((cc_sts_n, cc_sts_p), axis=4)
+                cc_stm = np.concatenate((cc_stm_n, cc_stm_p), axis=4)
+                ch_sts = np.concatenate((ch_sts_n, ch_sts_p), axis=4)
+                ch_stm = np.concatenate((ch_stm_n, ch_stm_p), axis=4)
 
-            for i_isov, isov in enumerate(isovalues):
-                self.series_output[series_name]['series_info'].append({
-                    'type': 'const-isovalue stm',
-                    'isovalue': isov,
-                    'fwhm': fwhm,
-                })
-                self.series_output[series_name]['series_data'][i_series_counter, :, :, :] = cc_stm[i_fwhm, i_isov, :, :, :]
-                i_series_counter += 1
+            # Move energy axis to position 2 (Other axes remain in their original order)
+            cc_sts = np.moveaxis(cc_sts, 4, 2)
+            cc_stm = np.moveaxis(cc_stm, 4, 2)
+            ch_sts = np.moveaxis(ch_sts, 4, 2)
+            ch_stm = np.moveaxis(ch_stm, 4, 2)
+
+            ### ------------------------------------
+            ### Save the data to self.series_output
+
+
+            for i_fwhm, fwhm in enumerate(fwhms):
+
+                for i_h, h in enumerate(heights):
+                    self.series_output[series_name]['series_info'].append({
+                        'type': 'const-height sts',
+                        'height': h,
+                        'fwhm': fwhm,
+                        'p_tip_ratio': p_tip_ratio,
+                    })
+                    self.series_output[series_name]['series_data'][i_series_counter, :, :, :] = ch_sts[i_fwhm, i_h, :, :, :]
+                    i_series_counter += 1
+
+                for i_isov, isov in enumerate(isovalues):
+                    self.series_output[series_name]['series_info'].append({
+                        'type': 'const-isovalue sts',
+                        'isovalue': isov,
+                        'fwhm': fwhm,
+                        'p_tip_ratio': p_tip_ratio,
+                    })
+                    self.series_output[series_name]['series_data'][i_series_counter, :, :, :] = cc_sts[i_fwhm, i_isov, :, :, :]
+                    i_series_counter += 1
+
+                for i_h, h in enumerate(heights):
+                    self.series_output[series_name]['series_info'].append({
+                        'type': 'const-height stm',
+                        'height': h,
+                        'fwhm': fwhm,
+                        'p_tip_ratio': p_tip_ratio,
+                    })
+                    self.series_output[series_name]['series_data'][i_series_counter, :, :, :] = ch_stm[i_fwhm, i_h, :, :, :]
+                    i_series_counter += 1
+
+                for i_isov, isov in enumerate(isovalues):
+                    self.series_output[series_name]['series_info'].append({
+                        'type': 'const-isovalue stm',
+                        'isovalue': isov,
+                        'fwhm': fwhm,
+                        'p_tip_ratio': p_tip_ratio,
+                    })
+                    self.series_output[series_name]['series_data'][i_series_counter, :, :, :] = cc_stm[i_fwhm, i_isov, :, :, :]
+                    i_series_counter += 1
             
 
     def collect_local_grid(self, local_arr, global_shape, to_rank = 0):
@@ -416,7 +445,7 @@ class STM:
 
         if self.mpi_rank == to_rank:
             recvbuf = np.empty(sum(nx_per_rank)*size_except_x, dtype=self.cgo.dtype)
-            print("R%d expecting counts: " % (self.mpi_rank) + str(nx_per_rank*size_except_x))
+            #print("R%d expecting counts: " % (self.mpi_rank) + str(nx_per_rank*size_except_x))
         else:
             recvbuf = None
             
@@ -511,8 +540,21 @@ class STM:
             }
             self.series_output[label]['series_info'] = []
         
-        number_of_series = (len(height_list) + len(isoval_list)) * (1 + 2*len(fwhm_list))
+        number_of_series = (
+            len(height_list) # just s-type WFN LDOS
+            + len(height_list) * len(self.p_tip_ratios) # p-type WFN ch-signals
+            + len(isoval_list) * len(self.p_tip_ratios) # p-type WFN cc-signals
+            + len(height_list) * 2*len(fwhm_list) * len(self.p_tip_ratios) # p-type ch sts & stm signals
+            + len(isoval_list) * 2*len(fwhm_list) * len(self.p_tip_ratios) # p-type cc sts & stm signals
+        )
 
+        #number_of_series = (
+        #    len(height_list) # just s-type WFN LDOS
+        #    + len(height_list) * len(self.p_tip_ratios) # p-type WFN ch-signals
+        #    + len(isoval_list) * len(self.p_tip_ratios) # p-type WFN cc-signals
+        #    + len(height_list) * 2*len(fwhm_list) # p-type ch sts & stm signals
+        #    + len(isoval_list) * 2*len(fwhm_list) # p-type cc sts & stm signals
+        #)
 
         # Orbital series
         for i_spin in range(self.nspin):
@@ -527,6 +569,9 @@ class STM:
             ### constant-height orbital series
 
             for i_h, h in enumerate(height_list):
+
+                ## orbital wavefunction
+
                 # series info
                 self.series_output[label]['series_info'].append({
                     'type': 'const-height orbital',
@@ -542,73 +587,55 @@ class STM:
                     i_orb_count += 1
                 i_series_counter += 1
 
+                ## orbital ch-signal with the different tips
+                for i_p, p_tip_ratio in enumerate(self.p_tip_ratios):
+
+                    # series info
+                    self.series_output[label]['series_info'].append({
+                        'type': 'const-height orbital sts',
+                        'height': h,
+                        'p_tip_ratio':  p_tip_ratio,
+                    })
+
+                    # series data
+                    i_orb_count = 0
+                    for i_mo in orb_indexes_wrt_data_start[i_spin]:
+                        orb_plane = self.local_data_plane_above_atoms(self.local_orbitals[i_spin][i_mo], h)
+                        self.series_output[label]['series_data'][i_series_counter, i_orb_count, :, :] = (
+                            self.s_p_type_signal_plane(orb_plane, self.dv[0], self.dv[1], p_tip_ratio)
+                        )
+                        i_orb_count += 1
+                    i_series_counter += 1
+
             ### constant-isovalue orbital series
 
             for i_isov, isov in enumerate(isoval_list):
-                # series info
-                self.series_output[label]['series_info'].append({
-                    'type': 'const-isovalue orbital^2',
-                    'isovalue': isov,
-                })
+                for i_p, p_tip_ratio in enumerate(self.p_tip_ratios):
 
-                # series data
-                i_orb_count = 0
-                for i_mo in orb_indexes_wrt_data_start[i_spin]:
-                    i_isosurf = self._get_isosurf_indexes(self.local_orbitals[i_spin][i_mo]**2, isov, True)
-                    self.series_output[label]['series_data'][i_series_counter, i_orb_count, :, :] = (
-                        self._index_with_interpolation(i_isosurf, self.z_arr)
-                    )
-                    i_orb_count += 1
+                    # series info
+                    self.series_output[label]['series_info'].append({
+                        'type': 'const-isovalue orbital sts',
+                        'isovalue': isov,
+                        'p_tip_ratio':  p_tip_ratio,
+                    })
 
-                i_series_counter += 1
+                    # series data
+                    i_orb_count = 0
+                    for i_mo in orb_indexes_wrt_data_start[i_spin]:
+                        i_isosurf = self._get_isosurf_indexes(
+                            self.s_p_type_signal_3d(self.local_orbitals[i_spin][i_mo], self.dv[0], self.dv[1], p_tip_ratio),
+                            isov, True
+                        )
+                        self.series_output[label]['series_data'][i_series_counter, i_orb_count, :, :] = (
+                            self._index_with_interpolation(i_isosurf, self.z_arr)
+                        )
+                        i_orb_count += 1
+                    i_series_counter += 1
 
             self.calculate_stm_maps(
                 fwhm_list, isoval_list, height_list, ens_list[i_spin], series_name='s%d_orb'%i_spin, i_series_offset=i_series_counter
             )
 
-
-#    def create_orbital_images(self, orbital_list, height_list=[], isoval_list=[]):
-#
-#        self.orb_maps_data = {}
-#
-#        ens_list = []
-#        orb_list = [] # orbital indexes of spin channels wrt to their SOMO
-#        physical_index_list = [] # physical global orbital indexes (count starts from 1)
-#        for i_spin in range(self.nspin):
-#            orbital_list_wrt_ref = list(np.array(orbital_list) + self.cgo.cwf.ref_index_glob)
-#            ens_list.append(self.global_morb_energies[i_spin][orbital_list_wrt_ref])
-#            orb_list.append(np.array(orbital_list) + self.cgo.cwf.ref_index_glob - self.cgo.i_homo_glob[i_spin])
-#            physical_index_list.append(self.cgo.cwf.morb_indexes[i_spin][orbital_list_wrt_ref])
-#
-#        self.orb_maps_data['energies'] = np.array(ens_list)
-#        self.orb_maps_data['relative_indexes'] = np.array(orb_list)
-#        self.orb_maps_data['physical_indexes'] = np.array(physical_index_list)
-#
-#        if len(height_list) != 0:
-#            self.orb_maps_data['ch_orbs'] = np.zeros(
-#                (self.nspin, len(height_list), len(orbital_list), self.local_cell_n[0], self.local_cell_n[1]),
-#                dtype=self.cgo.dtype)
-#
-#        if len(isoval_list) != 0:
-#            self.orb_maps_data['cc_orbs'] = np.zeros(
-#                (self.nspin, len(isoval_list), len(orbital_list), self.local_cell_n[0], self.local_cell_n[1]),
-#                dtype=self.cgo.dtype)
-#
-#        for i_spin in range(self.nspin):
-#            i_orb_count = 0
-#            for i_mo in range(len(self.global_morb_energies[i_spin])):
-#                i_mo_wrt_ref = i_mo - self.cgo.cwf.ref_index_glob
-#                if i_mo_wrt_ref in orbital_list:
-#                    for i_h, h in enumerate(height_list):
-#                        self.orb_maps_data['ch_orbs'][i_spin, i_h, i_orb_count, :, :] = (
-#                            self.local_data_plane_above_atoms(self.local_orbitals[i_spin][i_mo], h)
-#                        )
-#                    for i_isov, isov in enumerate(isoval_list):
-#                        i_isosurf = self._get_isosurf_indexes(self.local_orbitals[i_spin][i_mo]**2, isov, True)
-#                        self.orb_maps_data['cc_orbs'][i_spin, i_isov, i_orb_count, :, :] = (
-#                            self._index_with_interpolation(i_isosurf, self.z_arr)
-#                        )
-#                    i_orb_count += 1
 
     def collect_and_save_orb_maps(self, path = "./orb.npz"):
 
@@ -645,95 +672,3 @@ class STM:
 
         # Reset, otherwise can cause problems (more versatile to NOT reset, though)
         self.series_output = {}
-
-
-#        nx = self.cell_n[0]
-#        ny = self.cell_n[1]
-#        ne = len(self.orb_maps_data['energies'])
-#
-#        stm_maps_data = self.stm_maps_data_list[0]
-#        n_cc = len(stm_maps_data['isovalues'])
-#        n_ch = len(stm_maps_data['heights'])
-#        n_fwhms = len(stm_maps_data['fwhms'])
-#
-#        ### collect orbital maps
-#
-#        ch_orbs = self.collect_local_grid(self.orb_maps_data['ch_orbs'].swapaxes(0, 3), np.array([nx, n_ch, ne, self.nspin, ny]))
-#        cc_orbs = self.collect_local_grid(self.orb_maps_data['cc_orbs'].swapaxes(0, 3), np.array([nx, n_cc, ne, self.nspin, ny]))
-#
-#        if self.mpi_rank == 0:
-#
-#            # back to correct orientation
-#            ch_orbs = ch_orbs.swapaxes(3, 0)
-#            cc_orbs = cc_orbs.swapaxes(3, 0)
-#
-#            cc_sts_list = []
-#            cc_stm_list = []
-#            ch_sts_list = []
-#            ch_stm_list = []
-#
-#            e_arr_list = []
-#
-#
-#        ### collect STM/STS maps at orbital energies
-#
-#        for i_spin in range(self.nspin):
-#
-#            stm_maps_data = self.stm_maps_data_list[i_spin]
-#
-#            cc_sts = self.collect_local_grid(stm_maps_data['cc_sts'].swapaxes(0, 3), np.array([nx, n_cc, ne, n_fwhms, ny]))
-#            cc_stm = self.collect_local_grid(stm_maps_data['cc_stm'].swapaxes(0, 3), np.array([nx, n_cc, ne, n_fwhms, ny]))
-#            ch_sts = self.collect_local_grid(stm_maps_data['ch_sts'].swapaxes(0, 3), np.array([nx, n_ch, ne, n_fwhms, ny]))
-#            ch_stm = self.collect_local_grid(stm_maps_data['ch_stm'].swapaxes(0, 3), np.array([nx, n_ch, ne, n_fwhms, ny]))
-#
-#            if self.mpi_rank == 0:
-#
-#                # back to correct orientation
-#
-#                cc_sts = cc_sts.swapaxes(3, 0)
-#                cc_stm = cc_stm.swapaxes(3, 0)
-#                ch_sts = ch_sts.swapaxes(3, 0)
-#                ch_stm = ch_stm.swapaxes(3, 0)
-#
-#                cc_sts_list.append(cc_sts)
-#                cc_stm_list.append(cc_stm)
-#                ch_sts_list.append(ch_sts)
-#                ch_stm_list.append(ch_stm)
-#
-#                e_arr_list.append(stm_maps_data['e_arr'])
-#
-#
-#        # Build the final output data structure
-#
-#        if self.mpi_rank == 0:
-#
-#            save_data = {}
-#
-#            save_data['cc_stm'] = np.array(cc_stm_list).astype(np.float16) # all values either way ~ between -2 and 8
-#            save_data['cc_sts'] = np.array(cc_sts_list).astype(np.float32)
-#            save_data['ch_stm'] = np.array(ch_stm_list).astype(np.float32)
-#            save_data['ch_sts'] = np.array(ch_sts_list).astype(np.float32)
-#
-#            save_data['ch_orbs'] = ch_orbs.astype(np.float32)
-#            save_data['cc_orbs'] = cc_orbs.astype(np.float16)
-#
-#            ### ----------------
-#            ### Reduce filesize further by zero threshold
-#            zero_thresh = 1e-3
-#            self.apply_zero_threshold(save_data['cc_sts'], zero_thresh)
-#            self.apply_zero_threshold(save_data['ch_stm'], zero_thresh)
-#            self.apply_zero_threshold(save_data['ch_sts'], zero_thresh)
-#            self.apply_zero_threshold(save_data['ch_orbs'], zero_thresh)
-#            ### ----------------
-#            # additionally add info
-#            save_data['relative_indexes'] = self.orb_maps_data['relative_indexes']
-#            save_data['physical_indexes'] = self.orb_maps_data['physical_indexes']
-#
-#            save_data['energies'] = self.orb_maps_data['energies']
-#            save_data['isovalues'] = self.stm_maps_data['isovalues']
-#            save_data['heights'] = self.stm_maps_data['heights']
-#            save_data['fwhms'] = self.stm_maps_data['fwhms']
-#            save_data['e_arr'] = self.stm_maps_data['e_arr']
-#            save_data['x_arr'] = np.arange(0.0, self.cell_n[0]*self.dv[0] + self.dv[0]/2, self.dv[0]) + self.origin[0]
-#            save_data['y_arr'] = np.arange(0.0, self.cell_n[1]*self.dv[1] + self.dv[1]/2, self.dv[1]) + self.origin[1]
-#            np.savez_compressed(path, **save_data)

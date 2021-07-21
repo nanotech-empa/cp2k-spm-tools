@@ -9,14 +9,15 @@ import ase
 ang_2_bohr = 1.0/0.52917721067
 hart_2_ev = 27.21138602
 
-def calc_ioniz_potential(hartree_cube, homo_en_hrt):
+def find_vacuum_level_naive(hartree_cube):
     """
     In case of a slab, for accurate result, the dipole correction should be enabled.
     This case, however, is not handled.
     Only free molecules will have accurate result.
 
     Hartree cube in [Hrt]
-    homo_en_hrt in [Hrt] with the same reference
+
+    returns vacuum_level in [eV]
     """
 
     # average the hartree pot in x and y directions and keep z
@@ -26,8 +27,7 @@ def calc_ioniz_potential(hartree_cube, homo_en_hrt):
     z_ind_start = hartree_cube.get_z_index(np.max(hartree_cube.ase_atoms.positions[:, 2]) + 3.0)
     vacuum_level = np.max(hartree_1d[z_ind_start:])
 
-    return (vacuum_level - homo_en_hrt) * hart_2_ev
-
+    return vacuum_level * hart_2_ev
 
 
 def add_artif_core_charge(charge_dens_cube):
