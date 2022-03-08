@@ -57,7 +57,7 @@ def make_plot(fig, ax, data, extent, title=None, title_size=None, center0=False,
     else:
         ax.set_xlabel(r"x ($\AA$)")
         ax.set_ylabel(r"y ($\AA$)")
-        cb = fig.colorbar(im, ax=ax)
+        cb = fig.colorbar(im, ax=ax, fraction=0.048, pad=0.04)
         cb.formatter.set_powerlimits((-2, 2))
         cb.update_ticks()
     ax.set_title(title, loc='left')
