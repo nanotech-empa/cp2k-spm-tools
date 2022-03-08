@@ -56,6 +56,9 @@ class STM:
         self.local_cell = None
         self.local_origin = None
 
+        # p-tip contribution of the orbitals defined in local space for this mpi_rank
+        self.local_orbital_ptip = None
+
 #        # List of dictionaries containing everything to do with STM/STS maps
 #        self.stm_maps_data_list = []
 #
@@ -107,6 +110,7 @@ class STM:
     def divide_by_space(self):
 
         self.local_orbitals = []
+        self.local_orbital_ptip = []
 
         x_ind_start, x_ind_end = self.x_ind_per_rank(self.mpi_rank)
         self.local_cell_n = np.array([x_ind_end - x_ind_start, self.cell_n[1], self.cell_n[2]])
@@ -121,6 +125,11 @@ class STM:
             orbitals_per_rank = np.array([len(gme) for gme in self.global_morb_energies_by_rank[ispin]])
             total_orb = sum(orbitals_per_rank)
 
+            ### Calculate and divide also the p-tip contribution,
+            ### as derivatives are hard to account for after dividing the orbitals in space
+            grad_x, grad_y = np.gradient(self.cgo.morb_grids[ispin], axis=(1, 2))
+            p_tip_contrib = (grad_x/self.dv[0]) ** 2 + (grad_y/self.dv[1]) ** 2
+
             for rank in range(self.mpi_size):
 
                 # which indexes to send?
@@ -129,13 +138,13 @@ class STM:
                 if self.mpi_rank == rank:
                     recvbuf = np.empty(sum(orbitals_per_rank)*num_spatial_points, dtype=self.cgo.dtype)
                     #print("R%d expecting counts: " % (self.mpi_rank) + str(orbitals_per_rank*num_spatial_points))
-                    sys.stdout.flush()
+                    #sys.stdout.flush()
                 else:
                     recvbuf = None
 
                 sendbuf = self.cgo.morb_grids[ispin][:, ix_start:ix_end, :, :].ravel()
                 #print("R%d -> %d sending %d" %(self.mpi_rank, rank, len(sendbuf)))
-                sys.stdout.flush()
+                #sys.stdout.flush()
 
                 # Send the orbitals
                 self.mpi_comm.Gatherv(sendbuf=sendbuf,
@@ -143,6 +152,17 @@ class STM:
 
                 if self.mpi_rank == rank:
                     self.local_orbitals.append(recvbuf.reshape(total_orb, self.local_cell_n[0], self.local_cell_n[1], self.local_cell_n[2]))
+                
+                ### Divide also the p-tip contribution!
+                sendbuf = p_tip_contrib[:, ix_start:ix_end, :, :].ravel()
+                if self.mpi_rank == rank:
+                    recvbuf = np.empty(sum(orbitals_per_rank)*num_spatial_points, dtype=self.cgo.dtype)
+                else:
+                    recvbuf = None
+                self.mpi_comm.Gatherv(sendbuf=sendbuf,
+                    recvbuf=[recvbuf, orbitals_per_rank*num_spatial_points], root=rank)
+                if self.mpi_rank == rank:
+                    self.local_orbital_ptip.append(recvbuf.reshape(total_orb, self.local_cell_n[0], self.local_cell_n[1], self.local_cell_n[2]))
 
 
     def gather_global_energies(self):
@@ -241,19 +261,8 @@ class STM:
         plane_index = int(np.round(plane_z_wrt_orig/self.local_cell[2]*self.local_cell_n[2]))
         return local_data[:, :, plane_index]
 
-    def s_p_type_signal_plane(self, orb_plane, dx, dy, p_tip_ratio):
-        if p_tip_ratio <= 0.0:
-            return orb_plane**2
-        x_der, y_der = np.gradient(orb_plane)
-        p_type = (x_der/dx) ** 2 + (y_der/dy) ** 2
-        return (1.0 - p_tip_ratio) * orb_plane**2 + p_tip_ratio * p_type
-
-    def s_p_type_signal_3d(self, orbital, dx, dy, p_tip_ratio):
-        if p_tip_ratio <= 0.0:
-            return orbital**2
-        x_der, y_der, z_der = np.gradient(orbital)
-        p_type = (x_der/dx) ** 2 + (y_der/dy) ** 2
-        return (1.0 - p_tip_ratio) * orbital**2 + p_tip_ratio * p_type
+    def s_p_type_signal(self, orbital, orbital_ptip, p_tip_ratio):
+        return (1.0 - p_tip_ratio) * orbital**2 + p_tip_ratio * orbital_ptip
 
     def build_stm_series(self, e_arr, fwhms, heights, isovalues, p_tip_ratio=0.0):
 
@@ -285,6 +294,7 @@ class STM:
                 # Contributing orbitals in the energy range since last energy value
                 close_energies = []
                 close_grids = []
+                close_grids_ptip = []
                 for ispin in range(self.nspin):
                     e1 = np.min([last_e, e])
                     e2 = np.max([last_e, e])
@@ -294,6 +304,7 @@ class STM:
                     #    close_i2 += 1
                     close_energies.append(self.global_morb_energies[ispin][close_i1:close_i2])
                     close_grids.append(self.local_orbitals[ispin][close_i1:close_i2])
+                    close_grids_ptip.append(self.local_orbital_ptip[ispin][close_i1:close_i2])
                 
                 #print("fwhm %.2f, energy range %.4f : %.4f" % (fwhm, last_e, e))
                 #if close_i2 is not None:
@@ -308,7 +319,7 @@ class STM:
                     for i_m, morb_en in enumerate(close_energies[ispin]):
                         broad_factor = self.gaussian_area(last_e, e, morb_en, fwhm)
                         cur_charge_dens += broad_factor*(
-                            self.s_p_type_signal_3d(close_grids[ispin][i_m], self.dv[0], self.dv[1], p_tip_ratio)
+                            self.s_p_type_signal(close_grids[ispin][i_m], close_grids_ptip[ispin][i_m], p_tip_ratio)
                         )
 
                 # ---------------------
@@ -322,7 +333,7 @@ class STM:
                         for i_m, morb_en in enumerate(close_energies[ispin]):
                             morb_on_surf = self._index_with_interpolation_3d(
                                 i_isosurf,
-                                self.s_p_type_signal_3d(close_grids[ispin][i_m], self.dv[0], self.dv[1], p_tip_ratio)
+                                self.s_p_type_signal(close_grids[ispin][i_m], close_grids_ptip[ispin][i_m], p_tip_ratio)
                             )
                             cc_ldos[i_fwhm, i_iso, :, :, i_e] += self.gaussian(e - morb_en, fwhm) * morb_on_surf
                 # ---------------------
@@ -334,7 +345,7 @@ class STM:
                     for ispin in range(self.nspin):                    
                         for i_m, morb_en in enumerate(close_energies[ispin]):
                             morb_on_plane = self.local_data_plane_above_atoms(
-                                self.s_p_type_signal_3d(close_grids[ispin][i_m], self.dv[0], self.dv[1], p_tip_ratio),
+                                self.s_p_type_signal(close_grids[ispin][i_m], close_grids_ptip[ispin][i_m], p_tip_ratio),
                                 height
                             )
                             ch_ldos[i_fwhm, i_h, :, :, i_e] += self.gaussian(e - morb_en, fwhm) * morb_on_plane
@@ -601,8 +612,9 @@ class STM:
                     i_orb_count = 0
                     for i_mo in orb_indexes_wrt_data_start[i_spin]:
                         orb_plane = self.local_data_plane_above_atoms(self.local_orbitals[i_spin][i_mo], h)
+                        orb_plane_ptip = self.local_data_plane_above_atoms(self.local_orbital_ptip[i_spin][i_mo], h)
                         self.series_output[label]['series_data'][i_series_counter, i_orb_count, :, :] = (
-                            self.s_p_type_signal_plane(orb_plane, self.dv[0], self.dv[1], p_tip_ratio)
+                            self.s_p_type_signal(orb_plane, orb_plane_ptip, p_tip_ratio)
                         )
                         i_orb_count += 1
                     i_series_counter += 1
@@ -623,7 +635,7 @@ class STM:
                     i_orb_count = 0
                     for i_mo in orb_indexes_wrt_data_start[i_spin]:
                         i_isosurf = self._get_isosurf_indexes(
-                            self.s_p_type_signal_3d(self.local_orbitals[i_spin][i_mo], self.dv[0], self.dv[1], p_tip_ratio),
+                            self.s_p_type_signal(self.local_orbitals[i_spin][i_mo], self.local_orbital_ptip[i_spin][i_mo], p_tip_ratio),
                             isov, True
                         )
                         self.series_output[label]['series_data'][i_series_counter, i_orb_count, :, :] = (

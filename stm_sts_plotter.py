@@ -10,6 +10,7 @@ import argparse
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from cp2k_spm_tools import igor
 
@@ -57,7 +58,9 @@ def make_plot(fig, ax, data, extent, title=None, title_size=None, center0=False,
     else:
         ax.set_xlabel(r"x ($\AA$)")
         ax.set_ylabel(r"y ($\AA$)")
-        cb = fig.colorbar(im, ax=ax)
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        cb = fig.colorbar(im, cax=cax)
         cb.formatter.set_powerlimits((-2, 2))
         cb.update_ticks()
     ax.set_title(title, loc='left')
