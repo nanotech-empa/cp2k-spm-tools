@@ -1,12 +1,10 @@
-DIR="../benzene_cp2k_scf/"
+#!/bin/bash -l
 
-# Path to cube_from_wfn.py
-# Leave empty if already in $PATH
-SCRIPT_PATH=""
+DIR="../benzene_cp2k_scf/"
 
 mkdir cubes
 
-"$SCRIPT_PATH"cube_from_wfn.py \
+../../cube_from_wfn.py \
   --cp2k_input_file $DIR/cp2k.inp \
   --basis_set_file ../BASIS_MOLOPT \
   --xyz_file $DIR/geom.xyz \

@@ -17,10 +17,10 @@ mpirun -n 2 python3 ../../stm_sts_from_wfn.py \
   --dx 0.15 \
   --eval_cutoff 14.0 \
   --extrap_extent 2.0 \
-  --p_tip_ratios 0.0 1.0\
+  --p_tip_ratios 0.0 1.0 \
 \
-  --n_homo 5 \
-  --n_lumo 5 \
+  --n_homo 4 \
+  --n_lumo 4 \
   --orb_heights 3.0 5.0 \
   --orb_isovalues 1e-7 \
   --orb_fwhms 0.1 \

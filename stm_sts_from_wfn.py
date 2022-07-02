@@ -295,6 +295,7 @@ if mpi_rank == 0:
         ])
     ion_pot = cube_utils.find_vacuum_level_naive(hart_cube) - (homo_en + cp2k_grid_orb.ref_energy)
     print("IONIZATION POTENIAL (eV): %.6f (accurate only for isolated molecules)" % ion_pot)
+    sys.stdout.flush()
 
 ### ------------------------------------------------------
 ### Set up STM object
