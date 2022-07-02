@@ -40,9 +40,12 @@ class STM:
         self.mpi_comm = mpi_comm
 
         self.p_tip_ratios = p_tip_ratios
+        # add a check if ptip needs to be calculated, as it can use a lot of memory
+        self.ptip_enabled = True
+        if all(r == 0.0 for r in p_tip_ratios):
+            self.ptip_enabled = False
 
         self.global_morb_energies_by_rank = None
-
 
         self.z_arr = np.arange(0.0, self.cell_n[2]*self.dv[2], self.dv[2]) + self.origin[2]
         # to angstrom and WRT to topmost atom
@@ -58,12 +61,6 @@ class STM:
 
         # p-tip contribution of the orbitals defined in local space for this mpi_rank
         self.local_orbital_ptip = None
-
-#        # List of dictionaries containing everything to do with STM/STS maps
-#        self.stm_maps_data_list = []
-#
-#        # Dictionary containing everything to do with orbital maps
-#        self.orb_maps_data = None
         
         # Dictionary containing all the STM/STS/ORB output
         self.series_output = {}
@@ -125,11 +122,6 @@ class STM:
             orbitals_per_rank = np.array([len(gme) for gme in self.global_morb_energies_by_rank[ispin]])
             total_orb = sum(orbitals_per_rank)
 
-            ### Calculate and divide also the p-tip contribution,
-            ### as derivatives are hard to account for after dividing the orbitals in space
-            grad_x, grad_y = np.gradient(self.cgo.morb_grids[ispin], axis=(1, 2))
-            p_tip_contrib = (grad_x/self.dv[0]) ** 2 + (grad_y/self.dv[1]) ** 2
-
             for rank in range(self.mpi_size):
 
                 # which indexes to send?
@@ -152,17 +144,24 @@ class STM:
 
                 if self.mpi_rank == rank:
                     self.local_orbitals.append(recvbuf.reshape(total_orb, self.local_cell_n[0], self.local_cell_n[1], self.local_cell_n[2]))
-                
-                ### Divide also the p-tip contribution!
-                sendbuf = p_tip_contrib[:, ix_start:ix_end, :, :].ravel()
-                if self.mpi_rank == rank:
-                    recvbuf = np.empty(sum(orbitals_per_rank)*num_spatial_points, dtype=self.cgo.dtype)
-                else:
-                    recvbuf = None
-                self.mpi_comm.Gatherv(sendbuf=sendbuf,
-                    recvbuf=[recvbuf, orbitals_per_rank*num_spatial_points], root=rank)
-                if self.mpi_rank == rank:
-                    self.local_orbital_ptip.append(recvbuf.reshape(total_orb, self.local_cell_n[0], self.local_cell_n[1], self.local_cell_n[2]))
+            
+            if self.ptip_enabled:
+                ### Calculate and divide also the p-tip contribution,
+                ### as derivatives are hard to account for after dividing the orbitals in space
+                p_tip_contrib  = (np.gradient(self.cgo.morb_grids[ispin], axis=1)/self.dv[0])**2
+                p_tip_contrib += (np.gradient(self.cgo.morb_grids[ispin], axis=2)/self.dv[1])**2
+
+                for rank in range(self.mpi_size):
+                    ix_start, ix_end = self.x_ind_per_rank(rank)
+                    if self.mpi_rank == rank:
+                        recvbuf = np.empty(sum(orbitals_per_rank)*num_spatial_points, dtype=self.cgo.dtype)
+                    else:
+                        recvbuf = None
+                    sendbuf = p_tip_contrib[:, ix_start:ix_end, :, :].ravel()
+                    self.mpi_comm.Gatherv(sendbuf=sendbuf,
+                        recvbuf=[recvbuf, orbitals_per_rank*num_spatial_points], root=rank)
+                    if self.mpi_rank == rank:
+                        self.local_orbital_ptip.append(recvbuf.reshape(total_orb, self.local_cell_n[0], self.local_cell_n[1], self.local_cell_n[2]))
 
 
     def gather_global_energies(self):
@@ -261,8 +260,11 @@ class STM:
         plane_index = int(np.round(plane_z_wrt_orig/self.local_cell[2]*self.local_cell_n[2]))
         return local_data[:, :, plane_index]
 
-    def s_p_type_signal(self, orbital, orbital_ptip, p_tip_ratio):
-        return (1.0 - p_tip_ratio) * orbital**2 + p_tip_ratio * orbital_ptip
+    def s_p_type_signal(self, i_spin, i_mo, p_tip_ratio):
+        if p_tip_ratio == 0.0:
+            return self.local_orbitals[i_spin][i_mo]**2
+        else:
+            return (1.0 - p_tip_ratio) * self.local_orbitals[i_spin][i_mo]**2 + p_tip_ratio * self.local_orbital_ptip[i_spin][i_mo]
 
     def build_stm_series(self, e_arr, fwhms, heights, isovalues, p_tip_ratio=0.0):
 
@@ -292,35 +294,25 @@ class STM:
             for i_e, e in enumerate(e_arr):
                 # ---------------------
                 # Contributing orbitals in the energy range since last energy value
-                close_energies = []
-                close_grids = []
-                close_grids_ptip = []
+                close_indexes = []
                 for ispin in range(self.nspin):
                     e1 = np.min([last_e, e])
                     e2 = np.max([last_e, e])
                     close_i1 = index_energy(self.global_morb_energies[ispin] > e1 - 2.0*fwhm)
                     close_i2 = index_energy(self.global_morb_energies[ispin] > e2 + 2.0*fwhm)
-                    #if close_i2 is not None:
-                    #    close_i2 += 1
-                    close_energies.append(self.global_morb_energies[ispin][close_i1:close_i2])
-                    close_grids.append(self.local_orbitals[ispin][close_i1:close_i2])
-                    close_grids_ptip.append(self.local_orbital_ptip[ispin][close_i1:close_i2])
-                
-                #print("fwhm %.2f, energy range %.4f : %.4f" % (fwhm, last_e, e))
-                #if close_i2 is not None:
-                #    print("---- contrib %d:%d" % (close_i1, close_i2))
-                #else:
-                #    print("---- contrib %d:" % (close_i1))
-                #print("---- ens:" + str(close_energies))
+                    if close_i1 is None:
+                        close_i1 = 0
+                    if close_i2 is None:
+                        close_i2 = len(self.global_morb_energies[ispin])
+                    close_indexes.append(np.arange(close_i1, close_i2))
 
                 # ---------------------
                 # Update charge density
                 for ispin in range(self.nspin):
-                    for i_m, morb_en in enumerate(close_energies[ispin]):
+                    for i_mo in close_indexes[ispin]:
+                        morb_en = self.global_morb_energies[ispin][i_mo]
                         broad_factor = self.gaussian_area(last_e, e, morb_en, fwhm)
-                        cur_charge_dens += broad_factor*(
-                            self.s_p_type_signal(close_grids[ispin][i_m], close_grids_ptip[ispin][i_m], p_tip_ratio)
-                        )
+                        cur_charge_dens += broad_factor*self.s_p_type_signal(ispin, i_mo, p_tip_ratio)
 
                 # ---------------------
                 # find surfaces corresponding to isovalues
@@ -329,23 +321,26 @@ class STM:
                     i_isosurf = self._get_isosurf_indexes(cur_charge_dens, isoval, True)
                     cc_map[i_fwhm, i_iso, :, :, i_e] = self._index_with_interpolation(i_isosurf, self.z_arr)
                     
-                    for ispin in range(self.nspin):                    
-                        for i_m, morb_en in enumerate(close_energies[ispin]):
+                    for ispin in range(self.nspin):
+                        for i_mo in close_indexes[ispin]:
+                            morb_en = self.global_morb_energies[ispin][i_mo]
                             morb_on_surf = self._index_with_interpolation_3d(
                                 i_isosurf,
-                                self.s_p_type_signal(close_grids[ispin][i_m], close_grids_ptip[ispin][i_m], p_tip_ratio)
+                                self.s_p_type_signal(ispin, i_mo, p_tip_ratio)
                             )
                             cc_ldos[i_fwhm, i_iso, :, :, i_e] += self.gaussian(e - morb_en, fwhm) * morb_on_surf
+                
                 # ---------------------
                 # find constant height images
                 for i_h, height in enumerate(heights):
                     
                     ch_map[i_fwhm, i_h, :, :, i_e] = self.local_data_plane_above_atoms(cur_charge_dens, height)
 
-                    for ispin in range(self.nspin):                    
-                        for i_m, morb_en in enumerate(close_energies[ispin]):
+                    for ispin in range(self.nspin):
+                        for i_mo in close_indexes[ispin]:
+                            morb_en = self.global_morb_energies[ispin][i_mo]
                             morb_on_plane = self.local_data_plane_above_atoms(
-                                self.s_p_type_signal(close_grids[ispin][i_m], close_grids_ptip[ispin][i_m], p_tip_ratio),
+                                self.s_p_type_signal(ispin, i_mo, p_tip_ratio),
                                 height
                             )
                             ch_ldos[i_fwhm, i_h, :, :, i_e] += self.gaussian(e - morb_en, fwhm) * morb_on_plane
@@ -559,14 +554,6 @@ class STM:
             + len(isoval_list) * 2*len(fwhm_list) * len(self.p_tip_ratios) # p-type cc sts & stm signals
         )
 
-        #number_of_series = (
-        #    len(height_list) # just s-type WFN LDOS
-        #    + len(height_list) * len(self.p_tip_ratios) # p-type WFN ch-signals
-        #    + len(isoval_list) * len(self.p_tip_ratios) # p-type WFN cc-signals
-        #    + len(height_list) * 2*len(fwhm_list) # p-type ch sts & stm signals
-        #    + len(isoval_list) * 2*len(fwhm_list) # p-type cc sts & stm signals
-        #)
-
         # Orbital series
         for i_spin in range(self.nspin):
             label = 's%d_orb' % i_spin
@@ -611,10 +598,9 @@ class STM:
                     # series data
                     i_orb_count = 0
                     for i_mo in orb_indexes_wrt_data_start[i_spin]:
-                        orb_plane = self.local_data_plane_above_atoms(self.local_orbitals[i_spin][i_mo], h)
-                        orb_plane_ptip = self.local_data_plane_above_atoms(self.local_orbital_ptip[i_spin][i_mo], h)
+                        s_p_data = self.s_p_type_signal(i_spin, i_mo, p_tip_ratio)
                         self.series_output[label]['series_data'][i_series_counter, i_orb_count, :, :] = (
-                            self.s_p_type_signal(orb_plane, orb_plane_ptip, p_tip_ratio)
+                            self.local_data_plane_above_atoms(s_p_data, h)
                         )
                         i_orb_count += 1
                     i_series_counter += 1
@@ -635,7 +621,7 @@ class STM:
                     i_orb_count = 0
                     for i_mo in orb_indexes_wrt_data_start[i_spin]:
                         i_isosurf = self._get_isosurf_indexes(
-                            self.s_p_type_signal(self.local_orbitals[i_spin][i_mo], self.local_orbital_ptip[i_spin][i_mo], p_tip_ratio),
+                            self.s_p_type_signal(i_spin, i_mo, p_tip_ratio),
                             isov, True
                         )
                         self.series_output[label]['series_data'][i_series_counter, i_orb_count, :, :] = (
