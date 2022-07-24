@@ -397,7 +397,7 @@ class Cp2kWfnFile:
 
             first_imo = -1
 
-            for imo in range(self.nmo[0]):
+            for imo in range(self.nmo[ispin]):
                 coefs = inpf.read_reals()
                 if imo < loc_ind_start:
                     continue
