@@ -12,7 +12,7 @@ mkdir cubes
   --output_dir ./cubes/ \
   --n_homo 1 \
   --n_lumo 1 \
-  --dx 0.2 \
+  --dx 0.8 \
   --eval_cutoff 14.0 \
 #  --orb_square \
 #  --charge_dens \

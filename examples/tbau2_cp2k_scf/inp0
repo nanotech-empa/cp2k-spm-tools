@@ -1,0 +1,108 @@
+&FORCE_EVAL
+   &DFT
+      BASIS_SET_FILE_NAME BASIS_MOLOPT
+      CHARGE 0
+      &MGRID
+         CUTOFF 1600
+         NGRIDS 5
+      &END MGRID
+      MULTIPLICITY 2
+      UKS .TRUE.
+      &POISSON
+         PERIODIC XYZ
+         POISSON_SOLVER PERIODIC
+      &END POISSON
+      POTENTIAL_FILE_NAME POTENTIAL
+      &PRINT
+         &MO_CUBES
+            ADD_LAST NUMERIC
+            &EACH
+               GEO_OPT 0
+               QS_SCF 0
+            &END EACH
+            NHOMO 1
+            NLUMO 1
+            STRIDE 1 1 1
+         &END MO_CUBES
+      &END PRINT
+      &QS
+         EPS_DEFAULT 1e-14
+         EXTRAPOLATION ASPC
+         EXTRAPOLATION_ORDER 3
+         METHOD GPW
+      &END QS
+      RESTART_FILE_NAME PROJ0-RESTART.wfn
+      &SCF
+         EPS_SCF 1e-06
+         MAX_SCF 40
+         &OT
+            MINIMIZER CG
+            PRECONDITIONER FULL_SINGLE_INVERSE
+         &END OT
+         &OUTER_SCF
+            EPS_SCF 1e-06
+            MAX_SCF 50
+         &END OUTER_SCF
+         &PRINT
+            &RESTART
+               ADD_LAST NUMERIC
+               &EACH
+                  GEO_OPT 1
+                  QS_SCF 0
+               &END EACH
+               FILENAME RESTART
+            &END RESTART
+            &RESTART_HISTORY OFF
+               BACKUP_COPIES 0
+            &END RESTART_HISTORY
+         &END PRINT
+         SCF_GUESS RESTART
+      &END SCF
+      &XC
+         &XC_FUNCTIONAL PBE
+         &END XC_FUNCTIONAL
+      &END XC
+   &END DFT
+   METHOD Quickstep
+   &SUBSYS
+      &CELL
+         A 18     0.0             0.0
+         B 0.0             18     0.0
+         C 0.0             0.0             12
+         PERIODIC XYZ
+      &END CELL
+      &KIND Tb
+         BASIS_SET DZVP-MOLOPT-SR-GTH-q19
+         ELEMENT Tb
+         MAGNETIZATION 1
+         POTENTIAL GTH-PBE-q19
+      &END KIND
+      &KIND Tb1
+         BASIS_SET DZVP-MOLOPT-SR-GTH-q19
+         ELEMENT Tb
+         MAGNETIZATION -1
+         POTENTIAL GTH-PBE-q19
+      &END KIND
+      &KIND Au
+         BASIS_SET DZVP-MOLOPT-SR-GTH-q11
+         ELEMENT Au
+         POTENTIAL GTH-PBE-q11
+      &END KIND
+      &TOPOLOGY
+         COORD_FILE_FORMAT XYZ
+         COORD_FILE_NAME aiida.coords.xyz
+      &END TOPOLOGY
+   &END SUBSYS
+&END FORCE_EVAL
+&GLOBAL
+   &DBCSR
+      USE_MPI_ALLOCATOR .FALSE.
+   &END DBCSR
+   ELPA_KERNEL AUTO
+   EXTENDED_FFT_LENGTHS
+   PREFERRED_DIAG_LIBRARY ELPA
+   PRINT_LEVEL MEDIUM
+   PROJECT PROJ0
+   RUN_TYPE ENERGY
+   WALLTIME 12000
+&END GLOBAL
