@@ -22,7 +22,7 @@
             &END EACH
             NHOMO 2
             NLUMO 2
-            STRIDE 1 1 1
+            STRIDE 9 9 9
          &END MO_CUBES
       &END PRINT
       &QS

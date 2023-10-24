@@ -12,8 +12,9 @@ mkdir cubes
   --output_dir ./cubes/ \
   --n_homo 3 \
   --n_lumo 3 \
-  --dx .079364908106 \
+  --dx .714283 \
   --eval_cutoff 14.0 \
+  --do_not_center_atoms
 #  --orb_square \
 #  --charge_dens \
 #  --spin_dens \

@@ -20,9 +20,9 @@
                GEO_OPT 0
                QS_SCF 0
             &END EACH
-            NHOMO 1
-            NLUMO 1
-            STRIDE 4 4 4
+            NHOMO 2
+            NLUMO 2
+            STRIDE 10 10 10
          &END MO_CUBES
       &END PRINT
       &QS
@@ -63,7 +63,7 @@
       &CELL
          A 18     0.0             0.0
          B 0.0             18     0.0
-         C 0.0             0.0             12
+         C 0.0             0.0             18
          PERIODIC XYZ
       &END CELL
       &KIND Tb
