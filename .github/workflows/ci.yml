@@ -1,0 +1,41 @@
+name: pre-commit check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop
+
+env:
+  PYTEST_ADDOPTS: "--color=yes"
+
+# Cancel running workflows when additional changes are pushed
+# https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#example-using-a-fallback-value
+concurrency:
+  group: ${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  pre-commit:
+    name: install and run pre-commit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+          cache: "pip"
+          cache-dependency-path: |
+            pyproject.toml
+
+      - name: Install pre-commit
+        run: |
+          python -m pip install --upgrade pip
+          pip install pre-commit ruff
+
+      - name: Run linters
+        run: |
+          pre-commit run --all-files
