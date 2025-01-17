@@ -5,16 +5,31 @@
 Library and scripts to perform scanning probe microscopy simulations based on a [CP2K](https://www.cp2k.org/) calculation.
 
 Features include:
-* Processing the various output files of [CP2K](https://www.cp2k.org/), including the `.wfn` file
-* Scanning Tunnelling Microscopy and Spectroscopy (STM/STS) analysis
-* Fourier-Transformed STS analysis for finite cutouts of periodic systems
-* Orbital hybridization analysis for adsorbed systems
-* High-resolution STM (HRSTM) simulations
+
+- Processing the various output files of [CP2K](https://www.cp2k.org/), including the `.wfn` file
+- Scanning Tunnelling Microscopy and Spectroscopy (STM/STS) analysis
+- Fourier-Transformed STS analysis for finite cutouts of periodic systems
+- Orbital hybridization analysis for adsorbed systems
+- High-resolution STM (HRSTM) simulations
 
 Requirements:
-* numerical and scientific python libraries `numpy`, `scipy`
-* Atomistic simulation environment `ase`
-* `mpi4py` provides MPI parallelization
+
+- numerical and scientific python libraries `numpy`, `scipy`
+- Atomistic simulation environment `ase`
+- `mpi4py` provides MPI parallelization
+
+Installation:
+
+- `mpi4py` requires an external MPI implementation (e.g. `mpich`) available. One can install it together with `mpi4py` with
+  ```bash
+  conda install -c conda-forge mpi4py mpich
+  ```
+- the rest of the dependencies can be installed with pip
+  ```bash
+  git clone git@github.com:nanotech-empa/cp2k-spm-tools.git
+  cd cp2k-spm-tools
+  pip install .
+  ```
 
 When everything is set up correctly, the bash scripts in `examples/` folder can be executed without any further input and illustrate the usage of the various scripts. For example `example/benzene_stm/run_stm_sts_from_wfn.sh` evaluates the STM/STS signatures of isolated benzene at each orbital energy (`out/orb/`) as well as in an arbitrary energy range (`out/stm/`). The corresponding CP2K calculation is included in the repository.
 
@@ -32,7 +47,7 @@ cgo = Cp2kGridOrbitals()
 cgo.read_cp2k_input("./cp2k.inp")
 cgo.read_xyz("./geom.xyz")
 cgo.read_basis_functions("./BASIS_MOLOPT")
-cgo.load_restart_wfn_file("./PROJ-RESTART.wfn", n_occ=2, n_virt=2) 
+cgo.load_restart_wfn_file("./PROJ-RESTART.wfn", n_occ=2, n_virt=2)
 
 ### Evaluate the orbitals in the specific region ###
 cgo.calc_morbs_in_region(
@@ -48,4 +63,3 @@ cgo.write_cube("./homo.cube", orbital_nr=0)
 The evaluated HOMO orbital in the defined region:
 
 <img src="examples/example.png" width="600">
-
