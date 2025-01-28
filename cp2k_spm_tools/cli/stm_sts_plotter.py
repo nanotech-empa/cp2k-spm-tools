@@ -11,24 +11,6 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from cp2k_spm_tools import igor
 
-ang_2_bohr = 1.0 / 0.52917721067
-hart_2_ev = 27.21138602
-
-fig_y = 4.0
-
-title_font_size = 14
-
-parser = argparse.ArgumentParser(description="Makes images from the STM .npz files.")
-
-### ----------------------------------------------------------------------
-### Input and output files
-parser.add_argument("--stm_npz", metavar="FILENAME", default=None, help="File containing STM data.")
-parser.add_argument("--orb_npz", metavar="FILENAME", default=None, help="File containing ORB data.")
-parser.add_argument("--output_dir", metavar="DIR", default="./", help="Output directory.")
-### ----------------------------------------------------------------------
-
-args = parser.parse_args()
-
 
 def make_plot(
     fig,
@@ -190,51 +172,67 @@ def plot_all_series(general_info, series_info, series_data, plot_dir, itx_dir):
         plot_series_and_export_igor(general_info, info, data, make_plot_args, plot_dir, itx_dir)
 
 
-### ----------------------------------------------------------------------
-### STM.NPZ
-### ----------------------------------------------------------------------
+def main():
+    parser = argparse.ArgumentParser(description="Makes images from the STM .npz files.")
 
-if args.stm_npz is not None:
-    stm_dir = args.output_dir + "./stm"
-    if not os.path.exists(stm_dir):
-        os.makedirs(stm_dir)
+    ### ----------------------------------------------------------------------
+    ### Input and output files
+    parser.add_argument("--stm_npz", metavar="FILENAME", default=None, help="File containing STM data.")
+    parser.add_argument("--orb_npz", metavar="FILENAME", default=None, help="File containing ORB data.")
+    parser.add_argument("--output_dir", metavar="DIR", default="./", help="Output directory.")
+    ### ----------------------------------------------------------------------
 
-    stm_itx_dir = args.output_dir + "./stm_itx"
-    if not os.path.exists(stm_itx_dir):
-        os.makedirs(stm_itx_dir)
+    args = parser.parse_args()
 
-    loaded_data = np.load(args.stm_npz, allow_pickle=True)
+    ### ----------------------------------------------------------------------
+    ### STM.NPZ
+    ### ----------------------------------------------------------------------
 
-    stm_general_info = loaded_data["stm_general_info"][()]
-    stm_series_info = loaded_data["stm_series_info"]
-    stm_series_data = loaded_data["stm_series_data"]
+    if args.stm_npz is not None:
+        stm_dir = args.output_dir + "./stm"
+        if not os.path.exists(stm_dir):
+            os.makedirs(stm_dir)
 
-    plot_all_series(stm_general_info, stm_series_info, stm_series_data, stm_dir, stm_itx_dir)
+        stm_itx_dir = args.output_dir + "./stm_itx"
+        if not os.path.exists(stm_itx_dir):
+            os.makedirs(stm_itx_dir)
 
-### ----------------------------------------------------------------------
-### ORB.NPZ
-### ----------------------------------------------------------------------
+        loaded_data = np.load(args.stm_npz, allow_pickle=True)
 
-if args.orb_npz is not None:
-    orb_dir = args.output_dir + "./orb"
-    if not os.path.exists(orb_dir):
-        os.makedirs(orb_dir)
+        stm_general_info = loaded_data["stm_general_info"][()]
+        stm_series_info = loaded_data["stm_series_info"]
+        stm_series_data = loaded_data["stm_series_data"]
 
-    orb_itx_dir = args.output_dir + "./orb_itx"
-    if not os.path.exists(orb_itx_dir):
-        os.makedirs(orb_itx_dir)
+        plot_all_series(stm_general_info, stm_series_info, stm_series_data, stm_dir, stm_itx_dir)
 
-    loaded_data = np.load(args.orb_npz, allow_pickle=True)
+    ### ----------------------------------------------------------------------
+    ### ORB.NPZ
+    ### ----------------------------------------------------------------------
 
-    s0_orb_general_info = loaded_data["s0_orb_general_info"][()]
-    s0_orb_series_info = loaded_data["s0_orb_series_info"]
-    s0_orb_series_data = loaded_data["s0_orb_series_data"]
+    if args.orb_npz is not None:
+        orb_dir = args.output_dir + "./orb"
+        if not os.path.exists(orb_dir):
+            os.makedirs(orb_dir)
 
-    plot_all_series(s0_orb_general_info, s0_orb_series_info, s0_orb_series_data, orb_dir, orb_itx_dir)
+        orb_itx_dir = args.output_dir + "./orb_itx"
+        if not os.path.exists(orb_itx_dir):
+            os.makedirs(orb_itx_dir)
 
-    if "s1_orb_general_info" in loaded_data.files:
-        s1_orb_general_info = loaded_data["s1_orb_general_info"][()]
-        s1_orb_series_info = loaded_data["s1_orb_series_info"]
-        s1_orb_series_data = loaded_data["s1_orb_series_data"]
+        loaded_data = np.load(args.orb_npz, allow_pickle=True)
 
-        plot_all_series(s1_orb_general_info, s1_orb_series_info, s1_orb_series_data, orb_dir, orb_itx_dir)
+        s0_orb_general_info = loaded_data["s0_orb_general_info"][()]
+        s0_orb_series_info = loaded_data["s0_orb_series_info"]
+        s0_orb_series_data = loaded_data["s0_orb_series_data"]
+
+        plot_all_series(s0_orb_general_info, s0_orb_series_info, s0_orb_series_data, orb_dir, orb_itx_dir)
+
+        if "s1_orb_general_info" in loaded_data.files:
+            s1_orb_general_info = loaded_data["s1_orb_general_info"][()]
+            s1_orb_series_info = loaded_data["s1_orb_series_info"]
+            s1_orb_series_data = loaded_data["s1_orb_series_data"]
+
+            plot_all_series(s1_orb_general_info, s1_orb_series_info, s1_orb_series_data, orb_dir, orb_itx_dir)
+
+
+if __name__ == "__main__":
+    main()
