@@ -1,25 +1,12 @@
 """
 Tools to perform FT-STS analysis on orbitals evaluated on grid
-""" 
+"""
 
-import os
 import numpy as np
-import scipy
-import scipy.io
-import scipy.special
-import time
-import copy
-import sys
 
-import re
-import io
-import ase
-import ase.io
-
-from .cp2k_grid_orbitals import Cp2kGridOrbitals
-
-ang_2_bohr = 1.0/0.52917721067
+ang_2_bohr = 1.0 / 0.52917721067
 hart_2_ev = 27.21138602
+
 
 class FTSTS:
     """
@@ -59,13 +46,13 @@ class FTSTS:
 
     def add_padding(self, ldos, amount_factor):
         # assumes that first index is space
-        pad_n = int(amount_factor*ldos.shape[0])
+        pad_n = int(amount_factor * ldos.shape[0])
         if pad_n == 0:
             return ldos
-        padded_ldos = np.zeros((np.shape(ldos)[0]+2*pad_n, np.shape(ldos)[1]))
+        padded_ldos = np.zeros((np.shape(ldos)[0] + 2 * pad_n, np.shape(ldos)[1]))
         padded_ldos[pad_n:-pad_n] = ldos
         return padded_ldos
-    
+
     def crop_padding(self, ldos, tol=1e-6):
         # assumes that first index is space
         max_for_every_x = np.max(ldos, axis=1)
@@ -79,30 +66,28 @@ class FTSTS:
         return ldos[crop_index:-crop_index]
 
     def fourier_transform(self, ldos):
-
         ft = np.fft.rfft(ldos, axis=0)
         aft = np.abs(ft)
 
         # Corresponding k points
-        k_arr = 2*np.pi*np.fft.rfftfreq(len(ldos[:, 0]), self.dv[0])
+        k_arr = 2 * np.pi * np.fft.rfftfreq(len(ldos[:, 0]), self.dv[0])
         # Note: Since we took the FT of the charge density, the wave vectors are
         #       twice the ones of the underlying wave function.
-        #k_arr = k_arr / 2
+        # k_arr = k_arr / 2
 
         # Brillouin zone boundary [1/angstroms]
-        #bzboundary = np.pi / lattice_param
-        #bzb_index = int(np.round(bzboundary/dk))+1
+        # bzboundary = np.pi / lattice_param
+        # bzb_index = int(np.round(bzboundary/dk))+1
 
         dk = k_arr[1]
 
         return k_arr, aft, dk
-    
+
     def gaussian(self, x, fwhm):
-        sigma = fwhm/2.3548
-        return np.exp(-x**2/(2*sigma**2))/(sigma*np.sqrt(2*np.pi))
+        sigma = fwhm / 2.3548
+        return np.exp(-(x**2) / (2 * sigma**2)) / (sigma * np.sqrt(2 * np.pi))
 
     def project_orbitals_1d(self, axis=0, gauss_pos=None, gauss_fwhm=2.0):
-
         self.morbs_1d = []
 
         if axis != 0:
@@ -119,8 +104,8 @@ class FTSTS:
                     morb_1d = np.mean(morb_grid**2, axis=(1, 2))
                 else:
                     ny = morb_grid.shape[1]
-                    y_arr = np.linspace(-dv[1]*ny/2.0, dv[1]*ny/2.0, ny)
-                    y_gaussian = self.gaussian(y_arr-gauss_pos, gauss_fwhm)
+                    y_arr = np.linspace(-dv[1] * ny / 2.0, dv[1] * ny / 2.0, ny)
+                    y_gaussian = self.gaussian(y_arr - gauss_pos, gauss_fwhm)
                     morb_plane = np.mean(morb_grid**2, axis=2)
                     morb_1d = np.dot(morb_plane, y_gaussian)
 
@@ -144,8 +129,7 @@ class FTSTS:
         return borders
 
     def make_ftldos(self, emin, emax, de, fwhm):
-        
-        self.e_arr = np.arange(emin, emax+de/2, de)
+        self.e_arr = np.arange(emin, emax + de / 2, de)
 
         self.ldos = np.zeros((self.cell_n[0], len(self.e_arr)))
         self.ftldos = np.zeros((len(self.k_arr), len(self.e_arr)))
@@ -167,13 +151,6 @@ class FTSTS:
         """
         # Brillouin zone boundary [1/angstroms]
         bzboundary = np.pi / lattice_param
-        nbzb_index = int(np.round(nbz*bzboundary/self.dk))+1
+        nbzb_index = int(np.round(nbz * bzboundary / self.dk)) + 1
 
-        return self.ftldos[:nbzb_index, :], [0.0, nbz*bzboundary, self.ftldos_extent[2], self.ftldos_extent[3]]
-
-
-
-
-
-
-
+        return self.ftldos[:nbzb_index, :], [0.0, nbz * bzboundary, self.ftldos_extent[2], self.ftldos_extent[3]]

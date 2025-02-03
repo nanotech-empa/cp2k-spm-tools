@@ -2,27 +2,21 @@
 Tools to put CP2K orbitals on a real space grid
 """
 
-import os
-import numpy as np
-
-import scipy
-import scipy.io
-import scipy.interpolate
-
-import time
 import copy
-import sys
-
-import re
 import io
+import time
+
 import ase
 import ase.io
-
-from .cube import Cube
-from .cp2k_wfn_file import Cp2kWfnFile
-from . import cube_utils
-
+import numpy as np
+import scipy
+import scipy.interpolate
+import scipy.io
 from mpi4py import MPI
+
+from . import cube_utils
+from .cp2k_wfn_file import Cp2kWfnFile
+from .cube import Cube
 
 ang_2_bohr = 1.88972612463
 hart_2_ev = 27.21138602
@@ -76,9 +70,7 @@ class Cp2kGridOrbitals:
         self.eval_cell = None
         self.eval_cell_n = None
 
-        self.last_calc_iz = (
-            None  # last directly calculated z plane (others extrapolated)
-        )
+        self.last_calc_iz = None  # last directly calculated z plane (others extrapolated)
 
     @property
     def cell_ang(self):
@@ -112,9 +104,7 @@ class Cp2kGridOrbitals:
                     ## Loop over the proceeding lines to find the BASIS_SET and ELEMENT
                     for j in range(1, 100):
                         line = lines[i + j]
-                        if line.strip()[0] == "&" and not line.strip().startswith(
-                            "&END"
-                        ):
+                        if line.strip()[0] == "&" and not line.strip().startswith("&END"):
                             # We entered into a subsection of kind
                             subsec_count += 1
                         if line.strip().startswith("&END"):
@@ -138,18 +128,11 @@ class Cp2kGridOrbitals:
                             # remove numbers
                             kind_no_nr = "".join([i for i in kind if not i.isdigit()])
                             # remove anything appended by '_' or '-'
-                            kind_processed = (
-                                kind_no_nr.replace("_", " ")
-                                .replace("-", " ")
-                                .split()[0]
-                            )
+                            kind_processed = kind_no_nr.replace("_", " ").replace("-", " ").split()[0]
                             if kind_processed in ase.data.chemical_symbols:
                                 elem = kind_processed
                             else:
-                                print(
-                                    "Error: couldn't determine element for kind '%s'"
-                                    % kind
-                                )
+                                print("Error: couldn't determine element for kind '%s'" % kind)
                                 exit(1)
                     self.kind_elem_basis[kind] = (elem, basis_name)
 
@@ -190,12 +173,7 @@ class Cp2kGridOrbitals:
                 kind = line.split()[0]
                 self.atom_kinds.append(kind)
                 # Replace custom kinds with their corresponding element (e.g. for spin-pol calcs)
-                fxyz_contents[i_line] = (
-                    self.kind_elem_basis[kind][0]
-                    + " "
-                    + " ".join(line.split()[1:])
-                    + "\n"
-                )
+                fxyz_contents[i_line] = self.kind_elem_basis[kind][0] + " " + " ".join(line.split()[1:]) + "\n"
 
         self.ase_atoms = ase.io.read(io.StringIO("".join(fxyz_contents)), format="xyz")
 
@@ -239,19 +217,14 @@ class Cp2kGridOrbitals:
                                 2
                                 * coefs[i]
                                 * coefs[j]
-                                * (2 * np.sqrt(exps[i] * exps[j]) / (exps[i] + exps[j]))
-                                ** ((2 * l + 3) / 2)
+                                * (2 * np.sqrt(exps[i] * exps[j]) / (exps[i] + exps[j])) ** ((2 * l + 3) / 2)
                             )
 
                     for i in range(nexps):
                         norm_factor += coefs[i] ** 2
 
                     for i in range(nexps):
-                        coefs[i] = (
-                            coefs[i]
-                            * exps[i] ** ((2 * l + 3) / 4)
-                            / np.sqrt(norm_factor)
-                        )
+                        coefs[i] = coefs[i] * exps[i] ** ((2 * l + 3) / 4) / np.sqrt(norm_factor)
 
         return basis_sets
 
@@ -282,9 +255,7 @@ class Cp2kGridOrbitals:
                     # We have a basis set we're using
                     # find all kinds using this basis set:
                     kinds = [
-                        corresp_kinds[i]
-                        for i, e_b in enumerate(used_elems_bases)
-                        if e_b == trial_1 or e_b == trial_2
+                        corresp_kinds[i] for i, e_b in enumerate(used_elems_bases) if e_b == trial_1 or e_b == trial_2
                     ]
 
                     basis_functions = []
@@ -303,9 +274,7 @@ class Cp2kGridOrbitals:
                         coeffs = []
 
                         for k in range(n_exp):
-                            exp_c = [
-                                float(x) for x in lines[i + cursor + k + 1].split()
-                            ]
+                            exp_c = [float(x) for x in lines[i + cursor + k + 1].split()]
                             exps.append(exp_c[0])
                             coeffs.append(exp_c[1:])
 
@@ -328,18 +297,14 @@ class Cp2kGridOrbitals:
     ### WFN file routines
     ### -----------------------------------------
 
-    def load_restart_wfn_file(
-        self, restart_file, emin=None, emax=None, n_occ=None, n_virt=None
-    ):
+    def load_restart_wfn_file(self, restart_file, emin=None, emax=None, n_occ=None, n_virt=None):
         """
         Reads the specified molecular orbitals from cp2k restart wavefunction file.
         If both, energy limits and counts are given, then the extreme is used
         Note that the energy range is in eV and with respect to HOMO energy.
         """
 
-        self.cwf.load_restart_wfn_file(
-            restart_file, emin=emin, emax=emax, n_occ=n_occ, n_virt=n_virt
-        )
+        self.cwf.load_restart_wfn_file(restart_file, emin=emin, emax=emax, n_occ=n_occ, n_virt=n_virt)
         self.cwf.convert_readable()
 
         self.morb_composition = self.cwf.morb_composition
@@ -386,115 +351,35 @@ class Cp2kGridOrbitals:
         elif (l, m) == (2, -1):
             return cd * c * 0.5 * np.sqrt(15.0 / np.pi) * y_grid * z_grid
         elif (l, m) == (2, 0):
-            return (
-                cd
-                * c
-                * 0.25
-                * np.sqrt(5.0 / np.pi)
-                * (2 * z_grid**2 - x_grid**2 - y_grid**2)
-            )
+            return cd * c * 0.25 * np.sqrt(5.0 / np.pi) * (2 * z_grid**2 - x_grid**2 - y_grid**2)
         elif (l, m) == (2, 1):
             return cd * c * 0.5 * np.sqrt(15.0 / np.pi) * z_grid * x_grid
         elif (l, m) == (2, 2):
-            return (
-                cd
-                * c
-                * 0.25
-                * np.sqrt(15.0 / np.pi)
-                * (x_grid - y_grid)
-                * (x_grid + y_grid)
-            )
+            return cd * c * 0.25 * np.sqrt(15.0 / np.pi) * (x_grid - y_grid) * (x_grid + y_grid)
 
         # f orbitals
         elif (l, m) == (3, -3):
-            return (
-                cf
-                * c
-                * 0.25
-                * np.sqrt(35.0 / (2 * np.pi))
-                * y_grid
-                * (3 * x_grid**2 - y_grid**2)
-            )
+            return cf * c * 0.25 * np.sqrt(35.0 / (2 * np.pi)) * y_grid * (3 * x_grid**2 - y_grid**2)
         elif (l, m) == (3, -2):
             return cf * c * 0.5 * np.sqrt(105.0 / (np.pi)) * x_grid * y_grid * z_grid
         elif (l, m) == (3, -1):
-            return (
-                cf
-                * c
-                * 0.25
-                * np.sqrt(21.0 / (2 * np.pi))
-                * y_grid
-                * (4 * z_grid**2 - x_grid**2 - y_grid**2)
-            )
+            return cf * c * 0.25 * np.sqrt(21.0 / (2 * np.pi)) * y_grid * (4 * z_grid**2 - x_grid**2 - y_grid**2)
         elif (l, m) == (3, 0):
-            return (
-                cf
-                * c
-                * 0.25
-                * np.sqrt(7.0 / (np.pi))
-                * z_grid
-                * (2.0 * z_grid**2 - 3.0 * (x_grid**2 + y_grid**2))
-            )
+            return cf * c * 0.25 * np.sqrt(7.0 / (np.pi)) * z_grid * (2.0 * z_grid**2 - 3.0 * (x_grid**2 + y_grid**2))
         elif (l, m) == (3, 1):
-            return (
-                cf
-                * c
-                * 0.25
-                * np.sqrt(21.0 / (2 * np.pi))
-                * x_grid
-                * (4 * z_grid**2 - x_grid**2 - y_grid**2)
-            )
+            return cf * c * 0.25 * np.sqrt(21.0 / (2 * np.pi)) * x_grid * (4 * z_grid**2 - x_grid**2 - y_grid**2)
         elif (l, m) == (3, 2):
-            return (
-                cf
-                * c
-                * 0.25
-                * np.sqrt(105.0 / (np.pi))
-                * z_grid
-                * (x_grid - y_grid)
-                * (x_grid + y_grid)
-            )
+            return cf * c * 0.25 * np.sqrt(105.0 / (np.pi)) * z_grid * (x_grid - y_grid) * (x_grid + y_grid)
         elif (l, m) == (3, 3):
-            return (
-                cf
-                * c
-                * 0.25
-                * np.sqrt(35.0 / (2 * np.pi))
-                * x_grid
-                * (x_grid**2 - 3.0 * y_grid**2)
-            )
+            return cf * c * 0.25 * np.sqrt(35.0 / (2 * np.pi)) * x_grid * (x_grid**2 - 3.0 * y_grid**2)
 
         # g orbitals
         elif (l, m) == (4, -4):
-            return (
-                cg
-                * c
-                * 0.75
-                * np.sqrt(35.0 / np.pi)
-                * x_grid
-                * y_grid
-                * (x_grid**2 - y_grid**2)
-            )
+            return cg * c * 0.75 * np.sqrt(35.0 / np.pi) * x_grid * y_grid * (x_grid**2 - y_grid**2)
         elif (l, m) == (4, -3):
-            return (
-                cg
-                * c
-                * 0.75
-                * np.sqrt(35.0 / (2 * np.pi))
-                * y_grid
-                * z_grid
-                * (3 * x_grid**2 - y_grid**2)
-            )
+            return cg * c * 0.75 * np.sqrt(35.0 / (2 * np.pi)) * y_grid * z_grid * (3 * x_grid**2 - y_grid**2)
         elif (l, m) == (4, -2):
-            return (
-                cg
-                * c
-                * 0.75
-                * np.sqrt(5.0 / np.pi)
-                * x_grid
-                * y_grid
-                * (6 * z_grid**2 - x_grid**2 - y_grid**2)
-            )
+            return cg * c * 0.75 * np.sqrt(5.0 / np.pi) * x_grid * y_grid * (6 * z_grid**2 - x_grid**2 - y_grid**2)
         elif (l, m) == (4, -1):
             return (
                 cg
@@ -511,11 +396,7 @@ class Cp2kGridOrbitals:
                 * c
                 * 0.1875
                 * np.sqrt(1.0 / np.pi)
-                * (
-                    3 * (x_grid**2 + y_grid**2) ** 2
-                    - 24 * (x_grid**2 + y_grid**2) * z_grid**2
-                    + 8 * z_grid**4
-                )
+                * (3 * (x_grid**2 + y_grid**2) ** 2 - 24 * (x_grid**2 + y_grid**2) * z_grid**2 + 8 * z_grid**4)
             )
         elif (l, m) == (4, 1):
             return (
@@ -540,19 +421,11 @@ class Cp2kGridOrbitals:
                 * (6 * z_grid**2 - x_grid**2 - y_grid**2)
             )
         elif (l, m) == (4, 3):
-            return (
-                cg
-                * c
-                * 0.75
-                * np.sqrt(35.0 / (2 * np.pi))
-                * x_grid
-                * z_grid
-                * (x_grid**2 - 3 * y_grid**2)
-            )
+            return cg * c * 0.75 * np.sqrt(35.0 / (2 * np.pi)) * x_grid * z_grid * (x_grid**2 - 3 * y_grid**2)
         elif (l, m) == (4, 4):
-            return cg * c * 0.1875 * np.sqrt(35.0 / np.pi) * x_grid**2 * (
-                x_grid**2 - 3 * y_grid**2
-            ) - y_grid**2 * (3 * x_grid**2 - y_grid**2)
+            return cg * c * 0.1875 * np.sqrt(35.0 / np.pi) * x_grid**2 * (x_grid**2 - 3 * y_grid**2) - y_grid**2 * (
+                3 * x_grid**2 - y_grid**2
+            )
 
         print("No spherical harmonic found for l=%d, m=%d" % (l, m))
         return 0
@@ -628,9 +501,7 @@ class Cp2kGridOrbitals:
                 eval_i_arr.append(ovl[1])
         return loc_i_arr, eval_i_arr
 
-    def _add_local_to_eval_grid(
-        self, loc_grid, eval_grid, glob_n, od_lg, od_eg, wrap=(True, True, True)
-    ):
+    def _add_local_to_eval_grid(self, loc_grid, eval_grid, glob_n, od_lg, od_eg, wrap=(True, True, True)):
         """
         Method to add a grid to another one
         Arguments:
@@ -648,9 +519,7 @@ class Cp2kGridOrbitals:
 
         for i in range(len(glob_n)):
             if wrap[i]:
-                li_arr, ei_arr = self._determine_1d_wrapped_indexes(
-                    loc_n[i], eval_n[i], glob_n[i], od_lg[i], od_eg[i]
-                )
+                li_arr, ei_arr = self._determine_1d_wrapped_indexes(loc_n[i], eval_n[i], glob_n[i], od_lg[i], od_eg[i])
                 loc_inds.append(li_arr)
                 eval_inds.append(ei_arr)
             else:
@@ -679,9 +548,7 @@ class Cp2kGridOrbitals:
                         else:
                             i_lc_z = slice(None)
                             i_ev_z = slice(None)
-                        eval_grid[i_ev_x, i_ev_y, i_ev_z] += loc_grid[
-                            i_lc_x, i_lc_y, i_lc_z
-                        ]
+                        eval_grid[i_ev_x, i_ev_y, i_ev_z] += loc_grid[i_lc_x, i_lc_y, i_lc_z]
                 else:
                     if wrap[0]:
                         i_lc_x = slice(lix[0], lix[1])
@@ -726,10 +593,7 @@ class Cp2kGridOrbitals:
         reserve_extrap *= ang_2_bohr
 
         eval_regions_ang = [x_eval_region, y_eval_region, z_eval_region]
-        eval_regions = [
-            np.array(er) * ang_2_bohr if er is not None else er
-            for er in eval_regions_ang
-        ]
+        eval_regions = [np.array(er) * ang_2_bohr if er is not None else er for er in eval_regions_ang]
 
         global_cell_n = (np.round(self.cell / dr_guess)).astype(int)
         self.dv = self.cell / global_cell_n
@@ -786,9 +650,7 @@ class Cp2kGridOrbitals:
                 loc_cell_arrays.append(loc_arr)
                 loc_cell_n[i] = self.eval_cell_n[i] - ext_z_n
 
-        loc_cell_grids = np.meshgrid(
-            loc_cell_arrays[0], loc_cell_arrays[1], loc_cell_arrays[2], indexing="ij"
-        )
+        loc_cell_grids = np.meshgrid(loc_cell_arrays[0], loc_cell_arrays[1], loc_cell_arrays[2], indexing="ij")
 
         if print_info:
             print("eval_cell_n: ", self.eval_cell_n)
@@ -848,11 +710,7 @@ class Cp2kGridOrbitals:
                 else:
                     rel_loc_cell_grids.append(loc_grid - pos[i])
 
-            r_vec_2 = (
-                rel_loc_cell_grids[0] ** 2
-                + rel_loc_cell_grids[1] ** 2
-                + rel_loc_cell_grids[2] ** 2
-            )
+            r_vec_2 = rel_loc_cell_grids[0] ** 2 + rel_loc_cell_grids[1] ** 2 + rel_loc_cell_grids[2] ** 2
 
             for i_spin in range(nspin):
                 morb_grids_local[i_spin].fill(0.0)
@@ -883,14 +741,10 @@ class Cp2kGridOrbitals:
                         time2 = time.time()
 
                         for i_spin in range(nspin):
-                            coef_arr = self.morb_composition[i_spin][i_at][i_set][
-                                i_shell
-                            ][i_orb]
+                            coef_arr = self.morb_composition[i_spin][i_at][i_set][i_shell][i_orb]
 
                             for i_mo in range(num_morbs[i_spin]):
-                                morb_grids_local[i_spin][i_mo] += (
-                                    coef_arr[i_mo] * atomic_orb
-                                )
+                                morb_grids_local[i_spin][i_mo] += coef_arr[i_mo] * atomic_orb
 
                         time_loc_lmorb_add += time.time() - time2
 
@@ -922,9 +776,7 @@ class Cp2kGridOrbitals:
     def _resize_2d_arr_with_interpolation(self, array, new_shape):
         x_arr = np.linspace(0, 1, array.shape[0])
         y_arr = np.linspace(0, 1, array.shape[1])
-        rgi = scipy.interpolate.RegularGridInterpolator(
-            points=[x_arr, y_arr], values=array
-        )
+        rgi = scipy.interpolate.RegularGridInterpolator(points=[x_arr, y_arr], values=array)
 
         x_arr_new = np.linspace(0, 1, new_shape[0])
         y_arr_new = np.linspace(0, 1, new_shape[1])
@@ -933,9 +785,7 @@ class Cp2kGridOrbitals:
 
         return rgi(np.array([x_coords, y_coords]).T).reshape(new_shape)
 
-    def extrapolate_morbs(
-        self, vacuum_pot=None, hart_plane=None, use_weighted_avg=True
-    ):
+    def extrapolate_morbs(self, vacuum_pot=None, hart_plane=None, use_weighted_avg=True):
         for ispin in range(self.nspin):
             self.extrapolate_morbs_spin(
                 ispin,
@@ -944,9 +794,7 @@ class Cp2kGridOrbitals:
                 use_weighted_avg=use_weighted_avg,
             )
 
-    def extrapolate_morbs_spin(
-        self, ispin, vacuum_pot=None, hart_plane=None, use_weighted_avg=True
-    ):
+    def extrapolate_morbs_spin(self, ispin, vacuum_pot=None, hart_plane=None, use_weighted_avg=True):
         """
         Extrapolate molecular orbitals from a specified plane to a box or another plane
         Extent in bohr !!!
@@ -970,18 +818,15 @@ class Cp2kGridOrbitals:
         for morb_index in range(num_morbs):
             morb_plane = morb_planes[morb_index]
 
-            if vacuum_pot != None:
+            if vacuum_pot is not None:
                 hartree_avg = vacuum_pot
             else:
                 if use_weighted_avg:
                     # weigh the hartree potential by the molecular orbital
                     density_plane = morb_plane**2
                     density_plane /= np.sum(density_plane)
-                    weighted_hartree = (
-                        density_plane
-                        * self._resize_2d_arr_with_interpolation(
-                            hart_plane, density_plane.shape
-                        )
+                    weighted_hartree = density_plane * self._resize_2d_arr_with_interpolation(
+                        hart_plane, density_plane.shape
                     )
                     hartree_avg = np.sum(weighted_hartree)
                 else:
@@ -989,10 +834,7 @@ class Cp2kGridOrbitals:
 
             energy = morb_energies[morb_index] / hart_2_ev
             if energy > hartree_avg:
-                print(
-                    "Warning: unbound state, can't extrapolate! index: %d. Constant extrapolation."
-                    % morb_index
-                )
+                print("Warning: unbound state, can't extrapolate! index: %d. Constant extrapolation." % morb_index)
                 energy = hartree_avg
 
             fourier = np.fft.rfft2(morb_plane)
@@ -1003,15 +845,10 @@ class Cp2kGridOrbitals:
 
             kx_grid, ky_grid = np.meshgrid(kx_arr, ky_arr, indexing="ij")
 
-            prefactors = np.exp(
-                -np.sqrt(kx_grid**2 + ky_grid**2 - 2 * (energy - hartree_avg))
-                * self.dv[2]
-            )
+            prefactors = np.exp(-np.sqrt(kx_grid**2 + ky_grid**2 - 2 * (energy - hartree_avg)) * self.dv[2])
             for iz in range(self.last_calc_iz + 1, self.eval_cell_n[2]):
                 fourier *= prefactors
-                self.morb_grids[ispin][morb_index, :, :, iz] = np.fft.irfft2(
-                    fourier, morb_plane.shape
-                )
+                self.morb_grids[ispin][morb_index, :, :, iz] = np.fft.irfft2(fourier, morb_plane.shape)
 
         print("Extrapolation time: %.3f s" % (time.time() - time1))
 
@@ -1023,10 +860,7 @@ class Cp2kGridOrbitals:
         local_ind = self.i_homo_loc[spin] + orbital_nr
 
         if local_ind >= 0 and local_ind < self.morb_grids[spin].shape[0]:
-            print(
-                "R%d/%d is writing HOMO%+d cube"
-                % (self.mpi_rank, self.mpi_size, orbital_nr)
-            )
+            print("R%d/%d is writing HOMO%+d cube" % (self.mpi_rank, self.mpi_size, orbital_nr))
 
             energy = self.morb_energies[spin][local_ind]
             comment = "E=%.8f eV (wrt middle of gap)" % energy
@@ -1051,9 +885,7 @@ class Cp2kGridOrbitals:
                 )
             c.write_cube_file(filename)
 
-    def calculate_and_save_charge_density(
-        self, filename="./charge_density.cube", artif_core=False
-    ):
+    def calculate_and_save_charge_density(self, filename="./charge_density.cube", artif_core=False):
         charge_dens = np.zeros(self.eval_cell_n)
         for i_spin in range(self.nspin):
             for i_mo, grid in enumerate(self.morb_grids[i_spin]):
