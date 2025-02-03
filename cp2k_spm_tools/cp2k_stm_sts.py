@@ -145,7 +145,7 @@ class STM:
                         recvbuf = np.empty(sum(orbitals_per_rank) * num_spatial_points, dtype=self.cgo.dtype)
                     else:
                         recvbuf = None
-                    sendbuf = p_tip_contrib[:, ix_start:ix_end, :, :].ravel()
+                    sendbuf = p_tip_contrib[:, ix_start:ix_end, :, :].ravel().astype(self.cgo.dtype)
                     self.mpi_comm.Gatherv(
                         sendbuf=sendbuf, recvbuf=[recvbuf, orbitals_per_rank * num_spatial_points], root=rank
                     )
