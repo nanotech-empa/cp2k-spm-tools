@@ -1,0 +1,27 @@
+#!/bin/bash -l
+#SBATCH --no-requeue
+#SBATCH --job-name="orb"
+#SBATCH --get-user-env
+#SBATCH --output=_scheduler-stdout.txt
+#SBATCH --error=_scheduler-stderr.txt
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=4
+#SBATCH --cpus-per-task=2
+#SBATCH --time=00:30:00
+
+#SBATCH --partition=normal
+#SBATCH --account=s1141
+#SBATCH --constraint=gpu
+export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
+source $MODULESHOME/init/bash
+export CRAY_CUDA_MPS=1
+ulimit -s unlimited
+
+
+module load daint-mc
+module load CP2K
+
+
+srun -n $SLURM_NTASKS --ntasks-per-node=$SLURM_NTASKS_PER_NODE -c $SLURM_CPUS_PER_TASK cp2k.psmp -i inp0  > out0 
+
+ 

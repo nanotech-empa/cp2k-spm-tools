@@ -321,50 +321,111 @@ class Cp2kGridOrbitals:
 
     def _spherical_harmonic_grid(self, l, m, x_grid, y_grid, z_grid):
         """
-        Evaluates the spherical harmonics (times r^l) with some unknown normalization
-        (source: Carlo's Fortran code)
+        xyz form of solid harmonics (real spherical harmonics times r^l)
+        c is a common prefactor see the enclosed mathematica notebook.
+        Also compare to https://en.wikipedia.org/wiki/Table_of_spherical_harmonics
         """
-        c = (2.0 / np.pi) ** (3.0 / 4.0)
+
+        c = np.sqrt(np.pi) * (2.0 / np.pi) ** (0.75)
+        cs = 2.0
+        cp = 4.0 / np.sqrt(3)
+        cd = 8.0 / np.sqrt(15)
+        cf = 16.0 / np.sqrt(105)
+        cg = 32.0 / (3.0 * np.sqrt(105))
 
         # s orbitals
         if (l, m) == (0, 0):
-            return c
+            return cs * c * 1.0 / (2 * np.sqrt(np.pi))
 
         # p orbitals
         elif (l, m) == (1, -1):
-            return c * 2.0 * y_grid
+            return cp * c * np.sqrt(3.0 / (4 * np.pi)) * y_grid
         elif (l, m) == (1, 0):
-            return c * 2.0 * z_grid
+            return cp * c * np.sqrt(3.0 / (4 * np.pi)) * z_grid
         elif (l, m) == (1, 1):
-            return c * 2.0 * x_grid
+            return cp * c * np.sqrt(3.0 / (4 * np.pi)) * x_grid
 
         # d orbitals
         elif (l, m) == (2, -2):
-            return c * 4.0 * x_grid * y_grid
+            return cd * c * 0.5 * np.sqrt(15.0 / np.pi) * x_grid * y_grid
         elif (l, m) == (2, -1):
-            return c * 4.0 * y_grid * z_grid
+            return cd * c * 0.5 * np.sqrt(15.0 / np.pi) * y_grid * z_grid
         elif (l, m) == (2, 0):
-            return c * 2.0 / np.sqrt(3) * (2 * z_grid**2 - x_grid**2 - y_grid**2)
+            return cd * c * 0.25 * np.sqrt(5.0 / np.pi) * (2 * z_grid**2 - x_grid**2 - y_grid**2)
         elif (l, m) == (2, 1):
-            return c * 4.0 * z_grid * x_grid
+            return cd * c * 0.5 * np.sqrt(15.0 / np.pi) * z_grid * x_grid
         elif (l, m) == (2, 2):
-            return c * 2.0 * (x_grid**2 - y_grid**2)
+            return cd * c * 0.25 * np.sqrt(15.0 / np.pi) * (x_grid - y_grid) * (x_grid + y_grid)
 
         # f orbitals
         elif (l, m) == (3, -3):
-            return c * np.sqrt(8 / 3) * y_grid * (3 * x_grid**2 - y_grid**2)
+            return cf * c * 0.25 * np.sqrt(35.0 / (2 * np.pi)) * y_grid * (3 * x_grid**2 - y_grid**2)
         elif (l, m) == (3, -2):
-            return c * 8.0 * x_grid * y_grid * z_grid
+            return cf * c * 0.5 * np.sqrt(105.0 / (np.pi)) * x_grid * y_grid * z_grid
         elif (l, m) == (3, -1):
-            return c * np.sqrt(8 / 5) * y_grid * (4 * z_grid**2 - x_grid**2 - y_grid**2)
+            return cf * c * 0.25 * np.sqrt(21.0 / (2 * np.pi)) * y_grid * (4 * z_grid**2 - x_grid**2 - y_grid**2)
         elif (l, m) == (3, 0):
-            return c * 4.0 / np.sqrt(15.0) * z_grid * (2.0 * z_grid**2 - 3.0 * x_grid**2 - 3.0 * y_grid**2)
+            return cf * c * 0.25 * np.sqrt(7.0 / (np.pi)) * z_grid * (2.0 * z_grid**2 - 3.0 * (x_grid**2 + y_grid**2))
         elif (l, m) == (3, 1):
-            return c * np.sqrt(8 / 5) * x_grid * (4 * z_grid**2 - x_grid**2 - y_grid**2)
+            return cf * c * 0.25 * np.sqrt(21.0 / (2 * np.pi)) * x_grid * (4 * z_grid**2 - x_grid**2 - y_grid**2)
         elif (l, m) == (3, 2):
-            return c * 4.0 * z_grid * (x_grid**2 - y_grid**2)
+            return cf * c * 0.25 * np.sqrt(105.0 / (np.pi)) * z_grid * (x_grid - y_grid) * (x_grid + y_grid)
         elif (l, m) == (3, 3):
-            return c * np.sqrt(8 / 3) * x_grid * (x_grid**2 - 3.0 * y_grid**2)
+            return cf * c * 0.25 * np.sqrt(35.0 / (2 * np.pi)) * x_grid * (x_grid**2 - 3.0 * y_grid**2)
+
+        # g orbitals
+        elif (l, m) == (4, -4):
+            return cg * c * 0.75 * np.sqrt(35.0 / np.pi) * x_grid * y_grid * (x_grid**2 - y_grid**2)
+        elif (l, m) == (4, -3):
+            return cg * c * 0.75 * np.sqrt(35.0 / (2 * np.pi)) * y_grid * z_grid * (3 * x_grid**2 - y_grid**2)
+        elif (l, m) == (4, -2):
+            return cg * c * 0.75 * np.sqrt(5.0 / np.pi) * x_grid * y_grid * (6 * z_grid**2 - x_grid**2 - y_grid**2)
+        elif (l, m) == (4, -1):
+            return (
+                cg
+                * c
+                * 0.75
+                * np.sqrt(5.0 / (2 * np.pi))
+                * y_grid
+                * z_grid
+                * (4 * z_grid**2 - 3 * (x_grid**2 + y_grid**2))
+            )
+        elif (l, m) == (4, 0):
+            return (
+                cg
+                * c
+                * 0.1875
+                * np.sqrt(1.0 / np.pi)
+                * (3 * (x_grid**2 + y_grid**2) ** 2 - 24 * (x_grid**2 + y_grid**2) * z_grid**2 + 8 * z_grid**4)
+            )
+        elif (l, m) == (4, 1):
+            return (
+                cg
+                * c
+                * 0.75
+                * np.sqrt(5.0 / (2 * np.pi))
+                * x_grid
+                * z_grid
+                * (4 * z_grid**2 - 3 * (x_grid**2 + y_grid**2))
+            )
+        elif (l, m) == (4, 2):
+            return (
+                cg
+                * c
+                * 0.375
+                * np.sqrt(5.0 / np.pi)
+                * y_grid
+                * z_grid
+                * (x_grid - y_grid)
+                * (x_grid + y_grid)
+                * (6 * z_grid**2 - x_grid**2 - y_grid**2)
+            )
+        elif (l, m) == (4, 3):
+            return cg * c * 0.75 * np.sqrt(35.0 / (2 * np.pi)) * x_grid * z_grid * (x_grid**2 - 3 * y_grid**2)
+        elif (l, m) == (4, 4):
+            return cg * c * 0.1875 * np.sqrt(35.0 / np.pi) * x_grid**2 * (x_grid**2 - 3 * y_grid**2) - y_grid**2 * (
+                3 * x_grid**2 - y_grid**2
+            )
 
         print("No spherical harmonic found for l=%d, m=%d" % (l, m))
         return 0
@@ -581,7 +642,9 @@ class Cp2kGridOrbitals:
                 loc_cell_n[i] = len(loc_cell_arrays[i])
             else:
                 loc_arr = np.arange(
-                    self.origin[i], self.origin[i] + (self.eval_cell_n[i] - ext_z_n - 0.5) * self.dv[i], self.dv[i]
+                    self.origin[i],
+                    self.origin[i] + (self.eval_cell_n[i] - ext_z_n - 0.5) * self.dv[i],
+                    self.dv[i],
                 )
                 mid_ixs[i] = -1
                 loc_cell_arrays.append(loc_arr)
@@ -606,11 +669,20 @@ class Cp2kGridOrbitals:
             num_morbs.append(len(self.morb_composition[ispin][0][0][0][0]))
             self.morb_grids.append(
                 np.zeros(
-                    (num_morbs[ispin], self.eval_cell_n[0], self.eval_cell_n[1], self.eval_cell_n[2]), dtype=self.dtype
+                    (
+                        num_morbs[ispin],
+                        self.eval_cell_n[0],
+                        self.eval_cell_n[1],
+                        self.eval_cell_n[2],
+                    ),
+                    dtype=self.dtype,
                 )
             )
             morb_grids_local.append(
-                np.zeros((num_morbs[ispin], loc_cell_n[0], loc_cell_n[1], loc_cell_n[2]), dtype=self.dtype)
+                np.zeros(
+                    (num_morbs[ispin], loc_cell_n[0], loc_cell_n[1], loc_cell_n[2]),
+                    dtype=self.dtype,
+                )
             )
 
         ### ----------------------------------------
@@ -659,7 +731,11 @@ class Cp2kGridOrbitals:
                     for i_orb, m in enumerate(range(-l, l + 1, 1)):
                         time2 = time.time()
                         atomic_orb = radial_part * self._spherical_harmonic_grid(
-                            l, m, rel_loc_cell_grids[0], rel_loc_cell_grids[1], rel_loc_cell_grids[2]
+                            l,
+                            m,
+                            rel_loc_cell_grids[0],
+                            rel_loc_cell_grids[1],
+                            rel_loc_cell_grids[2],
                         )
                         time_spherical += time.time() - time2
                         time2 = time.time()
@@ -712,7 +788,10 @@ class Cp2kGridOrbitals:
     def extrapolate_morbs(self, vacuum_pot=None, hart_plane=None, use_weighted_avg=True):
         for ispin in range(self.nspin):
             self.extrapolate_morbs_spin(
-                ispin, vacuum_pot=vacuum_pot, hart_plane=hart_plane, use_weighted_avg=use_weighted_avg
+                ispin,
+                vacuum_pot=vacuum_pot,
+                hart_plane=hart_plane,
+                use_weighted_avg=use_weighted_avg,
             )
 
     def extrapolate_morbs_spin(self, ispin, vacuum_pot=None, hart_plane=None, use_weighted_avg=True):
