@@ -18,9 +18,6 @@ mpi_size = comm.Get_size()
 
 parser = argparse.ArgumentParser(description="Creates Gaussian cube files from cp2k .wfn file.")
 
-parser.add_argument("--cp2k_input_file", metavar="FILENAME", required=True, help="CP2K input of the SCF calculation.")
-parser.add_argument("--basis_set_file", metavar="FILENAME", required=True, help="File containing the used basis sets.")
-parser.add_argument("--xyz_file", metavar="FILENAME", required=True, help=".xyz file containing the geometry.")
 parser.add_argument(
     "--cp2k_input_file",
     metavar="FILENAME",

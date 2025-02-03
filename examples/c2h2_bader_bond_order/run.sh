@@ -1,6 +1,7 @@
 #!/bin/bash -l
 
-FOLDER="../c2h2_cp2k_scf"
+FOLDER="../data/c2h2_cp2k_scf"
+BASIS_PATH="../data/BASIS_MOLOPT"
 
 mkdir out
 
@@ -8,7 +9,7 @@ echo "### 1: calculate charge density cube ###"
 
 mpirun -n 2 python3 ../../cube_from_wfn.py \
   --cp2k_input_file "$FOLDER"/cp2k.inp \
-  --basis_set_file ../BASIS_MOLOPT \
+  --basis_set_file $BASIS_PATH \
   --xyz_file "$FOLDER"/geom.xyz \
   --wfn_file "$FOLDER"/PROJ-RESTART.wfn \
   --output_dir "./out/" \
@@ -44,7 +45,7 @@ echo "### 3: calculate bond order based on the Bader basins ###"
 
 mpirun -n 2 python3 ../../bader_bond_order.py \
   --cp2k_input_file "$FOLDER"/cp2k.inp \
-  --basis_set_file ../BASIS_MOLOPT \
+  --basis_set_file $BASIS_PATH \
   --xyz_file "$FOLDER"/geom.xyz \
   --wfn_file "$FOLDER"/PROJ-RESTART.wfn \
 \

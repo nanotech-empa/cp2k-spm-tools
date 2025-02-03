@@ -1,12 +1,13 @@
 #!/bin/bash -l
 
-FOLDER="../benzene_cp2k_scf"
+FOLDER="../data/benzene_cp2k_scf"
+BASIS_PATH="../data/BASIS_MOLOPT"
 
 mkdir out
 
 mpirun -n 2 python3 ../../stm_sts_from_wfn.py \
   --cp2k_input_file "$FOLDER"/cp2k.inp \
-  --basis_set_file ../BASIS_MOLOPT \
+  --basis_set_file $BASIS_PATH \
   --xyz_file "$FOLDER"/geom.xyz \
   --wfn_file "$FOLDER"/PROJ-RESTART.wfn \
   --hartree_file "$FOLDER"/PROJ-v_hartree-1_0.cube \

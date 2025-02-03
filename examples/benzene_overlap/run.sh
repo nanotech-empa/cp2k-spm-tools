@@ -1,19 +1,21 @@
 #!/bin/bash -l
 
-SLAB_FOLDER=../benzene_cp2k_scf
-MOL_FOLDER=../benzene_cp2k_scf
+# for demo, take slab and molecule to be the same calculation
+SLAB_FOLDER=../data/benzene_cp2k_scf
+MOL_FOLDER=../data/benzene_cp2k_scf
+BASIS_PATH="../data/BASIS_MOLOPT"
 
 mkdir out
 
 mpirun -n 2  python3 ../../overlap_from_wfns.py \
   --cp2k_input_file1 "$SLAB_FOLDER"/cp2k.inp \
-  --basis_set_file1 ../BASIS_MOLOPT \
+  --basis_set_file1 $BASIS_PATH \
   --xyz_file1 "$SLAB_FOLDER"/geom.xyz \
   --wfn_file1 "$SLAB_FOLDER"/PROJ-RESTART.wfn \
   --emin1 -8.0 \
   --emax1  8.0 \
   --cp2k_input_file2 "$MOL_FOLDER"/cp2k.inp \
-  --basis_set_file2 ../BASIS_MOLOPT \
+  --basis_set_file2 $BASIS_PATH \
   --xyz_file2 "$MOL_FOLDER"/geom.xyz \
   --wfn_file2 "$MOL_FOLDER"/PROJ-RESTART.wfn \
   --nhomo2 2 \
