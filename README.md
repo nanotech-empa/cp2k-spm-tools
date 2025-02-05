@@ -1,6 +1,7 @@
-[![DOI](https://zenodo.org/badge/133041124.svg)](https://zenodo.org/badge/latestdoi/133041124)
-
 ## CP2K Scanning Probe Microscopy tools
+
+[![DOI](https://zenodo.org/badge/133041124.svg)](https://zenodo.org/badge/latestdoi/133041124)
+[![PyPI - Version](https://img.shields.io/pypi/v/cp2k-spm-tools?color=4CC61E)](https://pypi.org/project/cp2k-spm-tools/)
 
 Library and scripts to perform scanning probe microscopy simulations based on a [CP2K](https://www.cp2k.org/) calculation.
 
@@ -78,7 +79,6 @@ cgo.write_cube("./homo.cube", orbital_nr=0)
 Here's the resulting cube file, illustrating the constrained region of evaluation:
 
 <img src="examples/example.png" width="500">
-
 
 ### For maintainers:
 
