@@ -12,30 +12,43 @@ Features include:
 - Orbital hybridization analysis for adsorbed systems
 - High-resolution STM (HRSTM) simulations
 
-Requirements:
+### Installation
 
-- numerical and scientific python libraries `numpy`, `scipy`
-- Atomistic simulation environment `ase`
-- `mpi4py` provides MPI parallelization
+The package requires an MPI implementation to be available on your system for `mpi4py`. You can install it:
 
-Installation:
+- On Linux: through your package manager (e.g., `apt install mpich` or `yum install mpich`)
+- On macOS: through Homebrew (`brew install mpich`)
+- On Windows: through conda (`conda install -c conda-forge mpich`)
 
-- `mpi4py` requires an external MPI implementation (e.g. `mpich`) available. One can install it together with `mpi4py` with
-  ```bash
-  conda install -c conda-forge mpi4py mpich
-  ```
-- the rest of the dependencies can be installed with pip
-  ```bash
-  git clone git@github.com:nanotech-empa/cp2k-spm-tools.git
-  cd cp2k-spm-tools
-  pip install .
-  ```
+Then install the package with pip:
+```bash
+pip install cp2k-spm-tools
+```
+
+Or, for development:
+```bash
+git clone https://github.com/nanotech-empa/cp2k-spm-tools.git
+cd cp2k-spm-tools
+pip install -e .[dev]
+```
+
+### Command Line Tools
+
+The package provides several command-line tools, including:
+
+- `cp2k-stm-sts-wfn`: STM/STS analysis from wavefunction files
+- `cp2k-cube-from-wfn`: Create cube files from wavefunction files
+- `cp2k-bader-bond-order`: Bond order analysis based on Bader basins
+
+Use `--help` with each command to see its options.
+
+### Example Usage
 
 When everything is set up correctly, the bash scripts in `examples/` folder can be executed without any further input and illustrate the usage of the various scripts. For example `example/benzene_stm/run_stm_sts_from_wfn.sh` evaluates the STM/STS signatures of isolated benzene at each orbital energy (`out/orb/`) as well as in an arbitrary energy range (`out/stm/`). The corresponding CP2K calculation is included in the repository.
 
 **NB: In all cases, the underlying DFT calculation has to be performed with the diagonalization algorithm rather than orbital transformation (OT).**
 
-### Evaluating molecular orbitals on an arbitrary grid
+### Python API Example
 
 Most of the functionality of this library is built on top of the possibility to evaluate the Kohn-Sham orbitals encoded in the `.wfn` file on an arbitrarily defined grid. This is illustrated by the following script applied for a nanographene adsorbed on a Au(111) slab (total of 1252 atoms and 10512 electrons):
 
@@ -59,7 +72,3 @@ cgo.calc_morbs_in_region(
 
 cgo.write_cube("./homo.cube", orbital_nr=0)
 ```
-
-The evaluated HOMO orbital in the defined region:
-
-<img src="examples/example.png" width="600">

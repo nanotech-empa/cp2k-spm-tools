@@ -11,23 +11,8 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from cp2k_spm_tools import igor
 
-ang_2_bohr = 1.0 / 0.52917721067
-hart_2_ev = 27.21138602
-
-fig_y = 4.0
-
-title_font_size = 14
-
-parser = argparse.ArgumentParser(description="Makes images from the STM .npz files.")
-
-### ----------------------------------------------------------------------
-### Input and output files
-parser.add_argument("--stm_npz", metavar="FILENAME", default=None, help="File containing STM data.")
-parser.add_argument("--orb_npz", metavar="FILENAME", default=None, help="File containing ORB data.")
-parser.add_argument("--output_dir", metavar="DIR", default="./", help="Output directory.")
-### ----------------------------------------------------------------------
-
-args = parser.parse_args()
+FIG_Y = 4.0
+TITLE_FONT_SIZE = 14
 
 
 def make_plot(
@@ -46,10 +31,24 @@ def make_plot(
     if center0:
         data_amax = np.max(np.abs(data))
         im = ax.imshow(
-            data.T, origin="lower", cmap=cmap, interpolation="bicubic", extent=extent, vmin=-data_amax, vmax=data_amax
+            data.T,
+            origin="lower",
+            cmap=cmap,
+            interpolation="bicubic",
+            extent=extent,
+            vmin=-data_amax,
+            vmax=data_amax,
         )
     else:
-        im = ax.imshow(data.T, origin="lower", cmap=cmap, interpolation="bicubic", extent=extent, vmin=vmin, vmax=vmax)
+        im = ax.imshow(
+            data.T,
+            origin="lower",
+            cmap=cmap,
+            interpolation="bicubic",
+            extent=extent,
+            vmin=vmin,
+            vmax=vmax,
+        )
 
     if noadd:
         ax.set_xticks([])
@@ -70,20 +69,44 @@ def make_plot(
 
 def make_series_label(info, i_spin=None):
     if info["type"] == "const-height sts":
-        label = "p$_{tip}$=%.1f ch-sts fwhm=%.2f h=%.1f" % (info["p_tip_ratio"], info["fwhm"], info["height"])
+        label = "p$_{tip}$=%.1f ch-sts fwhm=%.2f h=%.1f" % (
+            info["p_tip_ratio"],
+            info["fwhm"],
+            info["height"],
+        )
     elif info["type"] == "const-height stm":
-        label = "p$_{tip}$=%.1f ch-stm fwhm=%.2f h=%.1f" % (info["p_tip_ratio"], info["fwhm"], info["height"])
+        label = "p$_{tip}$=%.1f ch-stm fwhm=%.2f h=%.1f" % (
+            info["p_tip_ratio"],
+            info["fwhm"],
+            info["height"],
+        )
     elif info["type"] == "const-isovalue sts":
-        label = "p$_{tip}$=%.1f cc-sts fwhm=%.2f iv=%.0e" % (info["p_tip_ratio"], info["fwhm"], info["isovalue"])
+        label = "p$_{tip}$=%.1f cc-sts fwhm=%.2f iv=%.0e" % (
+            info["p_tip_ratio"],
+            info["fwhm"],
+            info["isovalue"],
+        )
     elif info["type"] == "const-isovalue stm":
-        label = "p$_{tip}$=%.1f cc-stm fwhm=%.2f iv=%.0e" % (info["p_tip_ratio"], info["fwhm"], info["isovalue"])
+        label = "p$_{tip}$=%.1f cc-stm fwhm=%.2f iv=%.0e" % (
+            info["p_tip_ratio"],
+            info["fwhm"],
+            info["isovalue"],
+        )
 
     elif info["type"] == "const-height orbital":
         label = "s%d ch-orb h=%.1f" % (i_spin, info["height"])
     elif info["type"] == "const-height orbital sts":
-        label = "s%d p$_{tip}$=%.1f ch-orb-sts h=%.1f" % (i_spin, info["p_tip_ratio"], info["height"])
+        label = "s%d p$_{tip}$=%.1f ch-orb-sts h=%.1f" % (
+            i_spin,
+            info["p_tip_ratio"],
+            info["height"],
+        )
     elif info["type"] == "const-isovalue orbital sts":
-        label = "s%d p$_{tip}$=%.1f cc-orb-sts iv=%.0e" % (i_spin, info["p_tip_ratio"], info["isovalue"])
+        label = "s%d p$_{tip}$=%.1f cc-orb-sts iv=%.0e" % (
+            i_spin,
+            info["p_tip_ratio"],
+            info["isovalue"],
+        )
     else:
         print("No support for: " + str(info))
 
@@ -147,11 +170,18 @@ def plot_series_and_export_igor(general_info, info, data, make_plot_args, plot_d
 
         # ---------------------------------------------------
         # Make the plot
-        fig = plt.figure(figsize=(fig_y * figure_xy_ratio, fig_y))
+        fig = plt.figure(figsize=(FIG_Y * figure_xy_ratio, FIG_Y))
 
         ax = plt.gca()
         make_plot(
-            fig, ax, data[i_e, :, :], extent, title=title, title_size=title_font_size, noadd=False, **make_plot_args
+            fig,
+            ax,
+            data[i_e, :, :],
+            extent,
+            title=title,
+            title_size=TITLE_FONT_SIZE,
+            noadd=False,
+            **make_plot_args,
         )
 
         plt.savefig(plot_dir + "/" + plot_name + ".png", dpi=200, bbox_inches="tight")
@@ -190,51 +220,79 @@ def plot_all_series(general_info, series_info, series_data, plot_dir, itx_dir):
         plot_series_and_export_igor(general_info, info, data, make_plot_args, plot_dir, itx_dir)
 
 
-### ----------------------------------------------------------------------
-### STM.NPZ
-### ----------------------------------------------------------------------
+def main():
+    parser = argparse.ArgumentParser(description="Makes images from the STM .npz files.")
 
-if args.stm_npz is not None:
-    stm_dir = args.output_dir + "./stm"
-    if not os.path.exists(stm_dir):
-        os.makedirs(stm_dir)
+    ### ----------------------------------------------------------------------
+    ### Input and output files
+    parser.add_argument("--stm_npz", metavar="FILENAME", default=None, help="File containing STM data.")
+    parser.add_argument("--orb_npz", metavar="FILENAME", default=None, help="File containing ORB data.")
+    parser.add_argument("--output_dir", metavar="DIR", default="./", help="Output directory.")
+    ### ----------------------------------------------------------------------
 
-    stm_itx_dir = args.output_dir + "./stm_itx"
-    if not os.path.exists(stm_itx_dir):
-        os.makedirs(stm_itx_dir)
+    args = parser.parse_args()
 
-    loaded_data = np.load(args.stm_npz, allow_pickle=True)
+    ### ----------------------------------------------------------------------
+    ### STM.NPZ
+    ### ----------------------------------------------------------------------
 
-    stm_general_info = loaded_data["stm_general_info"][()]
-    stm_series_info = loaded_data["stm_series_info"]
-    stm_series_data = loaded_data["stm_series_data"]
+    if args.stm_npz is not None:
+        stm_dir = args.output_dir + "./stm"
+        if not os.path.exists(stm_dir):
+            os.makedirs(stm_dir)
 
-    plot_all_series(stm_general_info, stm_series_info, stm_series_data, stm_dir, stm_itx_dir)
+        stm_itx_dir = args.output_dir + "./stm_itx"
+        if not os.path.exists(stm_itx_dir):
+            os.makedirs(stm_itx_dir)
 
-### ----------------------------------------------------------------------
-### ORB.NPZ
-### ----------------------------------------------------------------------
+        loaded_data = np.load(args.stm_npz, allow_pickle=True)
 
-if args.orb_npz is not None:
-    orb_dir = args.output_dir + "./orb"
-    if not os.path.exists(orb_dir):
-        os.makedirs(orb_dir)
+        stm_general_info = loaded_data["stm_general_info"][()]
+        stm_series_info = loaded_data["stm_series_info"]
+        stm_series_data = loaded_data["stm_series_data"]
 
-    orb_itx_dir = args.output_dir + "./orb_itx"
-    if not os.path.exists(orb_itx_dir):
-        os.makedirs(orb_itx_dir)
+        plot_all_series(stm_general_info, stm_series_info, stm_series_data, stm_dir, stm_itx_dir)
 
-    loaded_data = np.load(args.orb_npz, allow_pickle=True)
+    ### ----------------------------------------------------------------------
+    ### ORB.NPZ
+    ### ----------------------------------------------------------------------
 
-    s0_orb_general_info = loaded_data["s0_orb_general_info"][()]
-    s0_orb_series_info = loaded_data["s0_orb_series_info"]
-    s0_orb_series_data = loaded_data["s0_orb_series_data"]
+    if args.orb_npz is not None:
+        orb_dir = args.output_dir + "./orb"
+        if not os.path.exists(orb_dir):
+            os.makedirs(orb_dir)
 
-    plot_all_series(s0_orb_general_info, s0_orb_series_info, s0_orb_series_data, orb_dir, orb_itx_dir)
+        orb_itx_dir = args.output_dir + "./orb_itx"
+        if not os.path.exists(orb_itx_dir):
+            os.makedirs(orb_itx_dir)
 
-    if "s1_orb_general_info" in loaded_data.files:
-        s1_orb_general_info = loaded_data["s1_orb_general_info"][()]
-        s1_orb_series_info = loaded_data["s1_orb_series_info"]
-        s1_orb_series_data = loaded_data["s1_orb_series_data"]
+        loaded_data = np.load(args.orb_npz, allow_pickle=True)
 
-        plot_all_series(s1_orb_general_info, s1_orb_series_info, s1_orb_series_data, orb_dir, orb_itx_dir)
+        s0_orb_general_info = loaded_data["s0_orb_general_info"][()]
+        s0_orb_series_info = loaded_data["s0_orb_series_info"]
+        s0_orb_series_data = loaded_data["s0_orb_series_data"]
+
+        plot_all_series(
+            s0_orb_general_info,
+            s0_orb_series_info,
+            s0_orb_series_data,
+            orb_dir,
+            orb_itx_dir,
+        )
+
+        if "s1_orb_general_info" in loaded_data.files:
+            s1_orb_general_info = loaded_data["s1_orb_general_info"][()]
+            s1_orb_series_info = loaded_data["s1_orb_series_info"]
+            s1_orb_series_data = loaded_data["s1_orb_series_data"]
+
+            plot_all_series(
+                s1_orb_general_info,
+                s1_orb_series_info,
+                s1_orb_series_data,
+                orb_dir,
+                orb_itx_dir,
+            )
+
+
+if __name__ == "__main__":
+    main()
