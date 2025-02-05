@@ -78,3 +78,17 @@ cgo.write_cube("./homo.cube", orbital_nr=0)
 Here's the resulting cube file, illustrating the constrained region of evaluation:
 
 <img src="examples/example.png" width="500">
+
+
+### For maintainers:
+
+In order to make a new release of the library and publish to PYPI, run
+
+```shell
+bumpver update --major/--minor/--patch
+```
+
+This will
+
+- update version numbers, make a corresponding git commit and a git tag;
+- push this commit and tag to Github, which triggers the Github Action that makes a new Github Release and publishes the package to PYPI.
