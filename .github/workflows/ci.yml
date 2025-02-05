@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches:
-      - develop
+      - main
 
 env:
   PYTEST_ADDOPTS: "--color=yes"
