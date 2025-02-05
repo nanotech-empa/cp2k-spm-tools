@@ -5,7 +5,7 @@ BASIS_PATH="../data/BASIS_MOLOPT"
 
 mkdir cubes
 
-../../cube_from_wfn.py \
+cp2k-cube-from-wfn \
   --cp2k_input_file $DIR/inp \
   --basis_set_file $BASIS_PATH \
   --xyz_file $DIR/aiida.coords.xyz \

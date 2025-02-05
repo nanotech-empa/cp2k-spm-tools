@@ -14,18 +14,20 @@ Features include:
 
 ### Installation
 
-The package requires an MPI implementation to be available on your system for `mpi4py`. You can install it:
+The package requires an MPI implementation to be available on your system for `mpi4py`. One option is `mpich`, which you can install with:
 
 - On Linux: through your package manager (e.g., `apt install mpich` or `yum install mpich`)
 - On macOS: through Homebrew (`brew install mpich`)
-- On Windows: through conda (`conda install -c conda-forge mpich`)
+- Or via conda, but then it's recommended to install it together with `mpi4py`: `conda install -c conda-forge mpi4py mpich`
 
 Then install the package with pip:
+
 ```bash
 pip install cp2k-spm-tools
 ```
 
 Or, for development:
+
 ```bash
 git clone https://github.com/nanotech-empa/cp2k-spm-tools.git
 cd cp2k-spm-tools
@@ -64,7 +66,7 @@ cgo.load_restart_wfn_file("./PROJ-RESTART.wfn", n_occ=2, n_virt=2)
 
 ### Evaluate the orbitals in the specific region ###
 cgo.calc_morbs_in_region(
-    dr_guess = 0.15,                          # grid spacing
+    dr_guess = 0.15,                          # grid spacing, can change very slightly
     x_eval_region = None,                     # take whole cell in x
     y_eval_region = [0.0, cgo.cell_ang[1]/2], # half cell in y
     z_eval_region = [19.0, 24.0],             # around the molecule in z
@@ -72,3 +74,7 @@ cgo.calc_morbs_in_region(
 
 cgo.write_cube("./homo.cube", orbital_nr=0)
 ```
+
+Here's the resulting cube file, illustrating the constrained region of evaluation:
+
+<img src="examples/example.png" width="500">

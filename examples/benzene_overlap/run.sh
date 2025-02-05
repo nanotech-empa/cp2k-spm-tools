@@ -7,7 +7,7 @@ BASIS_PATH="../data/BASIS_MOLOPT"
 
 mkdir out
 
-mpirun -n 2  python3 ../../overlap_from_wfns.py \
+mpirun -n 2  cp2k-overlap-from-wfns \
   --cp2k_input_file1 "$SLAB_FOLDER"/cp2k.inp \
   --basis_set_file1 $BASIS_PATH \
   --xyz_file1 "$SLAB_FOLDER"/geom.xyz \

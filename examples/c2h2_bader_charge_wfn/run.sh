@@ -5,7 +5,7 @@ BASIS_PATH="../data/BASIS_MOLOPT"
 
 mkdir out
 
-mpirun -n 2 python3 ../../cube_from_wfn.py \
+mpirun -n 2 cp2k-cube-from-wfn \
   --cp2k_input_file "$FOLDER"/cp2k.inp \
   --basis_set_file $BASIS_PATH \
   --xyz_file "$FOLDER"/geom.xyz \

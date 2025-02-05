@@ -38,7 +38,7 @@ cp2k-cube-operations = "cp2k_spm_tools.cli.cube_operations:main"
 cp2k-cube-single-column = "cp2k_spm_tools.cli.cube_single_column:main"
 cp2k-cube-split = "cp2k_spm_tools.cli.cube_split:main"
 cp2k-hrstm-from-wfn = "cp2k_spm_tools.cli.hrstm_from_wfn:main"
-cp2k-overlap-from-wfn = "cp2k_spm_tools.cli.overlap_from_wfns:main"
+cp2k-overlap-from-wfns = "cp2k_spm_tools.cli.overlap_from_wfns:main"
 cp2k-stm-sts-wfn = "cp2k_spm_tools.cli.stm_sts_from_wfn:main"
 cp2k-stm-sts-plot = "cp2k_spm_tools.cli.stm_sts_plotter:main"
 

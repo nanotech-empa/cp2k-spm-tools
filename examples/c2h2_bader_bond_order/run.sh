@@ -7,7 +7,7 @@ mkdir out
 
 echo "### 1: calculate charge density cube ###"
 
-mpirun -n 2 python3 ../../cube_from_wfn.py \
+mpirun -n 2 cp2k-cube-from-wfn \
   --cp2k_input_file "$FOLDER"/cp2k.inp \
   --basis_set_file $BASIS_PATH \
   --xyz_file "$FOLDER"/geom.xyz \
@@ -43,7 +43,7 @@ cd ..
 
 echo "### 3: calculate bond order based on the Bader basins ###"
 
-mpirun -n 2 python3 ../../bader_bond_order.py \
+mpirun -n 2 cp2k-bader-bond-order \
   --cp2k_input_file "$FOLDER"/cp2k.inp \
   --basis_set_file $BASIS_PATH \
   --xyz_file "$FOLDER"/geom.xyz \
