@@ -17,19 +17,44 @@ def main():
     parser = argparse.ArgumentParser(description="Creates Gaussian cube files from cp2k .wfn file.")
 
     parser.add_argument(
-        "--cp2k_input_file", metavar="FILENAME", required=True, help="CP2K input of the SCF calculation."
+        "--cp2k_input_file",
+        metavar="FILENAME",
+        required=True,
+        help="CP2K input of the SCF calculation.",
     )
     parser.add_argument(
-        "--basis_set_file", metavar="FILENAME", required=True, help="File containing the used basis sets."
+        "--basis_set_file",
+        metavar="FILENAME",
+        required=True,
+        help="File containing the used basis sets.",
     )
-    parser.add_argument("--xyz_file", metavar="FILENAME", required=True, help=".xyz file containing the geometry.")
     parser.add_argument(
-        "--wfn_file", metavar="FILENAME", required=True, help="cp2k restart file containing the wavefunction."
+        "--xyz_file",
+        metavar="FILENAME",
+        required=True,
+        help=".xyz file containing the geometry.",
+    )
+    parser.add_argument(
+        "--wfn_file",
+        metavar="FILENAME",
+        required=True,
+        help="cp2k restart file containing the wavefunction.",
     )
 
-    parser.add_argument("--output_dir", metavar="DIR", required=True, help="directory where to output the cubes.")
+    parser.add_argument(
+        "--output_dir",
+        metavar="DIR",
+        required=True,
+        help="directory where to output the cubes.",
+    )
     ### -----------------------------------------------------------
-    parser.add_argument("--dx", type=float, metavar="DX", default=0.2, help="Spatial step for the grid (angstroms).")
+    parser.add_argument(
+        "--dx",
+        type=float,
+        metavar="DX",
+        default=0.2,
+        help="Spatial step for the grid (angstroms).",
+    )
     parser.add_argument(
         "--eval_cutoff",
         type=float,
@@ -56,14 +81,30 @@ def main():
         help="periodic boundary conditions in directions [x,y,z]. (1=on, 0=off)",
     )
     ### -----------------------------------------------------------
-    parser.add_argument("--n_homo", type=int, metavar="N", default=0, help="Number of HOMO orbitals to export.")
-    parser.add_argument("--n_lumo", type=int, metavar="N", default=0, help="Number of LUMO orbitals to export.")
     parser.add_argument(
-        "--orb_square", action="store_true", help=("Additionally generate the square (RHO) for each MO.")
+        "--n_homo",
+        type=int,
+        metavar="N",
+        default=0,
+        help="Number of HOMO orbitals to export.",
+    )
+    parser.add_argument(
+        "--n_lumo",
+        type=int,
+        metavar="N",
+        default=0,
+        help="Number of LUMO orbitals to export.",
+    )
+    parser.add_argument(
+        "--orb_square",
+        action="store_true",
+        help=("Additionally generate the square (RHO) for each MO."),
     )
     ### -----------------------------------------------------------
     parser.add_argument(
-        "--charge_dens", action="store_true", help=("Calculate charge density (all occupied orbitals are evaluated).")
+        "--charge_dens",
+        action="store_true",
+        help=("Calculate charge density (all occupied orbitals are evaluated)."),
     )
     parser.add_argument(
         "--charge_dens_artif_core",
@@ -71,7 +112,9 @@ def main():
         help=("Calculate charge density with 'fake' artificial core (all occ orbitals are evaluated)."),
     )
     parser.add_argument(
-        "--spin_dens", action="store_true", help=("Calculate spin density (all occupied orbitals are evaluated).")
+        "--spin_dens",
+        action="store_true",
+        help=("Calculate spin density (all occupied orbitals are evaluated)."),
     )
     ### -----------------------------------------------------------
     parser.add_argument("--do_not_center_atoms", action="store_true", help=("Center atoms to cell."))
@@ -135,10 +178,10 @@ def main():
     ### Export the data
     ### ------------------------------------------------------
 
-    ase_atoms = mol_grid_orb.ase_atoms
-    origin = mol_grid_orb.origin
-    cell = mol_grid_orb.eval_cell * np.eye(3)
-    vol_elem = np.prod(mol_grid_orb.dv)
+    # ase_atoms = mol_grid_orb.ase_atoms
+    # origin = mol_grid_orb.origin
+    # cell = mol_grid_orb.eval_cell * np.eye(3)
+    # vol_elem = np.prod(mol_grid_orb.dv)
 
     for imo in np.arange(n_homo + n_lumo):
         i_rel_homo = imo - n_homo + 1
