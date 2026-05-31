@@ -117,6 +117,8 @@ class Cp2kGridOrbitals:
                         if parts[0] == "ELEMENT":
                             elem = parts[1]
                         if parts[0] == "BASIS_SET":
+                            if len(parts) > 2 and parts[1].upper() in {"AUX_FIT", "RI_AUX"}:
+                                continue
                             basis_name = parts[1]
                     ## ---------------------------------------------------------------------
                     if elem is None:
