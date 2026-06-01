@@ -21,6 +21,12 @@ from .cube import Cube
 ang_2_bohr = 1.88972612463
 hart_2_ev = 27.21138602
 
+AUXILIARY_BASIS_SET_TYPES = {"AUX_FIT", "RI_AUX"}
+
+
+def is_auxiliary_basis_set_line(parts):
+    return len(parts) > 2 and parts[0].upper() == "BASIS_SET" and parts[1].upper() in AUXILIARY_BASIS_SET_TYPES
+
 
 class Cp2kGridOrbitals:
     """
@@ -114,9 +120,11 @@ class Cp2kGridOrbitals:
                             else:
                                 subsec_count -= 1
                         parts = line.split()
-                        if parts[0] == "ELEMENT":
+                        if parts[0].upper() == "ELEMENT":
                             elem = parts[1]
-                        if parts[0] == "BASIS_SET":
+                        if parts[0].upper() == "BASIS_SET":
+                            if is_auxiliary_basis_set_line(parts):
+                                continue
                             basis_name = parts[1]
                     ## ---------------------------------------------------------------------
                     if elem is None:
