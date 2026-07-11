@@ -100,9 +100,13 @@ class STM:
         self.local_cell_n = np.array([x_ind_end - x_ind_start, self.cell_n[1], self.cell_n[2]])
         num_spatial_points = (x_ind_end - x_ind_start) * self.cell_n[1] * self.cell_n[2]
 
-        self.local_origin = self.origin
-        self.local_origin[0] += x_ind_start * self.dv[0]
-        self.local_cell = self.local_cell_n * self.dv
+        self.local_origin = self.origin.copy()
+        if getattr(self.cgo, "dv_vectors", None) is not None:
+            self.local_origin += x_ind_start * self.cgo.dv_vectors[0]
+            self.local_cell = self.local_cell_n * self.dv
+        else:
+            self.local_origin[0] += x_ind_start * self.dv[0]
+            self.local_cell = self.local_cell_n * self.dv
 
         for ispin in range(self.nspin):
             orbitals_per_rank = np.array([len(gme) for gme in self.global_morb_energies_by_rank[ispin]])
@@ -136,8 +140,18 @@ class STM:
             if self.ptip_enabled:
                 ### Calculate and divide also the p-tip contribution,
                 ### as derivatives are hard to account for after dividing the orbitals in space
-                p_tip_contrib = (np.gradient(self.cgo.morb_grids[ispin], axis=1) / self.dv[0]) ** 2
-                p_tip_contrib += (np.gradient(self.cgo.morb_grids[ispin], axis=2) / self.dv[1]) ** 2
+                d_axis0 = np.gradient(self.cgo.morb_grids[ispin], axis=1)
+                d_axis1 = np.gradient(self.cgo.morb_grids[ispin], axis=2)
+                if getattr(self.cgo, "dv_vectors", None) is None:
+                    p_tip_contrib = (d_axis0 / self.dv[0]) ** 2 + (d_axis1 / self.dv[1]) ** 2
+                else:
+                    h_xy = self.cgo.dv_vectors[:2, :2]
+                    if abs(np.linalg.det(h_xy)) < 1e-20:
+                        raise ValueError("Cannot compute p-tip gradients for a degenerate in-plane grid.")
+                    inv_h_xy = np.linalg.inv(h_xy)
+                    grad_x = inv_h_xy[0, 0] * d_axis0 + inv_h_xy[0, 1] * d_axis1
+                    grad_y = inv_h_xy[1, 0] * d_axis0 + inv_h_xy[1, 1] * d_axis1
+                    p_tip_contrib = grad_x**2 + grad_y**2
 
                 for rank in range(self.mpi_size):
                     ix_start, ix_end = self.x_ind_per_rank(rank)
@@ -525,6 +539,10 @@ class STM:
             save_data["stm_general_info"]["y_arr"] = (
                 np.arange(0.0, self.cell_n[1] * self.dv[1] + self.dv[1] / 2, self.dv[1]) + self.origin[1]
             )
+            if getattr(self.cgo, "eval_cell_vectors", None) is not None:
+                save_data["stm_general_info"]["origin"] = self.origin
+                save_data["stm_general_info"]["cell_vectors"] = self.cgo.eval_cell_vectors
+                save_data["stm_general_info"]["dv_vectors"] = self.cgo.dv_vectors
             np.savez_compressed(path, **save_data)
 
         # Reset, otherwise can cause problems (more versatile to NOT reset, though)
@@ -683,6 +701,10 @@ class STM:
             save_data["s0_orb_general_info"]["y_arr"] = (
                 np.arange(0.0, self.cell_n[1] * self.dv[1] + self.dv[1] / 2, self.dv[1]) + self.origin[1]
             )
+            if getattr(self.cgo, "eval_cell_vectors", None) is not None:
+                save_data["s0_orb_general_info"]["origin"] = self.origin
+                save_data["s0_orb_general_info"]["cell_vectors"] = self.cgo.eval_cell_vectors
+                save_data["s0_orb_general_info"]["dv_vectors"] = self.cgo.dv_vectors
 
             if "s1_orb" in self.series_output:
                 save_data["s1_orb_general_info"] = self.series_output["s1_orb"]["general_info"]
@@ -696,6 +718,10 @@ class STM:
                 save_data["s1_orb_general_info"]["y_arr"] = (
                     np.arange(0.0, self.cell_n[1] * self.dv[1] + self.dv[1] / 2, self.dv[1]) + self.origin[1]
                 )
+                if getattr(self.cgo, "eval_cell_vectors", None) is not None:
+                    save_data["s1_orb_general_info"]["origin"] = self.origin
+                    save_data["s1_orb_general_info"]["cell_vectors"] = self.cgo.eval_cell_vectors
+                    save_data["s1_orb_general_info"]["dv_vectors"] = self.cgo.dv_vectors
 
             np.savez_compressed(path, **save_data)
 
