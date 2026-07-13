@@ -242,30 +242,34 @@ def main():
     time1 = time.time()
 
     ### ------------------------------------------------------
-    ### Calculate the ionization potential (just for output)
-    ### ------------------------------------------------------
-
-    if mpi_rank == 0:
-        # NB: currently only accurate for isolated molecules
-        if cp2k_grid_orb.nspin == 1:
-            homo_en = cp2k_grid_orb.global_morb_energies[0][cp2k_grid_orb.i_homo_glob[0]]
-        else:
-            homo_en = np.max(
-                [
-                    cp2k_grid_orb.global_morb_energies[0][cp2k_grid_orb.i_homo_glob[0]],
-                    cp2k_grid_orb.global_morb_energies[1][cp2k_grid_orb.i_homo_glob[1]],
-                ]
-            )
-        ion_pot = cube_utils.find_vacuum_level_naive(hart_cube) - (homo_en + cp2k_grid_orb.ref_energy)
-        print("IONIZATION POTENIAL (eV): %.6f (accurate only for isolated molecules)" % ion_pot)
-        sys.stdout.flush()
-
-    ### ------------------------------------------------------
     ### Set up STM object
     ### ------------------------------------------------------
 
     stm = css.STM(mpi_comm=comm, cp2k_grid_orb=cp2k_grid_orb, p_tip_ratios=args.p_tip_ratios)
     stm.gather_global_energies()
+
+    ### ------------------------------------------------------
+    ### Calculate the ionization potential (just for output)
+    ### ------------------------------------------------------
+
+    if mpi_rank == 0:
+        # NB: currently only accurate for isolated molecules. This estimate is
+        # optional because the selected STM energy window may not include the HOMO.
+        homo_energies = []
+        for ispin in range(cp2k_grid_orb.nspin):
+            homo_index = cp2k_grid_orb.i_homo_glob[ispin]
+            spin_energies = stm.global_morb_energies[ispin]
+            if 0 <= homo_index < len(spin_energies):
+                homo_energies.append(spin_energies[homo_index])
+
+        if homo_energies:
+            homo_en = np.max(homo_energies)
+            ion_pot = cube_utils.find_vacuum_level_naive(hart_cube) - (homo_en + cp2k_grid_orb.ref_energy)
+            print("IONIZATION POTENIAL (eV): %.6f (accurate only for isolated molecules)" % ion_pot)
+        else:
+            print("Skipping ionization potential estimate: HOMO is outside the selected orbital window.")
+        sys.stdout.flush()
+
     stm.divide_by_space()
 
     ### ------------------------------------------------------
