@@ -264,8 +264,13 @@ def main():
 
         if homo_energies:
             homo_en = np.max(homo_energies)
-            ion_pot = cube_utils.find_vacuum_level_naive(hart_cube) - (homo_en + cp2k_grid_orb.ref_energy)
-            print("IONIZATION POTENIAL (eV): %.6f (accurate only for isolated molecules)" % ion_pot)
+            try:
+                vacuum_level = cube_utils.find_vacuum_level_naive(hart_cube)
+            except ValueError as exc:
+                print(f"Skipping ionization potential estimate: {exc}")
+            else:
+                ion_pot = vacuum_level - (homo_en + cp2k_grid_orb.ref_energy)
+                print("IONIZATION POTENIAL (eV): %.6f (accurate only for isolated molecules)" % ion_pot)
         else:
             print("Skipping ionization potential estimate: HOMO is outside the selected orbital window.")
         sys.stdout.flush()
