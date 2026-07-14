@@ -142,16 +142,12 @@ class STM:
                 ### as derivatives are hard to account for after dividing the orbitals in space
                 d_axis0 = np.gradient(self.cgo.morb_grids[ispin], axis=1)
                 d_axis1 = np.gradient(self.cgo.morb_grids[ispin], axis=2)
-                if getattr(self.cgo, "dv_vectors", None) is None:
-                    p_tip_contrib = (d_axis0 / self.dv[0]) ** 2 + (d_axis1 / self.dv[1]) ** 2
-                else:
-                    h_xy = self.cgo.dv_vectors[:2, :2]
-                    if abs(np.linalg.det(h_xy)) < 1e-20:
-                        raise ValueError("Cannot compute p-tip gradients for a degenerate in-plane grid.")
-                    inv_h_xy = np.linalg.inv(h_xy)
-                    grad_x = inv_h_xy[0, 0] * d_axis0 + inv_h_xy[0, 1] * d_axis1
-                    grad_y = inv_h_xy[1, 0] * d_axis0 + inv_h_xy[1, 1] * d_axis1
-                    p_tip_contrib = grad_x**2 + grad_y**2
+                p_tip_contrib = self.in_plane_gradient_squared(
+                    d_axis0,
+                    d_axis1,
+                    self.dv,
+                    getattr(self.cgo, "dv_vectors", None),
+                )
 
                 for rank in range(self.mpi_size):
                     ix_start, ix_end = self.x_ind_per_rank(rank)
@@ -167,6 +163,19 @@ class STM:
                         self.local_orbital_ptip.append(
                             recvbuf.reshape(total_orb, self.local_cell_n[0], self.local_cell_n[1], self.local_cell_n[2])
                         )
+
+    @staticmethod
+    def in_plane_gradient_squared(d_axis0, d_axis1, dv, dv_vectors=None):
+        if dv_vectors is None:
+            return (d_axis0 / dv[0]) ** 2 + (d_axis1 / dv[1]) ** 2
+
+        h_xy = dv_vectors[:2, :2]
+        if abs(np.linalg.det(h_xy)) < 1e-20:
+            raise ValueError("Cannot compute p-tip gradients for a degenerate in-plane grid.")
+        inv_h_xy = np.linalg.inv(h_xy)
+        grad_x = inv_h_xy[0, 0] * d_axis0 + inv_h_xy[0, 1] * d_axis1
+        grad_y = inv_h_xy[1, 0] * d_axis0 + inv_h_xy[1, 1] * d_axis1
+        return grad_x**2 + grad_y**2
 
     def gather_global_energies(self):
         self.global_morb_energies_by_rank = []

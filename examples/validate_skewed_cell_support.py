@@ -18,6 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from cp2k_spm_tools.cp2k_grid_orbitals import Cp2kGridOrbitals  # noqa: E402
+from cp2k_spm_tools.cp2k_stm_sts import STM  # noqa: E402
 from cp2k_spm_tools.cube import Cube  # noqa: E402
 
 DATA_DIR = REPO_ROOT / "examples" / "data"
@@ -92,6 +93,30 @@ def check_reciprocal_metric_reduces_to_orthogonal_formula() -> None:
     print("orthogonal reciprocal metric: ok")
 
 
+def check_skewed_p_tip_gradient_metric() -> None:
+    dv_vectors = np.array(
+        [
+            [0.5, 0.0, 0.0],
+            [0.2, 0.4, 0.0],
+            [0.0, 0.0, 0.7],
+        ]
+    )
+    dv = np.linalg.norm(dv_vectors, axis=1)
+    grad_expected = np.array([1.7, -0.9])
+
+    ix, iy = np.meshgrid(np.arange(12), np.arange(14), indexing="ij")
+    x = ix * dv_vectors[0, 0] + iy * dv_vectors[1, 0]
+    y = ix * dv_vectors[0, 1] + iy * dv_vectors[1, 1]
+    orbital = (grad_expected[0] * x + grad_expected[1] * y)[None, :, :, None]
+
+    d_axis0 = np.gradient(orbital, axis=1)
+    d_axis1 = np.gradient(orbital, axis=2)
+    p_tip_contrib = STM.in_plane_gradient_squared(d_axis0, d_axis1, dv, dv_vectors)
+
+    np.testing.assert_allclose(p_tip_contrib, np.dot(grad_expected, grad_expected), atol=1e-12)
+    print("skewed p-tip gradient metric: ok")
+
+
 def skewed_grid_cartesian_points(cgo: Cp2kGridOrbitals) -> np.ndarray:
     ix, iy, iz = np.meshgrid(
         np.arange(cgo.eval_cell_n[0]),
@@ -162,6 +187,7 @@ def main() -> None:
         skewed_input = make_skewed_input(tmpdir)
         check_orthogonal_cube_generation(tmpdir)
         check_reciprocal_metric_reduces_to_orthogonal_formula()
+        check_skewed_p_tip_gradient_metric()
         check_skewed_grid_against_orthogonal_reference(skewed_input)
         check_skewed_cube_cell_vectors(tmpdir, skewed_input)
     print("skewed-cell validation passed")
