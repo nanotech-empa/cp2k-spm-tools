@@ -239,7 +239,7 @@ def read_atomic_proj(atomic_proj_xml):
 
     projections_node = data_file_root.find("PROJECTIONS")
 
-    wfc_projs = np.zeros((n_spin, n_kpts, n_at_wfc, n_bands), dtype=np.complex)
+    wfc_projs = np.zeros((n_spin, n_kpts, n_at_wfc, n_bands), dtype=complex)
     for i_kpt in range(n_kpts):
         for i_spin in range(n_spin):
             for i_wfc in range(n_at_wfc):
