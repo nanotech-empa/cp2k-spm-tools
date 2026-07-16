@@ -43,8 +43,12 @@ The package provides several command-line tools, including:
 - `cp2k-cube-from-wfn`: Create cube files from wavefunction files
 - `cp2k-bader-bond-order`: Bond order analysis based on Bader basins
 - `cp2k-overlap-to-sparse-npz`: Convert CP2K AO overlap matrix logs to compact sparse NPZ files
+- `cp2k-unfold-wfn-sparse`: Compute localized-basis CP2K band-unfolding weights from a WFN file and sparse overlap data
+- `cp2k-unfold-wfn-sparse-mpi`: MPI-parallel variant of `cp2k-unfold-wfn-sparse`, distributing molecular orbitals over MPI ranks
 
 Use `--help` with each command to see its options.
+
+The unfolding commands are intended for workflows where a supercell CP2K calculation is unfolded onto a lower-dimensional or primitive reference cell. They use the CP2K `.wfn`, the atomic structure, the CP2K input cell, and either a human-readable overlap matrix log or the compact sparse NPZ produced by `cp2k-overlap-to-sparse-npz`.
 
 ### Example Usage
 
