@@ -8,9 +8,7 @@ from cp2k_spm_tools.cp2k_overlap_matrix import write_sparse_overlap_npz
 def build_parser() -> argparse.ArgumentParser:
     """Create the command-line parser for overlap-log conversion."""
 
-    parser = argparse.ArgumentParser(
-        description="Convert CP2K AO overlap matrix logs to sparse NPZ files."
-    )
+    parser = argparse.ArgumentParser(description="Convert CP2K AO overlap matrix logs to sparse NPZ files.")
     parser.add_argument("input", help="CP2K output/log file containing an OVERLAP MATRIX block.")
     parser.add_argument("output", help="Output compressed sparse NPZ file.")
     parser.add_argument(

@@ -50,9 +50,7 @@ def test_parse_cp2k_overlap_matrix_log_data(tmp_path):
 
 
 def test_parse_applies_threshold_and_n_atomic_orbitals(tmp_path):
-    parsed = parse_cp2k_overlap_matrix_log_data(
-        write_overlap_log(tmp_path), n_atomic_orbitals=4, threshold=0.03
-    )
+    parsed = parse_cp2k_overlap_matrix_log_data(write_overlap_log(tmp_path), n_atomic_orbitals=4, threshold=0.03)
 
     assert parsed.matrix.shape == (4, 4)
     np.testing.assert_allclose(

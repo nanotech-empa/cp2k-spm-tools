@@ -147,9 +147,7 @@ def parse_cp2k_overlap_matrix_log_data(
     if not basis:
         raise ValueError(f"No overlap-matrix entries found in {path}")
 
-    n_basis = (
-        int(n_atomic_orbitals) if n_atomic_orbitals is not None else max_index
-    )
+    n_basis = int(n_atomic_orbitals) if n_atomic_orbitals is not None else max_index
     matrix = sp.coo_matrix((vals, (rows, cols)), shape=(n_basis, n_basis)).tocsr()
     basis_index = np.arange(1, n_basis + 1, dtype=np.int64)
     atom_index = np.zeros(n_basis, dtype=np.int64)
@@ -169,7 +167,6 @@ def parse_cp2k_overlap_matrix_log_data(
         element=elements,
         orbital=orbitals,
     )
-
 
 
 def read_sparse_overlap_npz(path_or_file) -> Cp2kOverlapMatrixLog:
