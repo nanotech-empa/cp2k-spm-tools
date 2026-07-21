@@ -171,15 +171,6 @@ def parse_cp2k_overlap_matrix_log_data(
     )
 
 
-def parse_cp2k_overlap_matrix_log(
-    path: Union[str, Path], n_atomic_orbitals: Optional[int] = None
-) -> sp.csr_matrix:
-    """Parse CP2K human-readable ``OVERLAP MATRIX`` blocks as a sparse CSR matrix."""
-
-    return parse_cp2k_overlap_matrix_log_data(
-        path, n_atomic_orbitals=n_atomic_orbitals
-    ).matrix
-
 
 def read_sparse_overlap_npz(path_or_file) -> Cp2kOverlapMatrixLog:
     """Read sparse CP2K overlap data written by :func:`write_sparse_overlap_npz`."""
