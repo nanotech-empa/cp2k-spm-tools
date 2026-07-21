@@ -78,10 +78,15 @@ def parse_cp2k_overlap_matrix_log_data(
     path = Path(path)
     float_re = re.compile(r"^[+-]?(?:[0-9]+(?:[.][0-9]*)?|[.][0-9]+)(?:[EeDd][+-]?[0-9]+)?$")
 
+    # COO entries accumulated across CP2K's repeated matrix-column blocks.
     rows: List[int] = []
     cols: List[int] = []
     vals: List[float] = []
+
+    # Per-AO metadata, keyed by the zero-based matrix row index.
     basis: Dict[int, Tuple[int, str, str]] = {}
+
+    # Parsing state for the active column block and the inferred matrix size.
     current_cols: Optional[List[int]] = None
     inside_overlap_matrix = False
     max_index = 0
