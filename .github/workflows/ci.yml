@@ -39,3 +39,26 @@ jobs:
       - name: Run linters
         run: |
           pre-commit run --all-files
+
+  test:
+    name: run pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+          cache: "pip"
+          cache-dependency-path: |
+            pyproject.toml
+
+      - name: Install package with dev extra
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        run: |
+          pytest || ([ $? -eq 5 ] && echo "No tests collected yet, ignoring." || exit 1)

@@ -28,7 +28,7 @@ dependencies = [
 "Bug Tracker" = "https://github.com/nanotech-empa/cp2k-spm-tools/issues"
 
 [project.optional-dependencies]
-dev = ["ruff", "pre-commit", "bumpver>=2023.1129"]
+dev = ["ruff", "pre-commit", "bumpver>=2023.1129", "pytest"]
 
 [project.scripts]
 cp2k-bader-bond-order = "cp2k_spm_tools.cli.bader_bond_order:main"
