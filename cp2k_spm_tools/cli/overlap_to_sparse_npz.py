@@ -20,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Keep entries with absolute value larger than this threshold.",
     )
     parser.add_argument(
-        "--nao",
+        "--n-atomic-orbitals",
         type=int,
         default=None,
         help="Expected number of atomic orbitals; defaults to the largest parsed AO index.",
@@ -36,7 +36,7 @@ def main(argv=None) -> None:
         args.input,
         args.output,
         threshold=args.threshold,
-        nao=args.nao,
+        n_atomic_orbitals=args.n_atomic_orbitals,
     )
 
 
