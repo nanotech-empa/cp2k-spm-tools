@@ -15,9 +15,7 @@ hart_2_ev = 27.21138602
 
 
 class Cp2kOverlapMatrix:
-    """
-    Class to deal with the CP2K overlap matrix
-    """
+    """Class to deal with the CP2K overlap matrix"""
 
     def __init__(self):
         self.sparse_mat = None
