@@ -60,6 +60,19 @@ def parse_cp2k_overlap_matrix_log_data(
     the 1-based AO index, atom index, element, and orbital label, followed by
     one matrix value for every active column header. The returned sparse matrix
     keeps only entries whose absolute value is larger than ``threshold``.
+
+    Args:
+        path: CP2K output or log file containing an ``OVERLAP MATRIX`` block.
+        n_atomic_orbitals: Expected total number of atomic orbitals. By default,
+            use the largest AO index found in the log.
+        threshold: Keep only matrix entries with an absolute value larger than
+            this value. ``None`` is equivalent to zero.
+
+    Returns:
+        The sparse CSR overlap matrix and its per-orbital metadata.
+
+    Raises:
+        ValueError: If the file contains no overlap-matrix entries.
     """
 
     path = Path(path)
