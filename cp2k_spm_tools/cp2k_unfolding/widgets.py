@@ -96,12 +96,8 @@ def create_primitive_cell_widgets(
 
 def read_primitive_cell_widgets(widget_state: PrimitiveCellWidgets):
     """Return primitive vectors, supercell vectors, and final lattice type."""
-    primitive_vectors = parse_matrix_text(
-        widget_state.primitive_vectors_widget.value, expected_dim=widget_state.dim
-    )
-    supercell_vectors = parse_matrix_text(
-        widget_state.supercell_vectors_widget.value, expected_dim=widget_state.dim
-    )
+    primitive_vectors = parse_matrix_text(widget_state.primitive_vectors_widget.value, expected_dim=widget_state.dim)
+    supercell_vectors = parse_matrix_text(widget_state.supercell_vectors_widget.value, expected_dim=widget_state.dim)
 
     lattice_type = widget_state.lattice_type_widget.value
     if lattice_type == "auto":
