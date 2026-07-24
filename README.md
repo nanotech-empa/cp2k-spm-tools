@@ -50,6 +50,15 @@ Use `--help` with each command to see its options.
 
 The unfolding commands are intended for workflows where a supercell CP2K calculation is unfolded onto a lower-dimensional or primitive reference cell. They use the CP2K `.wfn`, the atomic structure, the CP2K input cell, and either a human-readable overlap matrix log or the compact sparse NPZ produced by `cp2k-overlap-to-sparse-npz`.
 
+The reusable Python API lives in `cp2k_spm_tools.cp2k_unfolding`. It includes
+the geometry and AO-mapping helpers, sparse unfolding routines, k-path and PDOS
+utilities, plotting helper, and primitive-cell notebook widgets. Install the
+optional notebook dependency when using the widget helper:
+
+```bash
+pip install "cp2k-spm-tools[notebooks]"
+```
+
 ### Example Usage
 
 When everything is set up correctly, the bash scripts in `examples/` folder can be executed without any further input and illustrate the usage of the various scripts. For sparse AO overlap conversion, see `examples/overlap_to_sparse_npz/run.sh`. For example `example/benzene_stm/run_stm_sts_from_wfn.sh` evaluates the STM/STS signatures of isolated benzene at each orbital energy (`out/orb/`) as well as in an arbitrary energy range (`out/stm/`). The corresponding CP2K calculation is included in the repository.

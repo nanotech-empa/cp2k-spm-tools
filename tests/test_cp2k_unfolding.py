@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy.sparse as sp
 
 from cp2k_spm_tools.cli.unfold_wfn_sparse import parse_atom_indices, parse_path_labels, parse_vectors
+from cp2k_spm_tools.cp2k_unfolding import (
+    PrimitiveCellWidgets,
+    plot_unfolded_kpath,
+    read_primitive_cell_widgets,
+)
 from cp2k_spm_tools.cp2k_unfolding.geometry import (
     build_modulo_lattice_ao_mapping,
     snap_primitive_vectors_to_supercell,
@@ -64,3 +72,39 @@ def test_sparse_unfolding_two_replica_chain():
     assert np.allclose(mapping.ao_to_replica, [0, 1])
     assert np.allclose(mapping.ao_to_local, [0, 0])
     assert np.allclose(weights, [[1.0, 0.0], [0.0, 1.0]], atol=1.0e-12)
+
+
+def test_plot_unfolded_kpath():
+    ax = plot_unfolded_kpath(
+        path_k_indices=np.array([0, 1]),
+        path_x=np.array([0.0, 1.0]),
+        x_ticks=[0.0, 1.0],
+        x_tick_labels=["G", "X"],
+        energies_ev=np.array([-1.0, 1.0]),
+        weights=np.array([[1.0, 0.0], [0.25, 0.5]]),
+    )
+
+    assert len(ax.collections) == 2
+    assert ax.get_xlabel() == "primitive-cell k-path"
+    assert [tick.get_text() for tick in ax.get_xticklabels()] == ["G", "X"]
+    plt.close(ax.figure)
+
+
+def test_read_primitive_cell_widgets():
+    widget_state = PrimitiveCellWidgets(
+        primitive_vectors_widget=SimpleNamespace(value="1 0 0\n0 1 0"),
+        supercell_vectors_widget=SimpleNamespace(value="2 0 0\n0 2 0"),
+        lattice_type_widget=SimpleNamespace(value="auto"),
+        symbols=[],
+        coords=np.empty((0, 3)),
+        dim=2,
+        primitive_guess=np.eye(2, 3),
+        supercell_guess=2.0 * np.eye(2, 3),
+        lattice_type_guess="square",
+    )
+
+    primitive, supercell, lattice_type = read_primitive_cell_widgets(widget_state)
+
+    assert np.allclose(primitive, np.eye(2, 3))
+    assert np.allclose(supercell, 2.0 * np.eye(2, 3))
+    assert lattice_type == "square"
