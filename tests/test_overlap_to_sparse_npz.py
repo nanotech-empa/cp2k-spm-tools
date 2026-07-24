@@ -49,10 +49,8 @@ def test_parse_cp2k_overlap_matrix_log_data(tmp_path):
     np.testing.assert_array_equal(parsed.orbital, np.array(["s", "px", "s"]))
 
 
-def test_parse_applies_threshold_and_nao(tmp_path):
-    parsed = parse_cp2k_overlap_matrix_log_data(
-        write_overlap_log(tmp_path), nao=4, threshold=0.03
-    )
+def test_parse_applies_threshold_and_n_atomic_orbitals(tmp_path):
+    parsed = parse_cp2k_overlap_matrix_log_data(write_overlap_log(tmp_path), n_atomic_orbitals=4, threshold=0.03)
 
     assert parsed.matrix.shape == (4, 4)
     np.testing.assert_allclose(
@@ -107,7 +105,16 @@ def test_cli_writes_sparse_overlap_npz(tmp_path):
     input_path = write_overlap_log(tmp_path)
     output_path = tmp_path / "overlap-cli.npz"
 
-    overlap_cli([str(input_path), str(output_path), "--threshold", "0.03", "--nao", "4"])
+    overlap_cli(
+        [
+            str(input_path),
+            str(output_path),
+            "--threshold",
+            "0.03",
+            "--n-atomic-orbitals",
+            "4",
+        ]
+    )
     parsed = read_sparse_overlap_npz(output_path)
 
     assert parsed.matrix.shape == (4, 4)
