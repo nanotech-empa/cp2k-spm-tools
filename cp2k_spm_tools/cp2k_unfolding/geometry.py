@@ -27,7 +27,6 @@ class AOMapping:
         return int(self.ao_to_replica.size)
 
 
-
 def normalize_cp2k_kind_symbol(symbol: str) -> str:
     """Return the chemical element part of a CP2K kind/XYZ symbol.
 
@@ -41,6 +40,7 @@ def normalize_cp2k_kind_symbol(symbol: str) -> str:
     if len(text) >= 2 and text[1].islower():
         return text[:2]
     return text[:1]
+
 
 def lattice_matrix(vectors: np.ndarray) -> np.ndarray:
     """Return a 2D/3D column-vector lattice matrix from row-vector input."""
@@ -130,9 +130,7 @@ def cluster_basis_fractional_coords_adaptive(
     without making perfectly periodic cases less precise.
     """
 
-    basis_frac, atom_to_basis = cluster_basis_fractional_coords(
-        symbols, coords_cart, primitive_vectors, tol=tol
-    )
+    basis_frac, atom_to_basis = cluster_basis_fractional_coords(symbols, coords_cart, primitive_vectors, tol=tol)
     expected = _expected_basis_counts_by_symbol(symbols, det)
     initial_counts = _basis_counts_by_symbol(symbols, atom_to_basis)
     if initial_counts == expected:
@@ -153,7 +151,13 @@ def cluster_basis_fractional_coords_adaptive(
         1.0e-1,
     )
     candidates = sorted({value for value in candidate_grid if value <= float(tol)})
-    best = (sum(abs(initial_counts.get(sym, 0) - num) for sym, num in expected.items()), basis_frac, atom_to_basis, float(tol), initial_counts)
+    best = (
+        sum(abs(initial_counts.get(sym, 0) - num) for sym, num in expected.items()),
+        basis_frac,
+        atom_to_basis,
+        float(tol),
+        initial_counts,
+    )
     for candidate_tol in candidates:
         trial_basis, trial_atom_to_basis = cluster_basis_fractional_coords(
             symbols, coords_cart, primitive_vectors, tol=candidate_tol
@@ -214,8 +218,7 @@ def assign_atoms_to_user_basis(
     missing_symbols = sorted(set(normalized_symbols) - set(basis_symbols))
     if missing_symbols:
         raise ValueError(
-            "Primitive basis atoms do not cover all elements in the structure: "
-            + ", ".join(missing_symbols)
+            "Primitive basis atoms do not cover all elements in the structure: " + ", ".join(missing_symbols)
         )
 
     A = lattice_matrix(primitive_vectors)
@@ -258,11 +261,7 @@ def integer_supercell_matrix(primitive_vectors: np.ndarray, supercell_vectors: n
     return M_int
 
 
-
-
-def primitive_vectors_from_supercell_matrix(
-    supercell_vectors: np.ndarray, matrix: np.ndarray
-) -> np.ndarray:
+def primitive_vectors_from_supercell_matrix(supercell_vectors: np.ndarray, matrix: np.ndarray) -> np.ndarray:
     """Return primitive row vectors for ``S = A @ M``."""
     matrix = np.asarray(matrix, dtype=float)
     dim = matrix.shape[0]
@@ -311,9 +310,7 @@ def snap_primitive_vectors_to_supercell(
             best = item
 
     if best is None:
-        raise ValueError(
-            "Could not snap primitive vectors to an exact integer tiling of the supercell."
-        )
+        raise ValueError("Could not snap primitive vectors to an exact integer tiling of the supercell.")
 
     _, correction_norm, matrix, snapped = best
     return snapped, matrix, matrix_float, correction_norm
@@ -470,9 +467,7 @@ def translation_quality(
     return count / len(symbols)
 
 
-def integer_cell_matrix_if_valid(
-    primitive_vectors: np.ndarray, supercell_vectors: np.ndarray, tol: float = 1e-4
-):
+def integer_cell_matrix_if_valid(primitive_vectors: np.ndarray, supercell_vectors: np.ndarray, tol: float = 1e-4):
     try:
         M = integer_supercell_matrix(primitive_vectors, supercell_vectors)
     except Exception:
@@ -520,8 +515,7 @@ def guess_primitive_vectors_from_geometry(
     candidates: list[np.ndarray] = []
     for v in sorted(raw, key=lambda x: np.linalg.norm(x[:dim])):
         duplicate = any(
-            np.linalg.norm(v[:dim] - w[:dim]) < tol or np.linalg.norm(v[:dim] + w[:dim]) < tol
-            for w in candidates
+            np.linalg.norm(v[:dim] - w[:dim]) < tol or np.linalg.norm(v[:dim] + w[:dim]) < tol for w in candidates
         )
         if duplicate:
             continue
@@ -639,11 +633,7 @@ def infer_aos_per_symbol_from_overlap_metadata(
     for symbol, count in zip(symbols, counts_by_atom):
         counts_by_symbol.setdefault(symbol, set()).add(int(count))
 
-    ambiguous = {
-        symbol: sorted(counts)
-        for symbol, counts in counts_by_symbol.items()
-        if len(counts) > 1
-    }
+    ambiguous = {symbol: sorted(counts) for symbol, counts in counts_by_symbol.items() if len(counts) > 1}
     if ambiguous:
         raise ValueError(
             "Cannot infer one AO count per symbol because some symbols have multiple AO counts: "

@@ -44,8 +44,6 @@ def parse_vectors(text: str) -> np.ndarray:
     return np.asarray(rows, dtype=float)
 
 
-
-
 def parse_atom_indices(text: str | None) -> list[int] | None:
     """Parse 1-based atom indices/ranges into zero-based indices."""
     if text is None or not str(text).strip():
@@ -70,6 +68,7 @@ def parse_atom_indices(text: str | None) -> list[int] | None:
     if any(index < 1 for index in items):
         raise ValueError("Atom indices are 1-based and must be positive")
     return [index - 1 for index in items]
+
 
 def parse_path_labels(text: str) -> list[str]:
     clean = text.strip().replace("Γ", "G")
@@ -168,22 +167,14 @@ def write_unfolding_npz(
         arrays[f"hs_point_{label}"] = np.asarray(point, dtype=np.float64)
 
     if pdos_output_path is not None:
-        arrays["pdos_projection_filename"] = np.asarray(
-            Path(pdos_output_path).name, dtype="U128"
-        )
-        arrays["pdos_projection_threshold"] = np.asarray(
-            pdos_threshold, dtype=np.float64
-        )
+        arrays["pdos_projection_filename"] = np.asarray(Path(pdos_output_path).name, dtype="U128")
+        arrays["pdos_projection_threshold"] = np.asarray(pdos_threshold, dtype=np.float64)
 
     for spin, coeffs in enumerate(wfn.coeffs):
         if overlap.matrix.shape != (coeffs.shape[1], coeffs.shape[1]):
-            raise ValueError(
-                f"Overlap shape {overlap.matrix.shape} does not match WFN AO count {coeffs.shape[1]}"
-            )
+            raise ValueError(f"Overlap shape {overlap.matrix.shape} does not match WFN AO count {coeffs.shape[1]}")
         if getattr(overlap, "atom_index", None) is not None and len(overlap.atom_index):
-            aos_per_symbol = infer_aos_per_symbol_from_overlap_metadata(
-                symbols, overlap.atom_index
-            )
+            aos_per_symbol = infer_aos_per_symbol_from_overlap_metadata(symbols, overlap.atom_index)
         else:
             aos_per_symbol = infer_aos_per_symbol_from_wfn(symbols, coeffs.shape[1])
         mapping = build_modulo_lattice_ao_mapping(
@@ -200,9 +191,7 @@ def write_unfolding_npz(
         arrays[f"atom_to_replica_spin_{spin}"] = mapping.atom_to_replica.astype(np.int64)
         arrays[f"basis_frac_coords_spin_{spin}"] = mapping.basis_frac_coords
         if primitive_basis_atom_indices is not None:
-            arrays["primitive_basis_atom_indices"] = np.asarray(
-                primitive_basis_atom_indices, dtype=np.int64
-            ) + 1
+            arrays["primitive_basis_atom_indices"] = np.asarray(primitive_basis_atom_indices, dtype=np.int64) + 1
         weights = unfold_band_weights_full(
             coeffs,
             k_cart_folded,

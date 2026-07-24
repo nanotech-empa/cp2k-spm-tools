@@ -54,9 +54,7 @@ def lattice_lengths_angles_2d(primitive_vectors: np.ndarray) -> tuple[float, flo
     return la, lb, angle
 
 
-def guess_2d_lattice_type(
-    primitive_vectors: np.ndarray, rtol: float = 1e-3, angle_tol: float = 1e-2
-) -> str:
+def guess_2d_lattice_type(primitive_vectors: np.ndarray, rtol: float = 1e-3, angle_tol: float = 1e-2) -> str:
     """Guess a simple 2D Bravais-lattice family."""
     la, lb, angle = lattice_lengths_angles_2d(primitive_vectors)
     equal_lengths = abs(la - lb) <= rtol * max(la, lb)
@@ -72,9 +70,7 @@ def guess_2d_lattice_type(
     return "oblique"
 
 
-def standard_kpath(
-    dim: int, lattice_type: str | None = None, primitive_vectors: np.ndarray | None = None
-):
+def standard_kpath(dim: int, lattice_type: str | None = None, primitive_vectors: np.ndarray | None = None):
     """Return high-symmetry points and a standard path in fractional reciprocal coordinates."""
     if dim == 1:
         points = {
@@ -121,9 +117,7 @@ def standard_kpath(
     return points, path
 
 
-def kpath_axis_from_fractional_path(
-    points: dict[str, np.ndarray], path: Sequence[str], primitive_vectors: np.ndarray
-):
+def kpath_axis_from_fractional_path(points: dict[str, np.ndarray], path: Sequence[str], primitive_vectors: np.ndarray):
     """Return cumulative x-axis coordinates and tick positions for a high-symmetry path."""
     frac_nodes = [points[label] for label in path]
     cart_nodes = kfrac_to_cart(np.asarray(frac_nodes), primitive_vectors)

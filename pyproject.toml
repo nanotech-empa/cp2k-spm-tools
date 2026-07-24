@@ -29,6 +29,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["ruff", "pre-commit", "bumpver>=2023.1129", "pytest"]
+notebooks = ["ipywidgets"]
 
 [project.scripts]
 cp2k-bader-bond-order = "cp2k_spm_tools.cli.bader_bond_order:main"

@@ -8,7 +8,6 @@ from scipy import constants
 
 from cp2k_spm_tools.cp2k_overlap_matrix import (
     Cp2kOverlapMatrixLog,
-    parse_cp2k_overlap_matrix_log,
     parse_cp2k_overlap_matrix_log_data,
     read_sparse_overlap_npz,
     write_sparse_overlap_npz,
@@ -18,7 +17,6 @@ __all__ = [
     "Cp2kOverlapMatrixLog",
     "SupercellWavefunctions",
     "parse_cp2k_cell_vectors",
-    "parse_cp2k_overlap_matrix_log",
     "parse_cp2k_overlap_matrix_log_data",
     "print_eigenvalue_summary",
     "read_cp2k_wfn",
@@ -49,9 +47,7 @@ def read_cp2k_wfn(
     try:
         from cp2k_spm_tools.cp2k_wfn_file import Cp2kWfnFile
     except ImportError as exc:
-        raise ImportError(
-            "cp2k-spm-tools is required. Install it or add the repository to PYTHONPATH."
-        ) from exc
+        raise ImportError("cp2k-spm-tools is required. Install it or add the repository to PYTHONPATH.") from exc
 
     cwf = Cp2kWfnFile(mpi_rank=0, mpi_size=1, mpi_comm=None)
     try:

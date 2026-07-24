@@ -81,10 +81,7 @@ def parse_cp2k_atom_pdos_files(
         if data.ndim == 1:
             data = data.reshape(1, -1)
         if data.shape[1] < 3 + len(channels):
-            raise ValueError(
-                f"PDOS file {path} has {data.shape[1]} columns but header lists "
-                f"{len(channels)} channels"
-            )
+            raise ValueError(f"PDOS file {path} has {data.shape[1]} columns but header lists {len(channels)} channels")
 
         mo_index = data[:, 0].astype(np.int64) - 1
         evals_by_spin.setdefault(spin, data[:, 1].astype(np.float64))
@@ -120,12 +117,8 @@ def parse_cp2k_atom_pdos_files(
         arrays[f"evals_ev_spin_{spin}"] = evals_by_spin[spin] * HARTREE_TO_EV
         arrays[f"occs_spin_{spin}"] = occs_by_spin[spin]
         if spin in fermi_by_spin:
-            arrays[f"fermi_au_spin_{spin}"] = np.asarray(
-                fermi_by_spin[spin], dtype=np.float64
-            )
-            arrays[f"fermi_ev_spin_{spin}"] = np.asarray(
-                fermi_by_spin[spin] * HARTREE_TO_EV, dtype=np.float64
-            )
+            arrays[f"fermi_au_spin_{spin}"] = np.asarray(fermi_by_spin[spin], dtype=np.float64)
+            arrays[f"fermi_ev_spin_{spin}"] = np.asarray(fermi_by_spin[spin] * HARTREE_TO_EV, dtype=np.float64)
 
     return arrays
 

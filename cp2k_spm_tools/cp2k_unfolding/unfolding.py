@@ -107,9 +107,7 @@ def sparse_bloch_rhs_from_cache(
 ) -> np.ndarray:
     """Assemble V(k) = B_k^H S C for all selected MOs at once."""
     k_cart = np.asarray(k_cart, dtype=float)
-    phase_mu = np.exp(
-        -1j * (cache.replica_vectors_cart[cache.ao_to_replica] @ k_cart)
-    ) / np.sqrt(cache.nrep)
+    phase_mu = np.exp(-1j * (cache.replica_vectors_cart[cache.ao_to_replica] @ k_cart)) / np.sqrt(cache.nrep)
 
     weighted_SC = phase_mu[:, None] * cache.SC
 
@@ -205,9 +203,7 @@ def fourier_project_coefficients(coeff: np.ndarray, k_cart: np.ndarray, mapping:
     return d
 
 
-def spectral_weight_simple(
-    coeff: np.ndarray, k_cart: np.ndarray, S0: np.ndarray, mapping: AOMapping
-) -> float:
+def spectral_weight_simple(coeff: np.ndarray, k_cart: np.ndarray, S0: np.ndarray, mapping: AOMapping) -> float:
     """Simplified diagnostic weight, not used for final plots."""
     d = fourier_project_coefficients(coeff, k_cart, mapping)
     w = np.vdot(d, S0 @ d)
