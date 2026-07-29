@@ -7,8 +7,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
-import scipy
-import scipy.io
 import scipy.sparse as sp
 
 ang_2_bohr = 1.0 / 0.52917721067
@@ -26,7 +24,7 @@ class Cp2kOverlapMatrix:
 
         csr_txt = np.loadtxt(file_name)
 
-        sparse_mat = scipy.sparse.csr_matrix(
+        sparse_mat = sp.csr_matrix(
             (csr_txt[:, 2], (csr_txt[:, 0] - 1, csr_txt[:, 1] - 1)), shape=(n_basis_f, n_basis_f)
         )
 
@@ -52,7 +50,7 @@ class Cp2kOverlapMatrixLog:
 def parse_cp2k_overlap_matrix_log_data(
     path: Union[str, Path],
     *,
-    threshold: Optional[float] = None,
+    threshold: float = 0.0,
 ) -> Cp2kOverlapMatrixLog:
     """Parse CP2K human-readable ``OVERLAP MATRIX`` blocks.
 
@@ -72,7 +70,7 @@ def parse_cp2k_overlap_matrix_log_data(
     Args:
         path: CP2K output or log file containing an ``OVERLAP MATRIX`` block.
         threshold: Keep only matrix entries with an absolute value larger than
-            this value. ``None`` is equivalent to zero.
+            this value.
 
     Returns:
         The sparse CSR overlap matrix and its per-orbital metadata.
@@ -100,15 +98,11 @@ def parse_cp2k_overlap_matrix_log_data(
     current_cols: Optional[List[int]] = None
     inside_overlap_matrix = False
     max_index = 0
-    threshold_value = 0.0 if threshold is None else float(threshold)
 
     # Whether any data row has been parsed yet, and the unexpected lines seen
     # between the title and the first data row.
     data_started = False
     skipped: List[str] = []
-
-    def is_int_token(token: str) -> bool:
-        return token.isdigit()
 
     def is_float_token(token: str) -> bool:
         return bool(float_re.match(token))
@@ -134,7 +128,7 @@ def parse_cp2k_overlap_matrix_log_data(
 
             parts = line.split()
 
-            if all(is_int_token(token) for token in parts):
+            if all(token.isdigit() for token in parts):
                 current_cols = [int(token) - 1 for token in parts]
                 max_index = max(max_index, max(current_cols) + 1)
                 continue
@@ -142,8 +136,8 @@ def parse_cp2k_overlap_matrix_log_data(
             is_data = (
                 current_cols is not None
                 and len(parts) >= 5
-                and is_int_token(parts[0])
-                and is_int_token(parts[1])
+                and parts[0].isdigit()
+                and parts[1].isdigit()
                 and len(parts[4:]) == len(current_cols)
                 and all(is_float_token(token) for token in parts[4:])
             )
@@ -169,7 +163,7 @@ def parse_cp2k_overlap_matrix_log_data(
 
             for jcol, token in zip(current_cols, value_tokens):
                 value = float(token.replace("D", "E").replace("d", "e"))
-                if abs(value) > threshold_value:
+                if abs(value) > threshold:
                     rows.append(irow)
                     cols.append(jcol)
                     vals.append(value)
