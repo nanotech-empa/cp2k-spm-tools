@@ -7,11 +7,7 @@ import numpy as np
 import pytest
 
 from cp2k_spm_tools.cli.overlap_to_sparse_npz import main as overlap_cli
-from cp2k_spm_tools.cp2k_overlap_matrix import (
-    parse_cp2k_overlap_matrix_log_data,
-    read_sparse_overlap_npz,
-    write_sparse_overlap_npz,
-)
+from cp2k_spm_tools.cp2k_overlap_matrix import Cp2kOverlapMatrix
 
 OVERLAP_LOG = Path(__file__).parent / "data" / "cp2k_ch4_overlap_matrix.log"
 
@@ -24,8 +20,8 @@ def assert_overlap_metadata_equal(left, right):
 def assert_parses_like_reference_log(path):
     """The parse of ``path`` must match the pristine reference log exactly."""
 
-    expected = parse_cp2k_overlap_matrix_log_data(OVERLAP_LOG)
-    parsed = parse_cp2k_overlap_matrix_log_data(path)
+    expected = Cp2kOverlapMatrix.from_cp2k_output(OVERLAP_LOG)
+    parsed = Cp2kOverlapMatrix.from_cp2k_output(path)
 
     assert parsed.matrix.shape == expected.matrix.shape
     np.testing.assert_allclose(parsed.matrix.toarray(), expected.matrix.toarray())
@@ -40,7 +36,7 @@ def write_log(tmp_path, text):
 
 
 def test_parse_cp2k_overlap_matrix_log_data():
-    parsed = parse_cp2k_overlap_matrix_log_data(OVERLAP_LOG)
+    parsed = Cp2kOverlapMatrix.from_cp2k_output(OVERLAP_LOG)
 
     assert parsed.matrix.shape == (58, 58)
     assert parsed.matrix.nnz == 2728
@@ -118,7 +114,7 @@ def test_parse_warns_on_missing_ao_rows(tmp_path):
     )
 
     with pytest.warns(UserWarning, match="No overlap data row for AO index 2"):
-        parsed = parse_cp2k_overlap_matrix_log_data(log)
+        parsed = Cp2kOverlapMatrix.from_cp2k_output(log)
 
     assert parsed.matrix.shape == (3, 3)
     assert parsed.atom_index[1] == 0
@@ -135,7 +131,7 @@ def test_parse_warns_on_multiple_missing_ao_rows(tmp_path):
     )
 
     with pytest.warns(UserWarning, match=r"No overlap data row for AO index 2, 3\b"):
-        parsed = parse_cp2k_overlap_matrix_log_data(log)
+        parsed = Cp2kOverlapMatrix.from_cp2k_output(log)
 
     assert parsed.matrix.shape == (4, 4)
     assert parsed.atom_index[1] == 0 and parsed.atom_index[2] == 0
@@ -153,7 +149,7 @@ def test_parse_warns_on_many_missing_ao_rows_truncates_message(tmp_path):
     )
 
     with pytest.warns(UserWarning, match=r"\.\.\. \(14 total\)"):
-        parsed = parse_cp2k_overlap_matrix_log_data(log)
+        parsed = Cp2kOverlapMatrix.from_cp2k_output(log)
 
     assert parsed.matrix.shape == (n_cols, n_cols)
 
@@ -161,14 +157,14 @@ def test_parse_warns_on_many_missing_ao_rows_truncates_message(tmp_path):
 def test_parse_does_not_warn_on_complete_log():
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        parse_cp2k_overlap_matrix_log_data(OVERLAP_LOG)
+        Cp2kOverlapMatrix.from_cp2k_output(OVERLAP_LOG)
 
     assert caught == []
 
 
 def test_parse_threshold_preserves_shape_and_metadata():
-    full = parse_cp2k_overlap_matrix_log_data(OVERLAP_LOG)
-    parsed = parse_cp2k_overlap_matrix_log_data(OVERLAP_LOG, threshold=0.03)
+    full = Cp2kOverlapMatrix.from_cp2k_output(OVERLAP_LOG)
+    parsed = Cp2kOverlapMatrix.from_cp2k_output(OVERLAP_LOG, threshold=0.03)
 
     assert parsed.matrix.shape == (58, 58)
     assert parsed.matrix.nnz == 1700
@@ -179,10 +175,10 @@ def test_parse_threshold_preserves_shape_and_metadata():
 
 def test_sparse_overlap_npz_roundtrip(tmp_path):
     output_path = tmp_path / "overlap.npz"
-    expected = parse_cp2k_overlap_matrix_log_data(OVERLAP_LOG, threshold=0.01)
+    expected = Cp2kOverlapMatrix.from_cp2k_output(OVERLAP_LOG, threshold=0.01)
 
-    write_sparse_overlap_npz(OVERLAP_LOG, output_path, threshold=0.01)
-    parsed = read_sparse_overlap_npz(output_path)
+    Cp2kOverlapMatrix.from_cp2k_output(OVERLAP_LOG, threshold=0.01).to_npz(output_path)
+    parsed = Cp2kOverlapMatrix.from_npz(output_path)
 
     assert output_path.exists()
     assert parsed.matrix.shape == (58, 58)
@@ -204,6 +200,15 @@ def test_sparse_overlap_npz_roundtrip(tmp_path):
         assert data["threshold"] == pytest.approx(0.01)
 
 
+def test_sparse_overlap_npz_roundtrip_preserves_threshold(tmp_path):
+    output_path = tmp_path / "overlap.npz"
+
+    Cp2kOverlapMatrix.from_cp2k_output(OVERLAP_LOG, threshold=0.02).to_npz(output_path)
+    parsed = Cp2kOverlapMatrix.from_npz(output_path)
+
+    assert parsed.threshold == pytest.approx(0.02)
+
+
 def test_cli_writes_sparse_overlap_npz(tmp_path):
     output_path = tmp_path / "overlap-cli.npz"
 
@@ -215,7 +220,7 @@ def test_cli_writes_sparse_overlap_npz(tmp_path):
             "0.03",
         ]
     )
-    parsed = read_sparse_overlap_npz(output_path)
+    parsed = Cp2kOverlapMatrix.from_npz(output_path)
 
     assert parsed.matrix.shape == (58, 58)
     assert parsed.matrix.nnz == 1700
