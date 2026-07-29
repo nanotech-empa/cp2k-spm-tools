@@ -56,12 +56,18 @@ def parse_cp2k_overlap_matrix_log_data(
 ) -> Cp2kOverlapMatrixLog:
     """Parse CP2K human-readable ``OVERLAP MATRIX`` blocks.
 
-    CP2K prints the matrix in repeated column blocks. Each data row starts with
-    the 1-based AO index, atom index, element, and orbital label, followed by
-    one matrix value for every active column header. The returned sparse matrix
-    keeps only entries whose absolute value is larger than ``threshold``.
-    Its shape and AO metadata are inferred from the parsed indices and do not
-    depend on that threshold.
+    CP2K prints the matrix under a single ``OVERLAP MATRIX`` title, repeating
+    only the column headers beneath it. Each data row starts with the 1-based
+    AO index, atom index, element, and orbital label, followed by one matrix
+    value for every active column header. The returned sparse matrix keeps only
+    entries whose absolute value is larger than ``threshold``. Its shape and AO
+    metadata are inferred from the parsed indices and do not depend on that
+    threshold.
+
+    Only the **first** complete matrix is parsed. Parsing stops at the first
+    line that is neither a column header nor a data row, and at any second
+    ``OVERLAP MATRIX`` title, so unrelated tables later in a full CP2K output
+    are never folded into the result.
 
     Args:
         path: CP2K output or log file containing an ``OVERLAP MATRIX`` block.
@@ -73,6 +79,10 @@ def parse_cp2k_overlap_matrix_log_data(
 
     Raises:
         ValueError: If the file contains no overlap-matrix entries.
+
+    Warns:
+        UserWarning: If unexpected lines were skipped between the title and the
+            first data row, which may indicate an unrecognised output format.
     """
 
     path = Path(path)
