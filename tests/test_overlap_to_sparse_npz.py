@@ -125,6 +125,22 @@ def test_parse_warns_on_missing_ao_rows(tmp_path):
     assert parsed.element[1] == ""
 
 
+def test_parse_warns_on_multiple_missing_ao_rows(tmp_path):
+    log = write_log(
+        tmp_path,
+        " OVERLAP MATRIX\n"
+        "              1              2              3              4\n"
+        "      1       1 C  s       1.000000D+00   0.000000D+00   0.000000D+00   0.000000D+00\n"
+        "      4       2 H  s       0.000000D+00   0.000000D+00   0.000000D+00   1.000000D+00\n",
+    )
+
+    with pytest.warns(UserWarning, match=r"No overlap data row for AO index 2, 3\b"):
+        parsed = parse_cp2k_overlap_matrix_log_data(log)
+
+    assert parsed.matrix.shape == (4, 4)
+    assert parsed.atom_index[1] == 0 and parsed.atom_index[2] == 0
+
+
 def test_parse_warns_on_many_missing_ao_rows_truncates_message(tmp_path):
     """The warning lists at most 10 missing indices, then a total count."""
 
