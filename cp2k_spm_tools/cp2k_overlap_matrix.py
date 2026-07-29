@@ -50,7 +50,6 @@ class Cp2kOverlapMatrixLog:
 
 def parse_cp2k_overlap_matrix_log_data(
     path: Union[str, Path],
-    n_atomic_orbitals: Optional[int] = None,
     *,
     threshold: Optional[float] = None,
 ) -> Cp2kOverlapMatrixLog:
@@ -60,11 +59,11 @@ def parse_cp2k_overlap_matrix_log_data(
     the 1-based AO index, atom index, element, and orbital label, followed by
     one matrix value for every active column header. The returned sparse matrix
     keeps only entries whose absolute value is larger than ``threshold``.
+    Its shape and AO metadata are inferred from the parsed indices and do not
+    depend on that threshold.
 
     Args:
         path: CP2K output or log file containing an ``OVERLAP MATRIX`` block.
-        n_atomic_orbitals: Expected total number of atomic orbitals. By default,
-            use the largest AO index found in the log.
         threshold: Keep only matrix entries with an absolute value larger than
             this value. ``None`` is equivalent to zero.
 
@@ -147,18 +146,16 @@ def parse_cp2k_overlap_matrix_log_data(
     if not basis:
         raise ValueError(f"No overlap-matrix entries found in {path}")
 
-    n_basis = int(n_atomic_orbitals) if n_atomic_orbitals is not None else max_index
-    matrix = sp.coo_matrix((vals, (rows, cols)), shape=(n_basis, n_basis)).tocsr()
-    basis_index = np.arange(1, n_basis + 1, dtype=np.int64)
-    atom_index = np.zeros(n_basis, dtype=np.int64)
-    elements = np.full(n_basis, "", dtype="U8")
-    orbitals = np.full(n_basis, "", dtype="U16")
+    matrix = sp.coo_matrix((vals, (rows, cols)), shape=(max_index, max_index)).tocsr()
+    basis_index = np.arange(1, max_index + 1, dtype=np.int64)
+    atom_index = np.zeros(max_index, dtype=np.int64)
+    elements = np.full(max_index, "", dtype="U8")
+    orbitals = np.full(max_index, "", dtype="U16")
 
     for irow, (atom, element, orbital) in basis.items():
-        if irow < n_basis:
-            atom_index[irow] = atom
-            elements[irow] = element
-            orbitals[irow] = orbital
+        atom_index[irow] = atom
+        elements[irow] = element
+        orbitals[irow] = orbital
 
     return Cp2kOverlapMatrixLog(
         matrix=matrix,
@@ -193,7 +190,6 @@ def write_sparse_overlap_npz(
     output_path: Union[str, Path],
     *,
     threshold: float = 0.0,
-    n_atomic_orbitals: Optional[int] = None,
 ) -> None:
     """Convert a CP2K overlap matrix log to a compressed sparse NPZ file.
 
@@ -204,7 +200,6 @@ def write_sparse_overlap_npz(
 
     parsed = parse_cp2k_overlap_matrix_log_data(
         input_path,
-        n_atomic_orbitals=n_atomic_orbitals,
         threshold=threshold,
     )
     matrix = parsed.matrix.tocoo()
