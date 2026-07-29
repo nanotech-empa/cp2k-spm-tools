@@ -20,6 +20,24 @@ def assert_overlap_metadata_equal(left, right):
         np.testing.assert_array_equal(getattr(left, name), getattr(right, name))
 
 
+def assert_parses_like_reference_log(path):
+    """The parse of ``path`` must match the pristine reference log exactly."""
+
+    expected = parse_cp2k_overlap_matrix_log_data(OVERLAP_LOG)
+    parsed = parse_cp2k_overlap_matrix_log_data(path)
+
+    assert parsed.matrix.shape == expected.matrix.shape
+    np.testing.assert_allclose(parsed.matrix.toarray(), expected.matrix.toarray())
+    assert_overlap_metadata_equal(parsed, expected)
+    return parsed
+
+
+def write_log(tmp_path, text):
+    path = tmp_path / "cp2k-overlap.log"
+    path.write_text(text)
+    return path
+
+
 def test_parse_cp2k_overlap_matrix_log_data():
     parsed = parse_cp2k_overlap_matrix_log_data(OVERLAP_LOG)
 
@@ -45,6 +63,48 @@ def test_parse_cp2k_overlap_matrix_log_data():
         parsed.orbital[-5:],
         np.array(["3pz", "3px", "4py", "4pz", "4px"]),
     )
+
+
+def test_parse_stops_after_first_block(tmp_path):
+    """A second matrix must not be summed into the first via duplicate COO coordinates.
+
+    CP2K prints "OVERLAP MATRIX" once per matrix -- the reference log holds one
+    title above 29 column-header blocks -- so a repeated title starts a new
+    matrix and must terminate the parse.
+    """
+
+    path = write_log(tmp_path, OVERLAP_LOG.read_text() * 2)
+
+    assert_parses_like_reference_log(path)
+
+
+def test_parse_ignores_trailing_table(tmp_path):
+    """A later table shaped like overlap data must not be absorbed into the matrix."""
+
+    trailing = """
+ MULLIKEN POPULATION ANALYSIS
+
+                                1                    2
+     1    1  C     2s        9.99000000000000     8.88000000000000
+     2    1  C     3s        7.77000000000000     6.66000000000000
+"""
+    path = write_log(tmp_path, OVERLAP_LOG.read_text() + trailing)
+
+    assert_parses_like_reference_log(path)
+
+
+def test_parse_warns_on_unexpected_preamble_lines(tmp_path):
+    """Lines skipped inside the block are reported, so a partial parse is never silent."""
+
+    text = OVERLAP_LOG.read_text().replace(
+        " OVERLAP MATRIX\n",
+        " OVERLAP MATRIX\n Unexpected preamble line\n",
+        1,
+    )
+    path = write_log(tmp_path, text)
+
+    with pytest.warns(UserWarning, match="Skipped 1 unexpected line"):
+        assert_parses_like_reference_log(path)
 
 
 def test_parse_threshold_preserves_shape_and_metadata():

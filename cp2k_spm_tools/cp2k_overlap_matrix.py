@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
@@ -91,6 +92,11 @@ def parse_cp2k_overlap_matrix_log_data(
     max_index = 0
     threshold_value = 0.0 if threshold is None else float(threshold)
 
+    # Whether any data row has been parsed yet, and the unexpected lines seen
+    # between the title and the first data row.
+    data_started = False
+    skipped: List[str] = []
+
     def is_int_token(token: str) -> bool:
         return token.isdigit()
 
@@ -104,6 +110,11 @@ def parse_cp2k_overlap_matrix_log_data(
                 continue
 
             if "OVERLAP MATRIX" in line:
+                # CP2K prints the title once per matrix and repeats only the
+                # column headers beneath it, so a second title starts a new
+                # matrix and therefore ends this one.
+                if data_started:
+                    break
                 inside_overlap_matrix = True
                 current_cols = None
                 continue
@@ -113,22 +124,32 @@ def parse_cp2k_overlap_matrix_log_data(
 
             parts = line.split()
 
-            if parts and all(is_int_token(token) for token in parts):
+            if all(is_int_token(token) for token in parts):
                 current_cols = [int(token) - 1 for token in parts]
                 max_index = max(max_index, max(current_cols) + 1)
                 continue
 
-            if current_cols is None or len(parts) < 5:
-                continue
-            if not (is_int_token(parts[0]) and is_int_token(parts[1])):
+            is_data = (
+                current_cols is not None
+                and len(parts) >= 5
+                and is_int_token(parts[0])
+                and is_int_token(parts[1])
+                and len(parts[4:]) == len(current_cols)
+                and all(is_float_token(token) for token in parts[4:])
+            )
+
+            if not is_data:
+                # Once data has been seen, the first line that is neither a
+                # column header nor a data row ends the matrix. Anything after
+                # it belongs to an unrelated part of the CP2K output and must
+                # not be summed into the overlap entries.
+                if data_started:
+                    break
+                skipped.append(line)
                 continue
 
+            data_started = True
             value_tokens = parts[4:]
-            if len(value_tokens) != len(current_cols):
-                continue
-            if not all(is_float_token(token) for token in value_tokens):
-                continue
-
             irow = int(parts[0]) - 1
             atom = int(parts[1])
             element = parts[2]
@@ -142,6 +163,12 @@ def parse_cp2k_overlap_matrix_log_data(
                     rows.append(irow)
                     cols.append(jcol)
                     vals.append(value)
+
+    if skipped:
+        warnings.warn(
+            f"Skipped {len(skipped)} unexpected line(s) before overlap data in {path}",
+            stacklevel=2,
+        )
 
     if not basis:
         raise ValueError(f"No overlap-matrix entries found in {path}")
