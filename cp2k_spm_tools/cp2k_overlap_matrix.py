@@ -80,7 +80,8 @@ def parse_cp2k_overlap_matrix_log_data(
 
     Warns:
         UserWarning: If unexpected lines were skipped between the title and the
-            first data row, which may indicate an unrecognised output format.
+            first data row, which may indicate an unrecognised output format, or
+            if the parsed AO indices have gaps, leaving empty metadata rows.
     """
 
     path = Path(path)
@@ -176,6 +177,19 @@ def parse_cp2k_overlap_matrix_log_data(
 
     if not basis:
         raise ValueError(f"No overlap-matrix entries found in {path}")
+
+    # Rows are filled in only where the log actually had a data row, so a gap
+    # leaves atom_index 0 and empty element/orbital strings for that AO.
+    missing = sorted(set(range(max_index)) - basis.keys())
+    if missing:
+        shown = ", ".join(str(index + 1) for index in missing[:10])
+        if len(missing) > 10:
+            shown += f", ... ({len(missing)} total)"
+        warnings.warn(
+            f"No overlap data row for AO index {shown} in {path}; "
+            f"their atom, element and orbital metadata will be empty",
+            stacklevel=2,
+        )
 
     matrix = sp.coo_matrix((vals, (rows, cols)), shape=(max_index, max_index)).tocsr()
     basis_index = np.arange(1, max_index + 1, dtype=np.int64)
