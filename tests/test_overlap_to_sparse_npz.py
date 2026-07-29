@@ -125,6 +125,23 @@ def test_parse_warns_on_missing_ao_rows(tmp_path):
     assert parsed.element[1] == ""
 
 
+def test_parse_warns_on_many_missing_ao_rows_truncates_message(tmp_path):
+    """The warning lists at most 10 missing indices, then a total count."""
+
+    n_cols = 15
+    header = " ".join(str(i) for i in range(1, n_cols + 1))
+    values = " ".join("1.000000D+00" if i == 0 else "0.000000D+00" for i in range(n_cols))
+    log = write_log(
+        tmp_path,
+        f" OVERLAP MATRIX\n{header}\n      1       1 C  s       {values}\n",
+    )
+
+    with pytest.warns(UserWarning, match=r"\.\.\. \(14 total\)"):
+        parsed = parse_cp2k_overlap_matrix_log_data(log)
+
+    assert parsed.matrix.shape == (n_cols, n_cols)
+
+
 def test_parse_does_not_warn_on_complete_log():
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
