@@ -6,23 +6,15 @@ from pathlib import Path
 import numpy as np
 from scipy import constants
 
-from cp2k_spm_tools.cp2k_overlap_matrix import (
-    Cp2kOverlapMatrixLog,
-    parse_cp2k_overlap_matrix_log_data,
-    read_sparse_overlap_npz,
-    write_sparse_overlap_npz,
-)
+from cp2k_spm_tools.cp2k_overlap_matrix import Cp2kOverlapMatrix
 
 __all__ = [
-    "Cp2kOverlapMatrixLog",
+    "Cp2kOverlapMatrix",
     "SupercellWavefunctions",
     "parse_cp2k_cell_vectors",
-    "parse_cp2k_overlap_matrix_log_data",
     "print_eigenvalue_summary",
     "read_cp2k_wfn",
-    "read_sparse_overlap_npz",
     "read_xyz_coordinates",
-    "write_sparse_overlap_npz",
 ]
 
 hartree_to_ev = constants.physical_constants["Hartree energy in eV"][0]

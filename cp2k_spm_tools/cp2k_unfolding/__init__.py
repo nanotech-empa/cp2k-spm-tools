@@ -17,13 +17,12 @@ from .geometry import (
     snap_primitive_vectors_to_supercell,
 )
 from .io import (
+    Cp2kOverlapMatrix,
     SupercellWavefunctions,
     hartree_to_ev,
     parse_cp2k_cell_vectors,
-    parse_cp2k_overlap_matrix_log_data,
     print_eigenvalue_summary,
     read_cp2k_wfn,
-    read_sparse_overlap_npz,
     read_xyz_coordinates,
 )
 from .kpath import (
@@ -55,6 +54,7 @@ from .widgets import PrimitiveCellWidgets, create_primitive_cell_widgets, read_p
 
 __all__ = (
     "AOMapping",
+    "Cp2kOverlapMatrix",
     "PrimitiveCellWidgets",
     "SparseUnfoldingCache",
     "SupercellWavefunctions",
@@ -78,7 +78,6 @@ __all__ = (
     "mo_norms_sparse",
     "parse_cp2k_atom_pdos_files",
     "parse_cp2k_cell_vectors",
-    "parse_cp2k_overlap_matrix_log_data",
     "parse_matrix_text",
     "plot_unfolded_kpath",
     "prepare_sparse_unfolding_cache",
@@ -88,7 +87,6 @@ __all__ = (
     "project_kpoints_to_kpath",
     "read_cp2k_wfn",
     "read_primitive_cell_widgets",
-    "read_sparse_overlap_npz",
     "read_xyz_coordinates",
     "reciprocal_vectors",
     "snap_primitive_vectors_to_supercell",
