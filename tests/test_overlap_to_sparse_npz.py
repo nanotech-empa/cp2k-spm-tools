@@ -50,9 +50,7 @@ def test_parse_cp2k_overlap_matrix_log_data(tmp_path):
 
 
 def test_parse_threshold_preserves_shape_and_metadata(tmp_path):
-    parsed = parse_cp2k_overlap_matrix_log_data(
-        write_overlap_log(tmp_path), threshold=0.03
-    )
+    parsed = parse_cp2k_overlap_matrix_log_data(write_overlap_log(tmp_path), threshold=0.03)
 
     assert parsed.matrix.shape == (3, 3)
     np.testing.assert_allclose(
