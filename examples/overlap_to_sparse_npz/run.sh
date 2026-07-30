@@ -20,9 +20,9 @@ import os
 
 import numpy as np
 
-from cp2k_spm_tools.cp2k_overlap_matrix import read_sparse_overlap_npz
+from cp2k_spm_tools.cp2k_overlap_matrix import Cp2kOverlapMatrix
 
-parsed = read_sparse_overlap_npz(os.environ["OUTPUT_FILE"])
+parsed = Cp2kOverlapMatrix.from_npz(os.environ["OUTPUT_FILE"])
 n_rows, n_cols = parsed.matrix.shape
 
 print(f"shape:          {n_rows} x {n_cols}")
