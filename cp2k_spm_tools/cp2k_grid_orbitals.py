@@ -45,7 +45,8 @@ class Cp2kGridOrbitals:
             self.dtype = np.float64
 
         # geometry
-        self.cell = None  # Bohr radii / [au]
+        self.cell = None  # lattice vector lengths in Bohr radii / [au]
+        self.cell_vectors = None  # lattice vectors in Bohr radii / [au]
         self.ase_atoms = None
         self.atom_kinds = None  # saves the kind for each atom
 
@@ -71,9 +72,11 @@ class Cp2kGridOrbitals:
 
         # Orbitals on discrete grid
         self.morb_grids = None
-        self.dv = None  # [dx, dy, dz] in [au]
+        self.dv = None  # grid step vector lengths [dx, dy, dz] in [au]
+        self.dv_vectors = None  # grid step vectors in [au]
         self.origin = None  # origin point of the evaluation grid
         self.eval_cell = None
+        self.eval_cell_vectors = None
         self.eval_cell_n = None
 
         self.last_calc_iz = None  # last directly calculated z plane (others extrapolated)
@@ -81,6 +84,88 @@ class Cp2kGridOrbitals:
     @property
     def cell_ang(self):
         return self.cell / ang_2_bohr
+
+    @property
+    def cell_vectors_ang(self):
+        return self.cell_vectors / ang_2_bohr
+
+    @property
+    def eval_cell_vectors_ang(self):
+        return self.eval_cell_vectors / ang_2_bohr
+
+    def _cell_unit_vectors(self):
+        return self.cell_vectors / self.cell[:, None]
+
+    def _is_in_plane_orthogonal_cell(self, tol=1e-10):
+        return abs(np.dot(self.cell_vectors[0], self.cell_vectors[1])) < tol * self.cell[0] * self.cell[1]
+
+    def _is_supported_skewed_surface_cell(self, tol=1e-10):
+        return (
+            abs(self.cell_vectors[0, 2]) < tol * self.cell[0]
+            and abs(self.cell_vectors[1, 2]) < tol * self.cell[1]
+            and np.linalg.norm(self.cell_vectors[2, :2]) < tol * self.cell[2]
+        )
+
+    def _cartesian_to_fractional(self, coord):
+        return np.asarray(coord) @ np.linalg.inv(self.cell_vectors)
+
+    def _cartesian_to_grid(self, coord, grid_n):
+        return self._cartesian_to_fractional(coord) * grid_n
+
+    def _update_grid_vectors_from_lengths(self):
+        self.dv_vectors = self._cell_unit_vectors() * self.dv[:, None]
+        self.eval_cell_vectors = self.dv_vectors * self.eval_cell_n[:, None]
+        self.eval_cell = self.eval_cell_n * self.dv
+
+    def _eval_cell_matrix(self):
+        if self.eval_cell_vectors is None:
+            return self.eval_cell * np.eye(3)
+        return self.eval_cell_vectors
+
+    def _voxel_volume(self):
+        if self.dv_vectors is None:
+            return np.prod(self.dv)
+        return abs(np.linalg.det(self.dv_vectors))
+
+    def _surface_reciprocal_grids(self, shape):
+        a_vec = self.dv_vectors[0] * shape[0]
+        b_vec = self.dv_vectors[1] * shape[1]
+        normal = np.cross(a_vec, b_vec)
+        normal_norm_sq = np.dot(normal, normal)
+        if normal_norm_sq < 1e-20:
+            raise ValueError("Cannot build reciprocal grid for a degenerate surface cell.")
+
+        b1 = 2 * np.pi * np.cross(b_vec, normal) / normal_norm_sq
+        b2 = 2 * np.pi * np.cross(normal, a_vec) / normal_norm_sq
+
+        m_arr = np.fft.fftfreq(shape[0]) * shape[0]
+        n_arr = np.fft.rfftfreq(shape[1]) * shape[1]
+        m_grid, n_grid = np.meshgrid(m_arr, n_arr, indexing="ij")
+
+        g_vec = m_grid[..., None] * b1 + n_grid[..., None] * b2
+        return np.sum(g_vec**2, axis=-1)
+
+    def _extrapolation_step_length(self):
+        normal = np.cross(self.dv_vectors[0], self.dv_vectors[1])
+        normal /= np.linalg.norm(normal)
+        dz = abs(np.dot(self.dv_vectors[2], normal))
+        if dz < 1e-12:
+            raise ValueError("The extrapolation direction is parallel to the surface plane.")
+        return dz
+
+    @staticmethod
+    def _parse_cell_vector_parts(parts):
+        values = parts[1:]
+        unit = "angstrom"
+        if values and values[0].startswith("["):
+            unit = values[0].strip("[]").lower()
+            values = values[1:]
+        vector = np.array([float(x) for x in values[:3]])
+        if unit in {"angstrom", "ang"}:
+            return vector
+        if unit in {"bohr", "au", "a.u."}:
+            return vector / ang_2_bohr
+        raise ValueError(f"Unsupported CP2K cell vector unit: {unit}")
 
     ### -----------------------------------------
     ### General cp2k routines
@@ -93,7 +178,7 @@ class Cp2kGridOrbitals:
         * Cell size
         """
         self.kind_elem_basis = {}
-        self.cell = np.zeros(3)
+        self.cell_vectors = np.zeros((3, 3))
         with open(cp2k_input_file) as f:
             lines = f.readlines()
             for i in range(len(lines)):
@@ -146,29 +231,20 @@ class Cp2kGridOrbitals:
 
                 # Have we found the CELL info?
                 if parts[0] == "ABC":
-                    if parts[1] == "[angstrom]":
-                        self.cell[0] = float(parts[2])
-                        self.cell[1] = float(parts[3])
-                        self.cell[2] = float(parts[4])
-                    else:
-                        self.cell[0] = float(parts[1])
-                        self.cell[1] = float(parts[2])
-                        self.cell[2] = float(parts[3])
+                    self.cell_vectors = np.diag(self._parse_cell_vector_parts(parts))
 
                 if parts[0] == "A" or parts[0] == "B" or parts[0] == "C":
-                    prim_vec = np.array([float(x) for x in parts[1:]])
-                    if np.sum(prim_vec > 0.0) > 1:
-                        raise ValueError("Cell is not rectangular")
-                    ind = np.argmax(prim_vec > 0.0)
-                    self.cell[ind] = prim_vec[ind]
+                    ind = {"A": 0, "B": 1, "C": 2}[parts[0]]
+                    self.cell_vectors[ind] = self._parse_cell_vector_parts(parts)
 
-        self.cell *= ang_2_bohr
+        self.cell_vectors *= ang_2_bohr
+        self.cell = np.linalg.norm(self.cell_vectors, axis=1)
 
         if any(self.cell < 1e-3):
-            raise ValueError("Cell " + str(self.cell) + " is invalid")
+            raise ValueError("Cell " + str(self.cell_vectors) + " is invalid")
 
         if self.ase_atoms is not None:
-            self.ase_atoms.cell = self.cell / ang_2_bohr
+            self.ase_atoms.cell = self.cell_vectors / ang_2_bohr
 
     def read_xyz(self, file_xyz):
         """Read atomic positions from .xyz file (in Bohr radiuses)"""
@@ -186,7 +262,7 @@ class Cp2kGridOrbitals:
         self.ase_atoms = ase.io.read(io.StringIO("".join(fxyz_contents)), format="xyz")
 
         if self.cell is not None:
-            self.ase_atoms.cell = self.cell / ang_2_bohr
+            self.ase_atoms.cell = self.cell_vectors / ang_2_bohr
 
     def center_atoms_to_cell(self):
         self.ase_atoms.center()
@@ -603,8 +679,19 @@ class Cp2kGridOrbitals:
         eval_regions_ang = [x_eval_region, y_eval_region, z_eval_region]
         eval_regions = [np.array(er) * ang_2_bohr if er is not None else er for er in eval_regions_ang]
 
+        if not self._is_in_plane_orthogonal_cell() and any(er is not None for er in eval_regions[:2]):
+            raise NotImplementedError(
+                "Custom x/y evaluation regions are not supported for non-orthogonal in-plane cells. "
+                "Use the full periodic surface cell in x/y."
+            )
+        if not self._is_in_plane_orthogonal_cell() and not self._is_supported_skewed_surface_cell():
+            raise NotImplementedError(
+                "Non-orthogonal cells are supported only for slab cells with A/B in the xy plane and C along z."
+            )
+
         global_cell_n = (np.round(self.cell / dr_guess)).astype(int)
         self.dv = self.cell / global_cell_n
+        self.dv_vectors = self.cell_vectors / global_cell_n[:, None]
 
         ### ----------------------------------------
         ### Define evaluation grid
@@ -633,7 +720,7 @@ class Cp2kGridOrbitals:
         self.last_calc_iz = self.eval_cell_n[2] - 1
         ext_z_n = int(np.round(reserve_extrap / self.dv[2]))
         self.eval_cell_n[2] += ext_z_n
-        self.eval_cell = self.eval_cell_n * self.dv
+        self._update_grid_vectors_from_lengths()
 
         ### ----------------------------------------
         ### Local evaluation grid around each atom
@@ -706,19 +793,39 @@ class Cp2kGridOrbitals:
             pos = self.ase_atoms[i_at].position * ang_2_bohr
 
             # how does the position match with the grid?
-            int_shift = (pos / self.dv).astype(int)
-            frac_shift = pos / self.dv - int_shift
+            atom_grid_pos = self._cartesian_to_grid(pos, global_cell_n)
+            int_shift = np.floor(atom_grid_pos).astype(int)
+            frac_shift = atom_grid_pos - int_shift
             origin_diff = int_shift - mid_ixs
 
-            # Shift the local grid coordinates such that (0,0,0) is the atom
-            rel_loc_cell_grids = []
+            # Shift the local grid coordinates such that (0,0,0) is the atom.
+            # The local arrays are lattice-axis distances; convert them to Cartesian
+            # coordinates before evaluating solid harmonics and radial functions.
+            rel_loc_axis_grids = []
             for i, loc_grid in enumerate(loc_cell_grids):
                 if pbc[i]:
-                    rel_loc_cell_grids.append(loc_grid - frac_shift[i] * self.dv[i])
+                    rel_loc_axis_grids.append(loc_grid - frac_shift[i] * self.dv[i])
                 else:
-                    rel_loc_cell_grids.append(loc_grid - pos[i])
+                    rel_loc_axis_grids.append(loc_grid - pos[i])
 
-            r_vec_2 = rel_loc_cell_grids[0] ** 2 + rel_loc_cell_grids[1] ** 2 + rel_loc_cell_grids[2] ** 2
+            unit_vectors = self._cell_unit_vectors()
+            rel_x = (
+                rel_loc_axis_grids[0] * unit_vectors[0, 0]
+                + rel_loc_axis_grids[1] * unit_vectors[1, 0]
+                + rel_loc_axis_grids[2] * unit_vectors[2, 0]
+            )
+            rel_y = (
+                rel_loc_axis_grids[0] * unit_vectors[0, 1]
+                + rel_loc_axis_grids[1] * unit_vectors[1, 1]
+                + rel_loc_axis_grids[2] * unit_vectors[2, 1]
+            )
+            rel_z = (
+                rel_loc_axis_grids[0] * unit_vectors[0, 2]
+                + rel_loc_axis_grids[1] * unit_vectors[1, 2]
+                + rel_loc_axis_grids[2] * unit_vectors[2, 2]
+            )
+
+            r_vec_2 = rel_x**2 + rel_y**2 + rel_z**2
 
             for i_spin in range(nspin):
                 morb_grids_local[i_spin].fill(0.0)
@@ -741,9 +848,9 @@ class Cp2kGridOrbitals:
                         atomic_orb = radial_part * self._spherical_harmonic_grid(
                             l,
                             m,
-                            rel_loc_cell_grids[0],
-                            rel_loc_cell_grids[1],
-                            rel_loc_cell_grids[2],
+                            rel_x,
+                            rel_y,
+                            rel_z,
                         )
                         time_spherical += time.time() - time2
                         time2 = time.time()
@@ -765,7 +872,7 @@ class Cp2kGridOrbitals:
                         self.morb_grids[i_spin][i_mo][:, :, :z_end_ind],
                         global_cell_n,
                         origin_diff,
-                        np.round(self.origin / self.dv).astype(int),
+                        np.round(self._cartesian_to_grid(self.origin, global_cell_n)).astype(int),
                         wrap=pbc,
                     )
             time_loc_glob_add += time.time() - time2
@@ -846,14 +953,12 @@ class Cp2kGridOrbitals:
                 energy = hartree_avg
 
             fourier = np.fft.rfft2(morb_plane)
-            # NB: rfft2 takes REAL fourier transform over last (y) axis and COMPLEX over other (x) axes
-            # dv in BOHR, so k is in 1/bohr
-            kx_arr = 2 * np.pi * np.fft.fftfreq(morb_plane.shape[0], self.dv[0])
-            ky_arr = 2 * np.pi * np.fft.rfftfreq(morb_plane.shape[1], self.dv[1])
-
-            kx_grid, ky_grid = np.meshgrid(kx_arr, ky_arr, indexing="ij")
-
-            prefactors = np.exp(-np.sqrt(kx_grid**2 + ky_grid**2 - 2 * (energy - hartree_avg)) * self.dv[2])
+            # NB: rfft2 takes REAL fourier transform over last (y) axis and COMPLEX over other (x) axes.
+            # The decay depends on |G| from the reciprocal surface metric. For orthogonal
+            # cells this reduces to the old kx**2 + ky**2 expression.
+            g2_grid = self._surface_reciprocal_grids(morb_plane.shape)
+            sqrt_arg = np.maximum(g2_grid - 2 * (energy - hartree_avg), 0.0)
+            prefactors = np.exp(-np.sqrt(sqrt_arg) * self._extrapolation_step_length())
             for iz in range(self.last_calc_iz + 1, self.eval_cell_n[2]):
                 fourier *= prefactors
                 self.morb_grids[ispin][morb_index, :, :, iz] = np.fft.irfft2(fourier, morb_plane.shape)
@@ -879,7 +984,7 @@ class Cp2kGridOrbitals:
                     comment=comment,
                     ase_atoms=self.ase_atoms,
                     origin=self.origin,
-                    cell=self.eval_cell * np.eye(3),
+                    cell=self._eval_cell_matrix(),
                     data=self.morb_grids[spin][local_ind],
                 )
             else:
@@ -888,7 +993,7 @@ class Cp2kGridOrbitals:
                     comment=comment,
                     ase_atoms=self.ase_atoms,
                     origin=self.origin,
-                    cell=self.eval_cell * np.eye(3),
+                    cell=self._eval_cell_matrix(),
                     data=self.morb_grids[spin][local_ind] ** 2,
                 )
             c.write_cube_file(filename)
@@ -907,7 +1012,7 @@ class Cp2kGridOrbitals:
         self.mpi_comm.Reduce(charge_dens, total_charge_dens, op=MPI.SUM)
 
         if self.mpi_rank == 0:
-            vol_elem = np.prod(self.dv)
+            vol_elem = self._voxel_volume()
             integrated_charge = np.sum(total_charge_dens) * vol_elem
             comment = "Integrated charge: %.6f" % integrated_charge
             c = Cube(
@@ -915,7 +1020,7 @@ class Cp2kGridOrbitals:
                 comment=comment,
                 ase_atoms=self.ase_atoms,
                 origin=self.origin,
-                cell=self.eval_cell * np.eye(3),
+                cell=self._eval_cell_matrix(),
                 data=total_charge_dens,
             )
 
@@ -942,7 +1047,7 @@ class Cp2kGridOrbitals:
         self.mpi_comm.Reduce(spin_dens, total_spin_dens, op=MPI.SUM)
 
         if self.mpi_rank == 0:
-            vol_elem = np.prod(self.dv)
+            vol_elem = self._voxel_volume()
             integrated = np.sum(np.abs(total_spin_dens)) * vol_elem
             comment = "Integrated abs spin: %.6f" % integrated
             c = Cube(
@@ -950,7 +1055,7 @@ class Cp2kGridOrbitals:
                 comment=comment,
                 ase_atoms=self.ase_atoms,
                 origin=self.origin,
-                cell=self.eval_cell * np.eye(3),
+                cell=self._eval_cell_matrix(),
                 data=total_spin_dens,
             )
             c.write_cube_file(filename)
