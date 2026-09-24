@@ -25,3 +25,33 @@ def test_snap_primitive_vectors_to_supercell():
     assert np.array_equal(matrix, [[2, 0], [0, 2]])
     assert matrix_float.shape == (2, 2)
     assert correction_norm > 0.0
+
+
+def test_sparse_unfolding_two_replica_chain():
+    import scipy.sparse as sp
+
+    from cp2k_spm_tools.cp2k_unfolding.geometry import build_modulo_lattice_ao_mapping
+    from cp2k_spm_tools.cp2k_unfolding.kpath import kfrac_to_cart
+    from cp2k_spm_tools.cp2k_unfolding.unfolding import unfold_band_weights_full
+
+    primitive_vectors = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    supercell_vectors = np.array([[2.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    coords = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+    mapping = build_modulo_lattice_ao_mapping(
+        symbols=["H", "H"],
+        coords_cart=coords,
+        primitive_vectors=primitive_vectors,
+        supercell_vectors=supercell_vectors,
+        aos_per_symbol={"H": 1},
+        verbose=False,
+    )
+
+    k_frac = folded_kpoints_from_supercell_matrix(np.array([[2, 0], [0, 1]]))
+    k_cart = kfrac_to_cart(k_frac, primitive_vectors)
+    coeffs = np.array([[1.0, 1.0], [1.0, -1.0]], dtype=float) / np.sqrt(2.0)
+
+    weights = unfold_band_weights_full(coeffs, k_cart, sp.eye(2, format="csr"), mapping, verbose=False)
+
+    assert np.allclose(mapping.ao_to_replica, [0, 1])
+    assert np.allclose(mapping.ao_to_local, [0, 0])
+    assert np.allclose(weights, [[1.0, 0.0], [0.0, 1.0]], atol=1.0e-12)

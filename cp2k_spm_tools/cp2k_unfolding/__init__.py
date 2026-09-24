@@ -1,4 +1,4 @@
-"""Geometry and reciprocal-space helpers for CP2K band unfolding."""
+"""Reusable helpers for CP2K localized-basis band unfolding."""
 
 from .geometry import (
     AOMapping,
@@ -16,6 +16,15 @@ from .geometry import (
     primitive_vectors_from_supercell_matrix,
     snap_primitive_vectors_to_supercell,
 )
+from .io import (
+    Cp2kOverlapMatrix,
+    SupercellWavefunctions,
+    hartree_to_ev,
+    parse_cp2k_cell_vectors,
+    print_eigenvalue_summary,
+    read_cp2k_wfn,
+    read_xyz_coordinates,
+)
 from .kpath import (
     folded_kpoints_from_supercell_matrix,
     guess_2d_lattice_type,
@@ -25,16 +34,36 @@ from .kpath import (
     reciprocal_vectors,
     standard_kpath,
 )
+from .pdos import parse_cp2k_atom_pdos_files, write_sparse_atom_pdos_npz
+from .unfolding import (
+    SparseUnfoldingCache,
+    fourier_project_coefficients,
+    mo_norms_sparse,
+    prepare_sparse_unfolding_cache,
+    primitive_overlap_metric,
+    sparse_bloch_overlap_metric_from_cache,
+    sparse_bloch_rhs_from_cache,
+    spectral_weight_full,
+    spectral_weight_simple,
+    unfold_band_weights,
+    unfold_band_weights_full,
+    unfold_band_weights_sparse_full,
+)
 
 __all__ = (
     "AOMapping",
+    "Cp2kOverlapMatrix",
+    "SparseUnfoldingCache",
+    "SupercellWavefunctions",
     "build_modulo_lattice_ao_mapping",
     "cluster_basis_fractional_coords",
     "folded_kpoints_from_supercell_matrix",
+    "fourier_project_coefficients",
     "fractional_coordinates",
     "guess_2d_lattice_type",
     "guess_dimensionality_from_cell_and_coords",
     "guess_primitive_vectors_from_geometry",
+    "hartree_to_ev",
     "infer_aos_per_symbol_from_overlap_metadata",
     "infer_aos_per_symbol_from_wfn",
     "integer_supercell_matrix",
@@ -42,10 +71,26 @@ __all__ = (
     "kpath_axis_from_fractional_path",
     "lattice_matrix",
     "matrix_to_text",
+    "mo_norms_sparse",
+    "parse_cp2k_atom_pdos_files",
+    "parse_cp2k_cell_vectors",
     "parse_matrix_text",
+    "prepare_sparse_unfolding_cache",
+    "primitive_overlap_metric",
     "primitive_vectors_from_supercell_matrix",
+    "print_eigenvalue_summary",
     "project_kpoints_to_kpath",
+    "read_cp2k_wfn",
+    "read_xyz_coordinates",
     "reciprocal_vectors",
     "snap_primitive_vectors_to_supercell",
+    "sparse_bloch_overlap_metric_from_cache",
+    "sparse_bloch_rhs_from_cache",
+    "spectral_weight_full",
+    "spectral_weight_simple",
     "standard_kpath",
+    "unfold_band_weights",
+    "unfold_band_weights_full",
+    "unfold_band_weights_sparse_full",
+    "write_sparse_atom_pdos_npz",
 )
