@@ -66,3 +66,47 @@ def test_cli_input_parsers():
     assert parse_atom_indices("1 3-5 7..6") == [0, 2, 3, 4, 6, 5]
     assert parse_path_labels("G M K G") == ["G", "M", "K", "G"]
     assert parse_path_labels("GMKG") == ["G", "M", "K", "G"]
+
+
+def test_plot_unfolded_kpath():
+    import matplotlib.pyplot as plt
+
+    from cp2k_spm_tools.cp2k_unfolding import plot_unfolded_kpath
+
+    ax = plot_unfolded_kpath(
+        path_k_indices=np.array([0, 1]),
+        path_x=np.array([0.0, 1.0]),
+        x_ticks=[0.0, 1.0],
+        x_tick_labels=["G", "X"],
+        energies_ev=np.array([-1.0, 1.0]),
+        weights=np.array([[1.0, 0.0], [0.25, 0.5]]),
+    )
+
+    assert len(ax.collections) == 2
+    assert ax.get_xlabel() == "primitive-cell k-path"
+    assert [tick.get_text() for tick in ax.get_xticklabels()] == ["G", "X"]
+    plt.close(ax.figure)
+
+
+def test_read_primitive_cell_widgets():
+    from types import SimpleNamespace
+
+    from cp2k_spm_tools.cp2k_unfolding import PrimitiveCellWidgets, read_primitive_cell_widgets
+
+    widget_state = PrimitiveCellWidgets(
+        primitive_vectors_widget=SimpleNamespace(value="1 0 0\n0 1 0"),
+        supercell_vectors_widget=SimpleNamespace(value="2 0 0\n0 2 0"),
+        lattice_type_widget=SimpleNamespace(value="auto"),
+        symbols=[],
+        coords=np.empty((0, 3)),
+        dim=2,
+        primitive_guess=np.eye(2, 3),
+        supercell_guess=2.0 * np.eye(2, 3),
+        lattice_type_guess="square",
+    )
+
+    primitive, supercell, lattice_type = read_primitive_cell_widgets(widget_state)
+
+    assert np.allclose(primitive, np.eye(2, 3))
+    assert np.allclose(supercell, 2.0 * np.eye(2, 3))
+    assert lattice_type == "square"
