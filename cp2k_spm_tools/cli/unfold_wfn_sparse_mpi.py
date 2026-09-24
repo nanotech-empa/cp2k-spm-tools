@@ -19,11 +19,9 @@ from cp2k_spm_tools.cp2k_unfolding.geometry import (
     snap_primitive_vectors_to_supercell,
 )
 from cp2k_spm_tools.cp2k_unfolding.io import (
-    Cp2kOverlapMatrixLog,
+    Cp2kOverlapMatrix,
     parse_cp2k_cell_vectors,
-    parse_cp2k_overlap_matrix_log_data,
     read_cp2k_wfn,
-    read_sparse_overlap_npz,
     read_xyz_coordinates,
 )
 from cp2k_spm_tools.cp2k_unfolding.kpath import (
@@ -37,7 +35,7 @@ from cp2k_spm_tools.cp2k_unfolding.pdos import write_sparse_atom_pdos_npz
 from cp2k_spm_tools.cp2k_unfolding.unfolding import mo_norms_sparse, unfold_band_weights_full
 
 
-def _pack_overlap(overlap: Cp2kOverlapMatrixLog) -> dict[str, np.ndarray | tuple[int, int]]:
+def _pack_overlap(overlap: Cp2kOverlapMatrix) -> dict[str, np.ndarray | tuple[int, int] | float]:
     matrix = overlap.matrix.tocsr()
     return {
         "data": matrix.data,
@@ -48,20 +46,22 @@ def _pack_overlap(overlap: Cp2kOverlapMatrixLog) -> dict[str, np.ndarray | tuple
         "atom_index": overlap.atom_index,
         "element": overlap.element,
         "orbital": overlap.orbital,
+        "threshold": overlap.threshold,
     }
 
 
-def _unpack_overlap(payload: dict[str, np.ndarray | tuple[int, int]]) -> Cp2kOverlapMatrixLog:
+def _unpack_overlap(payload: dict[str, np.ndarray | tuple[int, int] | float]) -> Cp2kOverlapMatrix:
     matrix = sp.csr_matrix(
         (payload["data"], payload["indices"], payload["indptr"]),
         shape=payload["shape"],
     )
-    return Cp2kOverlapMatrixLog(
+    return Cp2kOverlapMatrix(
         matrix=matrix,
         basis_index=payload["basis_index"],
         atom_index=payload["atom_index"],
         element=payload["element"],
         orbital=payload["orbital"],
+        threshold=float(payload["threshold"]),
     )
 
 
@@ -143,9 +143,9 @@ def write_unfolding_npz_mpi(
         if resolved_overlap_format == "auto":
             resolved_overlap_format = "sparse" if str(overlap_path).endswith(".npz") else "log"
         if resolved_overlap_format == "sparse":
-            overlap = read_sparse_overlap_npz(overlap_path)
+            overlap = Cp2kOverlapMatrix.from_npz(overlap_path)
         elif resolved_overlap_format == "log":
-            overlap = parse_cp2k_overlap_matrix_log_data(
+            overlap = Cp2kOverlapMatrix.from_cp2k_output(
                 overlap_path,
                 threshold=overlap_threshold,
             )

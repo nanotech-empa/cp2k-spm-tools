@@ -12,10 +12,9 @@ from cp2k_spm_tools.cp2k_unfolding.geometry import (
     snap_primitive_vectors_to_supercell,
 )
 from cp2k_spm_tools.cp2k_unfolding.io import (
+    Cp2kOverlapMatrix,
     parse_cp2k_cell_vectors,
-    parse_cp2k_overlap_matrix_log_data,
     read_cp2k_wfn,
-    read_sparse_overlap_npz,
     read_xyz_coordinates,
 )
 from cp2k_spm_tools.cp2k_unfolding.kpath import (
@@ -120,9 +119,9 @@ def write_unfolding_npz(
     if overlap_format == "auto":
         overlap_format = "sparse" if str(overlap_path).endswith(".npz") else "log"
     if overlap_format == "sparse":
-        overlap = read_sparse_overlap_npz(overlap_path)
+        overlap = Cp2kOverlapMatrix.from_npz(overlap_path)
     elif overlap_format == "log":
-        overlap = parse_cp2k_overlap_matrix_log_data(
+        overlap = Cp2kOverlapMatrix.from_cp2k_output(
             overlap_path,
             threshold=overlap_threshold,
         )

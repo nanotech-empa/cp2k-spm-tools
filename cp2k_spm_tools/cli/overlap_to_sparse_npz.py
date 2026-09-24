@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from cp2k_spm_tools.cp2k_overlap_matrix import write_sparse_overlap_npz
+from cp2k_spm_tools.cp2k_overlap_matrix import Cp2kOverlapMatrix
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,12 +17,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.0,
         help="Keep entries with absolute value larger than this threshold.",
     )
-    parser.add_argument(
-        "--n-atomic-orbitals",
-        type=int,
-        default=None,
-        help="Expected number of atomic orbitals; defaults to the largest parsed AO index.",
-    )
     return parser
 
 
@@ -30,12 +24,7 @@ def main(argv=None) -> None:
     """Convert a human-readable CP2K overlap matrix to sparse NPZ format."""
 
     args = build_parser().parse_args(argv)
-    write_sparse_overlap_npz(
-        args.input,
-        args.output,
-        threshold=args.threshold,
-        n_atomic_orbitals=args.n_atomic_orbitals,
-    )
+    Cp2kOverlapMatrix.from_cp2k_output(args.input, threshold=args.threshold).to_npz(args.output)
 
 
 if __name__ == "__main__":
