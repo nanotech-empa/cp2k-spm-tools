@@ -55,3 +55,14 @@ def test_sparse_unfolding_two_replica_chain():
     assert np.allclose(mapping.ao_to_replica, [0, 1])
     assert np.allclose(mapping.ao_to_local, [0, 0])
     assert np.allclose(weights, [[1.0, 0.0], [0.0, 1.0]], atol=1.0e-12)
+
+
+def test_cli_input_parsers():
+    from cp2k_spm_tools.cli.unfold_wfn_sparse import parse_atom_indices, parse_path_labels, parse_vectors
+
+    vectors = parse_vectors("1 0 0; 0, 2, 0")
+    assert np.allclose(vectors, [[1.0, 0.0, 0.0], [0.0, 2.0, 0.0]])
+
+    assert parse_atom_indices("1 3-5 7..6") == [0, 2, 3, 4, 6, 5]
+    assert parse_path_labels("G M K G") == ["G", "M", "K", "G"]
+    assert parse_path_labels("GMKG") == ["G", "M", "K", "G"]
