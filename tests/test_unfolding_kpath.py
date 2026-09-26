@@ -17,6 +17,8 @@ CELLS = [
     ("hexagonal", [[1, 0, 0], [-0.5, np.sqrt(3) / 2, 0]]),
     ("centered_rectangular", [[1, 0, 0], [0.25, np.sqrt(15) / 4, 0]]),
     ("centered_rectangular", [[1, 0, 0], [-0.25, np.sqrt(15) / 4, 0]]),
+    ("centered_rectangular", [[1, 0, 0], [0.5, 1.3, 0]]),
+    ("centered_rectangular", [[1, 0, 0], [np.sqrt(3) / 2, 0.5, 0]]),
     ("oblique", [[1, 0, 0], [0.4, 1.3, 0]]),
     ("oblique", [[1, 0, 0], [-0.4, 1.3, 0]]),
 ]
