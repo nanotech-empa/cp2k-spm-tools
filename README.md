@@ -50,6 +50,36 @@ Use `--help` with each command to see its options.
 
 The unfolding commands are intended for workflows where a supercell CP2K calculation is unfolded onto a lower-dimensional or primitive reference cell. They use the CP2K `.wfn`, the atomic structure, the CP2K input cell, and either a human-readable overlap matrix log or the compact sparse NPZ produced by `cp2k-overlap-to-sparse-npz`.
 
+### Unfolding paths
+
+Omit `--path` (or pass an empty string) to select a path from the snapped primitive cell.
+The supported geometry is 1D along x or 2D in the xy plane:
+
+| Lattice | Default path |
+| --- | --- |
+| 1D | G-X |
+| Square | G-X-M-G |
+| Rectangular | G-X-S-Y-G |
+| Hexagonal | G-K-M-G |
+| Centered rectangular | G-X-A1-Y-G |
+| Oblique | G-Y-H-C-H1-X-G |
+
+Special-point coordinates are transformed to the supplied primitive basis.
+Both 60-degree and 120-degree hexagonal bases are supported. Oblique and
+centered-rectangular vertices depend on the reciprocal metric.
+Explicit path labels must exist for the selected lattice; an explicit lattice
+family must agree with the cell. Multi-character labels such as `A1` and `H1`
+work in both separated and compact paths.
+
+Unfolding uses only k-points that fold to supercell Gamma. It does not interpolate
+additional states: a small or incommensurate supercell can leave path segments or
+special points unsampled. Repeated points at different path distances, including
+closing Gamma, retain their separate positions in the output.
+
+Set `--emin` and `--emax` together, with the lower bound strictly smaller than
+the upper bound. The unused `--tol` option has been removed; it never affected
+the calculation. `--basis-cluster-tol` remains the separate AO-mapping tolerance.
+
 ### Example Usage
 
 When everything is set up correctly, the bash scripts in `examples/` folder can be executed without any further input and illustrate the usage of the various scripts.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 import numpy as np
@@ -69,13 +70,25 @@ def parse_atom_indices(text: str | None) -> list[int] | None:
     return [index - 1 for index in items]
 
 
-def parse_path_labels(text: str) -> list[str]:
+def parse_path_labels(text: str | None) -> list[str]:
+    if text is None:
+        return []
     clean = text.strip().replace("Γ", "G")
     if not clean:
         return []
     if "-" in clean or "," in clean or " " in clean:
         return [x for x in clean.replace(",", "-").replace(" ", "-").split("-") if x]
-    return list(clean)
+    labels = re.findall(r"[A-Za-z][0-9]*", clean)
+    if "".join(labels) != clean:
+        raise ValueError(f"Invalid path labels: {text!r}")
+    return labels
+
+
+def validate_energy_window(emin: float | None, emax: float | None) -> None:
+    if (emin is None) != (emax is None):
+        raise ValueError("--emin and --emax must be set together")
+    if emin is not None and emin >= emax:
+        raise ValueError("--emin must be lower than --emax")
 
 
 def write_unfolding_npz(
@@ -90,7 +103,6 @@ def write_unfolding_npz(
     path_labels: list[str] | None = None,
     emin: float | None = None,
     emax: float | None = None,
-    tol: float = 1.0e-5,
     basis_cluster_tol: float = 5.0e-2,
     overlap_format: str = "auto",
     overlap_threshold: float = 1.0e-10,
@@ -99,6 +111,7 @@ def write_unfolding_npz(
     pdos_threshold: float = 1.0e-4,
     primitive_basis_atom_indices: list[int] | None = None,
 ) -> None:
+    validate_energy_window(emin, emax)
     dim = int(primitive_vectors_approx.shape[0])
     supercell_vectors = parse_cp2k_cell_vectors(cp2k_input_path, dim=dim)
     primitive_vectors, supercell_matrix, matrix_float, correction_norm = snap_primitive_vectors_to_supercell(
@@ -221,11 +234,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--xyz", required=True)
     parser.add_argument("--cp2k-input", required=True)
     parser.add_argument("--primitive-vectors", required=True)
-    parser.add_argument("--path", default="G-K-M-G")
+    parser.add_argument("--path", default=None, help="Path labels; omitted or empty uses the lattice-dependent default")
     parser.add_argument("--lattice-type", default="auto")
     parser.add_argument("--emin", type=float, default=None)
     parser.add_argument("--emax", type=float, default=None)
-    parser.add_argument("--tol", type=float, default=1.0e-5)
     parser.add_argument("--basis-cluster-tol", type=float, default=5.0e-2)
     parser.add_argument("--primitive-basis-atoms", default=None)
     parser.add_argument("--overlap-format", choices=["auto", "sparse", "log"], default="auto")
@@ -234,6 +246,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pdos-output", default=None)
     parser.add_argument("--pdos-threshold", type=float, default=1.0e-4)
     args = parser.parse_args(argv)
+    try:
+        validate_energy_window(args.emin, args.emax)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     write_unfolding_npz(
         wfn_path=args.wfn,
@@ -246,7 +262,6 @@ def main(argv: list[str] | None = None) -> int:
         path_labels=parse_path_labels(args.path),
         emin=args.emin,
         emax=args.emax,
-        tol=args.tol,
         basis_cluster_tol=args.basis_cluster_tol,
         overlap_format=args.overlap_format,
         overlap_threshold=args.overlap_threshold,
