@@ -1,4 +1,4 @@
-"""Reusable helpers for CP2K localized-basis band unfolding."""
+"""Reusable helpers for CP2K localized-basis band unfolding notebooks."""
 
 from .geometry import (
     AOMapping,
@@ -35,6 +35,7 @@ from .kpath import (
     standard_kpath,
 )
 from .pdos import parse_cp2k_atom_pdos_files, write_sparse_atom_pdos_npz
+from .plotting import plot_unfolded_kpath
 from .unfolding import (
     SparseUnfoldingCache,
     fourier_project_coefficients,
@@ -49,14 +50,17 @@ from .unfolding import (
     unfold_band_weights_full,
     unfold_band_weights_sparse_full,
 )
+from .widgets import PrimitiveCellWidgets, create_primitive_cell_widgets, read_primitive_cell_widgets
 
 __all__ = (
     "AOMapping",
     "Cp2kOverlapMatrix",
+    "PrimitiveCellWidgets",
     "SparseUnfoldingCache",
     "SupercellWavefunctions",
     "build_modulo_lattice_ao_mapping",
     "cluster_basis_fractional_coords",
+    "create_primitive_cell_widgets",
     "folded_kpoints_from_supercell_matrix",
     "fourier_project_coefficients",
     "fractional_coordinates",
@@ -75,12 +79,14 @@ __all__ = (
     "parse_cp2k_atom_pdos_files",
     "parse_cp2k_cell_vectors",
     "parse_matrix_text",
+    "plot_unfolded_kpath",
     "prepare_sparse_unfolding_cache",
     "primitive_overlap_metric",
     "primitive_vectors_from_supercell_matrix",
     "print_eigenvalue_summary",
     "project_kpoints_to_kpath",
     "read_cp2k_wfn",
+    "read_primitive_cell_widgets",
     "read_xyz_coordinates",
     "reciprocal_vectors",
     "snap_primitive_vectors_to_supercell",
