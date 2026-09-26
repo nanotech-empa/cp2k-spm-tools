@@ -1,0 +1,51 @@
+"""Geometry and reciprocal-space helpers for CP2K band unfolding."""
+
+from .geometry import (
+    AOMapping,
+    build_modulo_lattice_ao_mapping,
+    cluster_basis_fractional_coords,
+    fractional_coordinates,
+    guess_dimensionality_from_cell_and_coords,
+    guess_primitive_vectors_from_geometry,
+    infer_aos_per_symbol_from_overlap_metadata,
+    infer_aos_per_symbol_from_wfn,
+    integer_supercell_matrix,
+    lattice_matrix,
+    matrix_to_text,
+    parse_matrix_text,
+    primitive_vectors_from_supercell_matrix,
+    snap_primitive_vectors_to_supercell,
+)
+from .kpath import (
+    folded_kpoints_from_supercell_matrix,
+    guess_2d_lattice_type,
+    kfrac_to_cart,
+    kpath_axis_from_fractional_path,
+    project_kpoints_to_kpath,
+    reciprocal_vectors,
+    standard_kpath,
+)
+
+__all__ = (
+    "AOMapping",
+    "build_modulo_lattice_ao_mapping",
+    "cluster_basis_fractional_coords",
+    "folded_kpoints_from_supercell_matrix",
+    "fractional_coordinates",
+    "guess_2d_lattice_type",
+    "guess_dimensionality_from_cell_and_coords",
+    "guess_primitive_vectors_from_geometry",
+    "infer_aos_per_symbol_from_overlap_metadata",
+    "infer_aos_per_symbol_from_wfn",
+    "integer_supercell_matrix",
+    "kfrac_to_cart",
+    "kpath_axis_from_fractional_path",
+    "lattice_matrix",
+    "matrix_to_text",
+    "parse_matrix_text",
+    "primitive_vectors_from_supercell_matrix",
+    "project_kpoints_to_kpath",
+    "reciprocal_vectors",
+    "snap_primitive_vectors_to_supercell",
+    "standard_kpath",
+)

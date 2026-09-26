@@ -51,6 +51,7 @@ build-backend = "setuptools.build_meta"
 packages = [
     "cp2k_spm_tools",
     "cp2k_spm_tools.cli",
+    "cp2k_spm_tools.cp2k_unfolding",
     "cp2k_spm_tools.hrstm_tools",
 ]
 
