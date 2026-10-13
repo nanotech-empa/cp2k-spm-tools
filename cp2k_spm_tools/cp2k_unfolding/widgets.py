@@ -72,10 +72,10 @@ def create_primitive_cell_widgets(
         layout=widgets.Layout(width="720px", height="90px"),
     )
     lattice_type_widget = widgets.Dropdown(
-        options=["auto", "hexagonal", "square", "rectangular", "oblique", "1d"],
+        options=["auto", "hexagonal", "square", "rectangular", "centered_rectangular", "oblique", "1d"],
         value=(
             lattice_type_guess
-            if lattice_type_guess in ["hexagonal", "square", "rectangular", "oblique", "1d"]
+            if lattice_type_guess in ["hexagonal", "square", "rectangular", "centered_rectangular", "oblique", "1d"]
             else "auto"
         ),
         description="k-path",

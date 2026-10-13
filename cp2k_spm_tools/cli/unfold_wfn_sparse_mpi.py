@@ -10,6 +10,7 @@ from cp2k_spm_tools.cli.unfold_wfn_sparse import (
     parse_atom_indices,
     parse_path_labels,
     parse_vectors,
+    validate_energy_window,
     write_unfolding_npz,
 )
 from cp2k_spm_tools.cp2k_unfolding.geometry import (
@@ -77,7 +78,6 @@ def write_unfolding_npz_mpi(
     path_labels: list[str] | None = None,
     emin: float | None = None,
     emax: float | None = None,
-    tol: float = 1.0e-5,
     basis_cluster_tol: float = 5.0e-2,
     overlap_format: str = "auto",
     overlap_threshold: float = 1.0e-10,
@@ -86,6 +86,7 @@ def write_unfolding_npz_mpi(
     pdos_threshold: float = 1.0e-4,
     primitive_basis_atom_indices: list[int] | None = None,
 ) -> None:
+    validate_energy_window(emin, emax)
     try:
         from mpi4py import MPI
     except ImportError as exc:
@@ -107,7 +108,6 @@ def write_unfolding_npz_mpi(
             path_labels=path_labels,
             emin=emin,
             emax=emax,
-            tol=tol,
             basis_cluster_tol=basis_cluster_tol,
             overlap_format=overlap_format,
             overlap_threshold=overlap_threshold,
@@ -301,11 +301,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--xyz", required=True)
     parser.add_argument("--cp2k-input", required=True)
     parser.add_argument("--primitive-vectors", required=True)
-    parser.add_argument("--path", default="G-K-M-G")
+    parser.add_argument("--path", default=None, help="Path labels; omitted or empty uses the lattice-dependent default")
     parser.add_argument("--lattice-type", default="auto")
     parser.add_argument("--emin", type=float, default=None)
     parser.add_argument("--emax", type=float, default=None)
-    parser.add_argument("--tol", type=float, default=1.0e-5)
     parser.add_argument("--basis-cluster-tol", type=float, default=5.0e-2)
     parser.add_argument("--primitive-basis-atoms", default=None)
     parser.add_argument("--overlap-format", choices=["auto", "sparse", "log"], default="auto")
@@ -314,6 +313,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pdos-output", default=None)
     parser.add_argument("--pdos-threshold", type=float, default=1.0e-4)
     args = parser.parse_args(argv)
+    try:
+        validate_energy_window(args.emin, args.emax)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     write_unfolding_npz_mpi(
         wfn_path=args.wfn,
@@ -326,7 +329,6 @@ def main(argv: list[str] | None = None) -> int:
         path_labels=parse_path_labels(args.path),
         emin=args.emin,
         emax=args.emax,
-        tol=args.tol,
         basis_cluster_tol=args.basis_cluster_tol,
         overlap_format=args.overlap_format,
         overlap_threshold=args.overlap_threshold,

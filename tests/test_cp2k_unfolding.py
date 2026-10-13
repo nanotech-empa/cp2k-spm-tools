@@ -1,32 +1,9 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
-import matplotlib.pyplot as plt
 import numpy as np
-import scipy.sparse as sp
 
-from cp2k_spm_tools.cli.unfold_wfn_sparse import parse_atom_indices, parse_path_labels, parse_vectors
-from cp2k_spm_tools.cp2k_unfolding import (
-    PrimitiveCellWidgets,
-    plot_unfolded_kpath,
-    read_primitive_cell_widgets,
-)
-from cp2k_spm_tools.cp2k_unfolding.geometry import (
-    build_modulo_lattice_ao_mapping,
-    snap_primitive_vectors_to_supercell,
-)
-from cp2k_spm_tools.cp2k_unfolding.kpath import folded_kpoints_from_supercell_matrix, kfrac_to_cart
-from cp2k_spm_tools.cp2k_unfolding.unfolding import unfold_band_weights_full
-
-
-def test_cli_input_parsers():
-    vectors = parse_vectors("1 0 0; 0, 2, 0")
-    assert np.allclose(vectors, [[1.0, 0.0, 0.0], [0.0, 2.0, 0.0]])
-
-    assert parse_atom_indices("1 3-5 7..6") == [0, 2, 3, 4, 6, 5]
-    assert parse_path_labels("G M K G") == ["G", "M", "K", "G"]
-    assert parse_path_labels("GMKG") == ["G", "M", "K", "G"]
+from cp2k_spm_tools.cp2k_unfolding.geometry import snap_primitive_vectors_to_supercell
+from cp2k_spm_tools.cp2k_unfolding.kpath import folded_kpoints_from_supercell_matrix
 
 
 def test_folded_kpoints_from_supercell_matrix():
@@ -51,6 +28,12 @@ def test_snap_primitive_vectors_to_supercell():
 
 
 def test_sparse_unfolding_two_replica_chain():
+    import scipy.sparse as sp
+
+    from cp2k_spm_tools.cp2k_unfolding.geometry import build_modulo_lattice_ao_mapping
+    from cp2k_spm_tools.cp2k_unfolding.kpath import kfrac_to_cart
+    from cp2k_spm_tools.cp2k_unfolding.unfolding import unfold_band_weights_full
+
     primitive_vectors = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
     supercell_vectors = np.array([[2.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
     coords = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
@@ -74,7 +57,22 @@ def test_sparse_unfolding_two_replica_chain():
     assert np.allclose(weights, [[1.0, 0.0], [0.0, 1.0]], atol=1.0e-12)
 
 
+def test_cli_input_parsers():
+    from cp2k_spm_tools.cli.unfold_wfn_sparse import parse_atom_indices, parse_path_labels, parse_vectors
+
+    vectors = parse_vectors("1 0 0; 0, 2, 0")
+    assert np.allclose(vectors, [[1.0, 0.0, 0.0], [0.0, 2.0, 0.0]])
+
+    assert parse_atom_indices("1 3-5 7..6") == [0, 2, 3, 4, 6, 5]
+    assert parse_path_labels("G M K G") == ["G", "M", "K", "G"]
+    assert parse_path_labels("GMKG") == ["G", "M", "K", "G"]
+
+
 def test_plot_unfolded_kpath():
+    import matplotlib.pyplot as plt
+
+    from cp2k_spm_tools.cp2k_unfolding import plot_unfolded_kpath
+
     ax = plot_unfolded_kpath(
         path_k_indices=np.array([0, 1]),
         path_x=np.array([0.0, 1.0]),
@@ -91,6 +89,10 @@ def test_plot_unfolded_kpath():
 
 
 def test_read_primitive_cell_widgets():
+    from types import SimpleNamespace
+
+    from cp2k_spm_tools.cp2k_unfolding import PrimitiveCellWidgets, read_primitive_cell_widgets
+
     widget_state = PrimitiveCellWidgets(
         primitive_vectors_widget=SimpleNamespace(value="1 0 0\n0 1 0"),
         supercell_vectors_widget=SimpleNamespace(value="2 0 0\n0 2 0"),
