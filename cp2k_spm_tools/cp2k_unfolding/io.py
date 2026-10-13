@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+from ase.geometry import cellpar_to_cell
 from scipy import constants
 
 from cp2k_spm_tools.cp2k_overlap_matrix import Cp2kOverlapMatrix
@@ -103,15 +104,32 @@ def read_xyz_coordinates(path: str | Path) -> tuple[list[str], np.ndarray]:
 
 
 def parse_cp2k_cell_vectors(cp2k_input_file: str | Path, dim: int | None = None) -> np.ndarray:
-    """Parse CP2K &CELL vectors A/B/C or ABC from an input file."""
+    """Read one numeric CP2K &CELL as row vectors in Angstrom.
+
+    Support A/B/C or ABC with ALPHA_BETA_GAMMA (alias ANGLES), with
+    CP2K's default Angstrom/degree units. ABC takes precedence over A/B/C.
+    External cells, imposed symmetry and cell replication must first be
+    resolved to explicit vectors; they cannot be silently ignored here.
+    """
     path = Path(cp2k_input_file)
     if not path.exists():
         raise FileNotFoundError(f"CP2K input file not found: {path}")
 
     lines = path.read_text(errors="replace").splitlines()
-    in_cell = False
-    vectors: dict[str, np.ndarray] = {}
-    abc = None
+    depth = 0
+    sections: list[dict[str, list[str]]] = []
+    keywords = {"A", "B", "C", "ABC", "ALPHA_BETA_GAMMA", "CELL_FILE_NAME", "SYMMETRY", "MULTIPLE_UNIT_CELL"}
+    bohr_to_angstrom = constants.physical_constants["Bohr radius"][0] * 1e10
+    length_units = {
+        "angstrom": 1.0,
+        "ang": 1.0,
+        "bohr": bohr_to_angstrom,
+        "au": bohr_to_angstrom,
+        "a.u.": bohr_to_angstrom,
+        "nm": 10.0,
+        "pm": 0.01,
+    }
+    angle_units = {"deg": 1.0, "degree": 1.0, "rad": 180.0 / np.pi, "radian": 180.0 / np.pi}
 
     def strip_unit(tokens: list[str]) -> tuple[str | None, list[str]]:
         if tokens and tokens[0].startswith("[") and tokens[0].endswith("]"):
@@ -126,30 +144,64 @@ def parse_cp2k_cell_vectors(cp2k_input_file: str | Path, dim: int | None = None)
         key = parts[0].upper()
 
         if key == "&CELL":
-            in_cell = True
+            sections.append({})
+            depth = 1
             continue
-        if in_cell and key.startswith("&END"):
-            in_cell = False
+        if depth and key == "&END":
+            depth -= 1
             continue
-        if not in_cell:
+        if depth and key.startswith("&"):
+            depth += 1
             continue
+        if depth != 1:
+            continue
+        key = "ALPHA_BETA_GAMMA" if key == "ANGLES" else key
+        if key in keywords:
+            if key in sections[-1]:
+                raise ValueError(f"Repeated CP2K CELL keyword: {key}")
+            sections[-1][key] = parts[1:]
 
-        if key in {"A", "B", "C"}:
-            _, values = strip_unit(parts[1:])
-            if len(values) >= 3:
-                vectors[key] = np.array([float(x) for x in values[:3]], dtype=float)
-        elif key == "ABC":
-            _, values = strip_unit(parts[1:])
-            if len(values) >= 3:
-                abc = np.array([float(x) for x in values[:3]], dtype=float)
+    if depth or len(sections) != 1:
+        raise ValueError("Expected exactly one complete CP2K &CELL section")
+    entries = sections[0]
+    if "CELL_FILE_NAME" in entries or [x.upper() for x in entries.get("SYMMETRY", ["NONE"])] != ["NONE"]:
+        raise ValueError("External or symmetry-imposed CP2K cells must be supplied as resolved explicit A/B/C vectors")
+    if [int(x) for x in entries.get("MULTIPLE_UNIT_CELL", ["1", "1", "1"])] != [1, 1, 1]:
+        raise ValueError("Replicated CP2K cells must be supplied as resolved explicit A/B/C vectors")
 
-    if all(k in vectors for k in ("A", "B", "C")):
-        cell = np.vstack([vectors["A"], vectors["B"], vectors["C"]])
-    elif abc is not None:
-        cell = np.diag(abc)
+    def read_triplet(key: str, units: dict[str, float], default_unit: str) -> np.ndarray:
+        unit, values = strip_unit(entries[key])
+        unit = unit or default_unit
+        if unit not in units:
+            raise ValueError(f"Unsupported CP2K {key} unit: {unit}")
+        if len(values) != 3:
+            raise ValueError(f"CP2K {key} requires exactly three numeric values")
+        result = np.array([float(x.replace("D", "E").replace("d", "e")) for x in values]) * units[unit]
+        if not np.all(np.isfinite(result)):
+            raise ValueError(f"CP2K {key} requires finite numeric values")
+        return result
+
+    if "ABC" in entries:
+        abc = read_triplet("ABC", length_units, "angstrom")
+        angles = (
+            read_triplet("ALPHA_BETA_GAMMA", angle_units, "deg") if "ALPHA_BETA_GAMMA" in entries else np.full(3, 90.0)
+        )
+        if np.any(abc <= 0) or np.any(angles <= 0) or np.any(angles >= 180):
+            raise ValueError("CP2K ABC lengths must be positive and cell angles must lie between 0 and 180 degrees")
+        try:
+            cell = cellpar_to_cell(np.concatenate([abc, angles]))
+        except (AssertionError, ValueError) as exc:
+            raise ValueError("CP2K ABC angles do not define a nondegenerate cell") from exc
+    elif all(key in entries for key in ("A", "B", "C")):
+        cell = np.vstack([read_triplet(key, length_units, "angstrom") for key in ("A", "B", "C")])
     else:
         raise ValueError("Could not parse CP2K cell vectors from input file")
 
+    if np.linalg.matrix_rank(cell) != 3:
+        raise ValueError("CP2K cell vectors must define a nondegenerate three-dimensional cell")
+
     if dim is None:
         dim = 3
+    if dim not in (1, 2, 3):
+        raise ValueError("Cell dimension must be 1, 2 or 3")
     return cell[:dim]
