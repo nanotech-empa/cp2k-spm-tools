@@ -42,12 +42,15 @@ The package provides several command-line tools, including:
 - `cp2k-stm-sts-wfn`: STM/STS analysis from wavefunction files
 - `cp2k-cube-from-wfn`: Create cube files from wavefunction files
 - `cp2k-bader-bond-order`: Bond order analysis based on Bader basins
+- `cp2k-overlap-to-sparse-npz`: Convert CP2K AO overlap matrix logs to compact sparse NPZ files
 
 Use `--help` with each command to see its options.
 
 ### Example Usage
 
-When everything is set up correctly, the bash scripts in `examples/` folder can be executed without any further input and illustrate the usage of the various scripts. For example `example/benzene_stm/run_stm_sts_from_wfn.sh` evaluates the STM/STS signatures of isolated benzene at each orbital energy (`out/orb/`) as well as in an arbitrary energy range (`out/stm/`). The corresponding CP2K calculation is included in the repository.
+When everything is set up correctly, the bash scripts in `examples/` folder can be executed without any further input and illustrate the usage of the various scripts.
+For example `example/benzene_stm/run_stm_sts_from_wfn.sh` evaluates the STM/STS signatures of isolated benzene at each orbital energy (`out/orb/`) as well as in an arbitrary energy range (`out/stm/`).
+The corresponding CP2K calculation is included in the repository. For sparse AO overlap conversion, see `examples/overlap_to_sparse_npz/run.sh`.
 
 **NB: In all cases, the underlying DFT calculation has to be performed with the diagonalization algorithm rather than orbital transformation (OT).**
 
