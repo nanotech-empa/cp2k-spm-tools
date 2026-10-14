@@ -50,13 +50,17 @@ class Cp2kOverlapMatrix:
             The sparse CSR overlap matrix and its per-orbital metadata.
 
         Raises:
-            ValueError: If the file contains no overlap-matrix entries.
+            ValueError: If the threshold is negative or the file contains no
+                overlap-matrix entries.
 
         Warns:
             UserWarning: If unexpected lines were skipped between the title and the
                 first data row, which may indicate an unrecognised output format, or
                 if the parsed AO indices have gaps, leaving empty metadata rows.
         """
+
+        if threshold < 0.0:
+            raise ValueError("Threshold must be non-negative.")
 
         path = Path(path)
         float_re = re.compile(r"^[+-]?(?:[0-9]+(?:[.][0-9]*)?|[.][0-9]+)(?:[EeDd][+-]?[0-9]+)?$")

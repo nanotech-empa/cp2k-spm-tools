@@ -23,7 +23,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv=None) -> None:
     """Convert a human-readable CP2K overlap matrix to sparse NPZ format."""
 
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.threshold < 0.0:
+        parser.error("--threshold must be non-negative.")
     Cp2kOverlapMatrix.from_cp2k_output(args.input, threshold=args.threshold).to_npz(args.output)
 
 
