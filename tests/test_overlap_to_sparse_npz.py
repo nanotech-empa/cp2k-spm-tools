@@ -162,6 +162,12 @@ def test_parse_does_not_warn_on_complete_log():
     assert caught == []
 
 
+@pytest.mark.parametrize("threshold", [-1.0, -0.01])
+def test_parse_rejects_negative_threshold(threshold):
+    with pytest.raises(ValueError, match="non-negative"):
+        Cp2kOverlapMatrix.from_cp2k_output(OVERLAP_LOG, threshold=threshold)
+
+
 def test_parse_threshold_preserves_shape_and_metadata():
     full = Cp2kOverlapMatrix.from_cp2k_output(OVERLAP_LOG)
     parsed = Cp2kOverlapMatrix.from_cp2k_output(OVERLAP_LOG, threshold=0.03)
@@ -228,3 +234,26 @@ def test_cli_writes_sparse_overlap_npz(tmp_path):
         np.bincount(parsed.atom_index, minlength=6)[1:],
         np.array([22, 9, 9, 9, 9]),
     )
+
+
+def test_cli_rejects_negative_threshold_without_writing_output(tmp_path, capsys):
+    output_path = tmp_path / "overlap.npz"
+
+    with pytest.raises(SystemExit) as error:
+        overlap_cli([str(OVERLAP_LOG), str(output_path), "--threshold", "-0.01"])
+
+    assert error.value.code == 2
+    assert "--threshold must be non-negative" in capsys.readouterr().err
+    assert not output_path.exists()
+
+
+def test_cli_accepts_zero_threshold(tmp_path):
+    output_path = tmp_path / "overlap.npz"
+    overlap_cli([str(OVERLAP_LOG), str(output_path), "--threshold", "0"])
+
+    parsed = Cp2kOverlapMatrix.from_npz(output_path)
+    expected = Cp2kOverlapMatrix.from_cp2k_output(OVERLAP_LOG)
+    assert parsed.threshold == 0.0
+    assert parsed.matrix.nnz == expected.matrix.nnz == 2728
+    np.testing.assert_array_equal(parsed.matrix.toarray(), expected.matrix.toarray())
+    assert_overlap_metadata_equal(parsed, expected)
