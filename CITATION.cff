@@ -1,0 +1,23 @@
+# Software authorship source: https://zenodo.org/records/22937298
+cff-version: 1.2.0
+type: software
+title: cp2k-spm-tools
+message: If you use this software, please cite it and identify the exact version or commit
+  used. See README.md for software attribution and applicable scientific references.
+identifiers:
+- type: doi
+  value: 10.5281/zenodo.2641146
+  description: Project DOI covering archived releases; identify the exact version or commit
+    used separately.
+authors:
+- family-names: Eimre
+  given-names: Kristjan
+- family-names: Pignedoli
+  given-names: Carlo
+- family-names: Yakutovich
+  given-names: Aliaksandr
+- family-names: Baldi
+  given-names: Edoardo
+repository-code: https://github.com/nanotech-empa/cp2k-spm-tools
+url: https://github.com/nanotech-empa/cp2k-spm-tools
+license: MIT
