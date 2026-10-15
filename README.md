@@ -138,3 +138,25 @@ This will
 
 - update version numbers, make a corresponding git commit and a git tag;
 - push this commit and tag to Github, which triggers the Github Action that makes a new Github Release and publishes the package to PYPI.
+
+## Software attribution and scientific acknowledgements
+
+Please credit [cp2k-spm-tools](https://github.com/nanotech-empa/cp2k-spm-tools) and its
+[contributors](https://github.com/nanotech-empa/cp2k-spm-tools/graphs/contributors),
+and identify the release or immutable commit used. Existing author,
+contributor and funding acknowledgements remain authoritative.
+
+See [CITATION.cff](CITATION.cff) for the software citation. A project DOI
+covers archived releases; identify the exact version or commit separately.
+Use a release DOI only for the release it identifies.
+
+Preserve the copyright and permission notices in [LICENSE](LICENSE)
+when copying or distributing copies or substantial portions of MIT-licensed
+code. Separately licensed components retain their own notices. A name or
+repository link does not replace the applicable licence notices.
+
+Credit cp2k-spm-tools and its contributors for its numerical implementations, and cite CP2K and the scientific methods used. Running its standalone command-line tools does not itself imply use of AiiDA or AiiDAlab.
+
+The [shared credit guide](https://github.com/nanotech-empa/.github/blob/main/CITATION_GUIDANCE.md) keeps software attribution, licence
+compliance and scientific citation requests separate. Scientific citation
+requests are not additional MIT licence conditions.
