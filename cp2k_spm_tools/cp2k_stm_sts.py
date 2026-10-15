@@ -96,9 +96,11 @@ class STM:
         self.local_orbitals = []
         self.local_orbital_ptip = []
 
+        if self.ptip_enabled and min(self.cell_n[:2]) < 2:
+            raise ValueError("P-tip gradients require at least two grid points along each in-plane axis.")
+
         x_ind_start, x_ind_end = self.x_ind_per_rank(self.mpi_rank)
         self.local_cell_n = np.array([x_ind_end - x_ind_start, self.cell_n[1], self.cell_n[2]])
-        num_spatial_points = (x_ind_end - x_ind_start) * self.cell_n[1] * self.cell_n[2]
 
         self.local_origin = self.origin.copy()
         if getattr(self.cgo, "dv_vectors", None) is not None:
@@ -113,56 +115,50 @@ class STM:
             total_orb = sum(orbitals_per_rank)
 
             for rank in range(self.mpi_size):
-                # which indexes to send?
                 ix_start, ix_end = self.x_ind_per_rank(rank)
+                gather_start, gather_end = ix_start, ix_end
+                if self.ptip_enabled and ix_end > ix_start:
+                    # One neighbouring plane preserves the original centred differences
+                    # at MPI boundaries. Physical grid edges remain one-sided.
+                    gather_start = max(0, ix_start - 1)
+                    gather_end = min(self.cell_n[0], ix_end + 1)
+                gather_nx = gather_end - gather_start
+                num_spatial_points = gather_nx * self.cell_n[1] * self.cell_n[2]
 
                 if self.mpi_rank == rank:
-                    recvbuf = np.empty(sum(orbitals_per_rank) * num_spatial_points, dtype=self.cgo.dtype)
-                    # print("R%d expecting counts: " % (self.mpi_rank) + str(orbitals_per_rank*num_spatial_points))
-                    # sys.stdout.flush()
+                    recvbuf = np.empty(total_orb * num_spatial_points, dtype=self.cgo.dtype)
                 else:
                     recvbuf = None
 
-                sendbuf = self.cgo.morb_grids[ispin][:, ix_start:ix_end, :, :].ravel()
-                # print("R%d -> %d sending %d" %(self.mpi_rank, rank, len(sendbuf)))
-                # sys.stdout.flush()
-
-                # Send the orbitals
+                sendbuf = self.cgo.morb_grids[ispin][:, gather_start:gather_end, :, :].ravel()
                 self.mpi_comm.Gatherv(
                     sendbuf=sendbuf, recvbuf=[recvbuf, orbitals_per_rank * num_spatial_points], root=rank
                 )
 
                 if self.mpi_rank == rank:
-                    self.local_orbitals.append(
-                        recvbuf.reshape(total_orb, self.local_cell_n[0], self.local_cell_n[1], self.local_cell_n[2])
-                    )
+                    local_grids = recvbuf.reshape(total_orb, gather_nx, self.cell_n[1], self.cell_n[2])
+                    local_x = slice(ix_start - gather_start, ix_end - gather_start)
 
+            # Do not retain the last outgoing MPI buffer while evaluating gradients.
+            del sendbuf, recvbuf
+            self.local_orbitals.append(local_grids[:, local_x])
             if self.ptip_enabled:
-                ### Calculate and divide also the p-tip contribution,
-                ### as derivatives are hard to account for after dividing the orbitals in space
-                d_axis0 = np.gradient(self.cgo.morb_grids[ispin], axis=1)
-                d_axis1 = np.gradient(self.cgo.morb_grids[ispin], axis=2)
-                p_tip_contrib = self.in_plane_gradient_squared(
-                    d_axis0,
-                    d_axis1,
-                    self.dv,
-                    getattr(self.cgo, "dv_vectors", None),
-                )
+                # All ranks evaluate their spatial region concurrently after gathering.
+                self.local_orbital_ptip.append(self._local_p_tip_contribution(local_grids, local_x))
 
-                for rank in range(self.mpi_size):
-                    ix_start, ix_end = self.x_ind_per_rank(rank)
-                    if self.mpi_rank == rank:
-                        recvbuf = np.empty(sum(orbitals_per_rank) * num_spatial_points, dtype=self.cgo.dtype)
-                    else:
-                        recvbuf = None
-                    sendbuf = p_tip_contrib[:, ix_start:ix_end, :, :].ravel().astype(self.cgo.dtype)
-                    self.mpi_comm.Gatherv(
-                        sendbuf=sendbuf, recvbuf=[recvbuf, orbitals_per_rank * num_spatial_points], root=rank
-                    )
-                    if self.mpi_rank == rank:
-                        self.local_orbital_ptip.append(
-                            recvbuf.reshape(total_orb, self.local_cell_n[0], self.local_cell_n[1], self.local_cell_n[2])
-                        )
+    def _local_p_tip_contribution(self, orbital_grids, local_x):
+        """Evaluate p-tip gradients one orbital at a time, excluding the halo from output."""
+        shape = (len(orbital_grids), local_x.stop - local_x.start, *orbital_grids.shape[2:])
+        contribution = np.empty(shape, dtype=self.cgo.dtype)
+        if shape[1] == 0:
+            return contribution
+        for i_orb, orbital in enumerate(orbital_grids):
+            d_axis0 = np.gradient(orbital, axis=0)[local_x]
+            d_axis1 = np.gradient(orbital, axis=1)[local_x]
+            contribution[i_orb] = self.in_plane_gradient_squared(
+                d_axis0, d_axis1, self.dv, getattr(self.cgo, "dv_vectors", None)
+            )
+        return contribution
 
     @staticmethod
     def in_plane_gradient_squared(d_axis0, d_axis1, dv, dv_vectors=None):
