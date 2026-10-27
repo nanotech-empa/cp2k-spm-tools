@@ -18,7 +18,7 @@ concurrency:
 jobs:
   pre-commit:
     name: install and run pre-commit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v3
@@ -42,7 +42,7 @@ jobs:
 
   test:
     name: run pytest
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v3
 
