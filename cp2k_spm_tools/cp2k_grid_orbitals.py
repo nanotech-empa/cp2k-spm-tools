@@ -4,6 +4,7 @@ Tools to put CP2K orbitals on a real space grid
 
 import copy
 import io
+import os
 import time
 
 import ase
@@ -313,68 +314,77 @@ class Cp2kGridOrbitals:
         return basis_sets
 
     def read_basis_functions(self, basis_set_file):
-        """Reads the basis sets from basis_set_file specified in kind_elem_basis
+        """Read primary orbital bases from one filename or an ordered sequence.
 
-        returns:
-        basis_sets["kind"] =
+        As in CP2K, the first matching definition wins. Auxiliary bases are
+        ignored because ``kind_elem_basis`` contains only the orbital bases.
         """
+        if isinstance(basis_set_file, (str, os.PathLike)):
+            basis_set_files = [basis_set_file]
+        else:
+            basis_set_files = list(basis_set_file)
         self.basis_sets = {}
-        used_elems_bases = list(self.kind_elem_basis.values())
-        corresp_kinds = list(self.kind_elem_basis.keys())
 
-        with open(basis_set_file) as f:
-            lines = f.readlines()
+        for filename in basis_set_files:
+            with open(filename) as handle:
+                lines = handle.readlines()
             for i in range(len(lines)):
-                parts = lines[i].split()
+                parts = lines[i].split("#", 1)[0].split()
                 if len(parts) <= 1:
                     continue
+                kinds = [
+                    kind
+                    for kind, (element, basis) in self.kind_elem_basis.items()
+                    if kind not in self.basis_sets and element == parts[0] and basis in parts[1:]
+                ]
+                if not kinds:
+                    continue
 
-                elem = parts[0]
-                trial_1 = (elem, parts[1])
-                trial_2 = None
-                if len(parts) > 2:
-                    trial_2 = (elem, parts[2])
+                basis_functions = []
+                nsets = int(lines[i + 1])
+                cursor = 2
+                for j in range(nsets):
+                    basis_functions.append([])
 
-                if trial_1 in used_elems_bases or trial_2 in used_elems_bases:
-                    # We have a basis set we're using
-                    # find all kinds using this basis set:
-                    kinds = [
-                        corresp_kinds[i] for i, e_b in enumerate(used_elems_bases) if e_b == trial_1 or e_b == trial_2
-                    ]
+                    comp = [int(x) for x in lines[i + cursor].split()]
+                    n_princ, l_min, l_max, n_exp = comp[:4]
+                    l_arr = np.arange(l_min, l_max + 1, 1)
+                    n_basisf_for_l = comp[4:]
+                    assert len(l_arr) == len(n_basisf_for_l)
 
-                    basis_functions = []
-                    nsets = int(lines[i + 1])
-                    cursor = 2
-                    for j in range(nsets):
-                        basis_functions.append([])
+                    exps = []
+                    coeffs = []
 
-                        comp = [int(x) for x in lines[i + cursor].split()]
-                        n_princ, l_min, l_max, n_exp = comp[:4]
-                        l_arr = np.arange(l_min, l_max + 1, 1)
-                        n_basisf_for_l = comp[4:]
-                        assert len(l_arr) == len(n_basisf_for_l)
+                    for k in range(n_exp):
+                        exp_c = [float(x) for x in lines[i + cursor + k + 1].split()]
+                        exps.append(exp_c[0])
+                        coeffs.append(exp_c[1:])
 
-                        exps = []
-                        coeffs = []
+                    exps = np.array(exps)
+                    coeffs = np.array(coeffs)
 
-                        for k in range(n_exp):
-                            exp_c = [float(x) for x in lines[i + cursor + k + 1].split()]
-                            exps.append(exp_c[0])
-                            coeffs.append(exp_c[1:])
+                    indx = 0
+                    for l, nl in zip(l_arr, n_basisf_for_l):
+                        for il in range(nl):
+                            basis_functions[-1].append([l, exps, coeffs[:, indx]])
+                            indx += 1
+                    cursor += n_exp + 1
 
-                        exps = np.array(exps)
-                        coeffs = np.array(coeffs)
+                for kind in kinds:
+                    self.basis_sets[kind] = copy.deepcopy(basis_functions)
 
-                        indx = 0
-                        for l, nl in zip(l_arr, n_basisf_for_l):
-                            for il in range(nl):
-                                basis_functions[-1].append([l, exps, coeffs[:, indx]])
-                                indx += 1
-                        cursor += n_exp + 1
-
-                    for kind in kinds:
-                        self.basis_sets[kind] = copy.deepcopy(basis_functions)
-
+        missing = [
+            f"{kind} ({element}/{basis})"
+            for kind, (element, basis) in self.kind_elem_basis.items()
+            if kind not in self.basis_sets
+        ]
+        if missing:
+            raise ValueError(
+                "Missing orbital basis definitions: "
+                + ", ".join(missing)
+                + "; searched files: "
+                + ", ".join(map(str, basis_set_files))
+            )
         self.basis_sets = self._magic_basis_normalization(self.basis_sets)
 
     ### -----------------------------------------

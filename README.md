@@ -162,3 +162,14 @@ Credit cp2k-spm-tools and its contributors for its numerical implementations, an
 The [shared credit guide](https://github.com/nanotech-empa/.github/blob/main/CITATION_GUIDANCE.md) keeps software attribution, licence
 compliance and scientific citation requests separate. Scientific citation
 requests are not additional MIT licence conditions.
+
+### Orbital basis files for overlap post-processing
+
+`cp2k-overlap-from-wfns` accepts one or more filenames for each of
+`--basis_set_file1` and `--basis_set_file2`, for example
+`--basis_set_file1 basis_C basis_H`. A single filename remains valid.
+Use the same file order as the parent CP2K calculation: the first matching
+definition of each orbital basis is used. Auxiliary-only files do not replace
+the orbital bases, and missing orbital definitions produce an explicit error.
+The Python `read_basis_functions` method likewise accepts a filename or an
+ordered sequence of filenames.

@@ -22,7 +22,11 @@ def main():
         "--cp2k_input_file1", metavar="FILENAME", required=True, help="CP2K input of the SCF calculation."
     )
     parser.add_argument(
-        "--basis_set_file1", metavar="FILENAME", required=True, help="File containing the used basis sets."
+        "--basis_set_file1",
+        metavar="FILENAME",
+        nargs="+",
+        required=True,
+        help="Files containing the used orbital basis sets, in CP2K search order.",
     )
     parser.add_argument("--xyz_file1", metavar="FILENAME", required=True, help=".xyz file containing the geometry.")
     parser.add_argument(
@@ -41,7 +45,11 @@ def main():
         "--cp2k_input_file2", metavar="FILENAME", required=True, help="CP2K input of the SCF calculation."
     )
     parser.add_argument(
-        "--basis_set_file2", metavar="FILENAME", required=True, help="File containing the used basis sets."
+        "--basis_set_file2",
+        metavar="FILENAME",
+        nargs="+",
+        required=True,
+        help="Files containing the used orbital basis sets, in CP2K search order.",
     )
     parser.add_argument("--xyz_file2", metavar="FILENAME", required=True, help=".xyz file containing the geometry.")
     parser.add_argument(
