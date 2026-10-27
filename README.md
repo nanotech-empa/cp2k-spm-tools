@@ -1,5 +1,7 @@
 ## CP2K Scanning Probe Microscopy tools
 
+> **Legacy Python 3.9:** use [v1.5.0](https://github.com/nanotech-empa/cp2k-spm-tools/releases/tag/v1.5.0). See the [Empa legacy compatibility guide](https://github.com/nanotech-empa/aiida-nanotech-empa/blob/master/docs/legacy-python39-aiida263.md) for the matching package versions and installation constraints. Use a tagged version to preserve this runtime.
+
 [![DOI](https://zenodo.org/badge/133041124.svg)](https://zenodo.org/badge/latestdoi/133041124)
 [![PyPI - Version](https://img.shields.io/pypi/v/cp2k-spm-tools?color=4CC61E)](https://pypi.org/project/cp2k-spm-tools/)
 
