@@ -1,5 +1,6 @@
 """Read the same orbital basis from single or distributed parameter files."""
 
+import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -176,3 +177,80 @@ def test_overlap_cli_accepts_one_or_several_files(monkeypatch, first, second):
         overlap_from_wfns.main()
     assert parsed["basis_set_file1"] == first
     assert parsed["basis_set_file2"] == second
+
+
+@pytest.mark.parametrize("command", ["stm_sts_from_wfn", "hrstm_from_wfn"])
+@pytest.mark.parametrize("files", [["orbital"], ["auxiliary", "carbon", "hydrogen"]])
+def test_stm_cli_passes_ordered_files_to_reader(monkeypatch, command, files):
+    from importlib import import_module
+
+    cli = import_module(f"cp2k_spm_tools.cli.{command}")
+
+    class StopAfterBasis(Exception):
+        pass
+
+    class Comm:
+        def Get_rank(self):
+            return 0
+
+        def Get_size(self):
+            return 1
+
+        def bcast(self, value, root=0):
+            return value
+
+    class Reader:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def read_cp2k_input(self, path):
+            pass
+
+        def read_xyz(self, path):
+            pass
+
+        def center_atoms_to_cell(self):
+            pass
+
+        def read_basis_functions(self, paths):
+            assert paths == files
+            raise StopAfterBasis
+
+    argv = [
+        command,
+        "--basis_set_file",
+        *files,
+        "--cp2k_input_file",
+        "input",
+        "--xyz_file",
+        "xyz",
+        "--wfn_file",
+        "wfn",
+        "--hartree_file",
+        "hartree",
+        "--eval_region",
+        "0",
+        "1",
+        "0",
+        "1",
+        "0",
+        "1",
+    ]
+    if command == "stm_sts_from_wfn":
+        argv += ["--dx", "0.2", "--extrap_extent", "4"]
+    else:
+        argv += ["--dx_tip", "0.2", "--pdos_list", "1", "0", "0", "0", "--voltages", "1"]
+        monkeypatch.setattr(cli.hu, "create_tip_positions", lambda *args: (None, None, None, None))
+        monkeypatch.setattr(
+            cli.tc,
+            "TipCoefficients",
+            lambda *args: SimpleNamespace(
+                read_coefficients=lambda *args: None,
+                initialize=lambda *args: None,
+            ),
+        )
+    monkeypatch.setattr(cli, "MPI", SimpleNamespace(COMM_WORLD=Comm()))
+    monkeypatch.setattr(cli.cgo, "Cp2kGridOrbitals", Reader)
+    monkeypatch.setattr(sys, "argv", argv)
+    with pytest.raises(StopAfterBasis):
+        cli.main()

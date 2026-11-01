@@ -53,8 +53,9 @@ def main():
     parser.add_argument(
         "--basis_set_file",
         metavar="FILE",
+        nargs="+",
         required=True,
-        help="File containing all basis sets used for sample calculation.",
+        help="Orbital basis files in the same search order as the sample CP2K calculation.",
     )
 
     parser.add_argument(
