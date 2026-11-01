@@ -163,11 +163,13 @@ The [shared credit guide](https://github.com/nanotech-empa/.github/blob/main/CIT
 compliance and scientific citation requests separate. Scientific citation
 requests are not additional MIT licence conditions.
 
-### Orbital basis files for overlap post-processing
+### Orbital basis files for post-processing
 
 `cp2k-overlap-from-wfns` accepts one or more filenames for each of
 `--basis_set_file1` and `--basis_set_file2`, for example
 `--basis_set_file1 basis_C basis_H`. A single filename remains valid.
+`cp2k-stm-sts-wfn` and `cp2k-hrstm-from-wfn` likewise accept one or more filenames for
+`--basis_set_file`, for example `--basis_set_file basis_C basis_H`.
 Use the same file order as the parent CP2K calculation: the first matching
 definition of each orbital basis is used. Auxiliary-only files do not replace
 the orbital bases, and missing orbital definitions produce an explicit error.
